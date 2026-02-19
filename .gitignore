@@ -1,0 +1,48 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+.pnpm-store
+dist
+dist-ssr
+*.local
+
+# Server build output
+server/dist
+
+# Database
+server/data/*.db
+server/data/*.db-wal
+server/data/*.db-shm
+
+# Environment variables
+.env
+server/.env
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Test coverage
+coverage
+
+# Environment variants
+.env.*
+server/.env.*
+
+# Tooling caches
+.eslintcache
+.turbo

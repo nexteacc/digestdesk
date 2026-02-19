@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: digestdesk
+    runtime: node
+    plan: free
+    buildCommand: pnpm install && pnpm run build:all
+    startCommand: cd server && npx tsx src/index.ts
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: AI_MODEL
+        value: gpt-5-nano
