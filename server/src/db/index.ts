@@ -79,7 +79,7 @@ export function initDb() {
     CREATE INDEX IF NOT EXISTS idx_articles_feed_id ON articles(feed_id);
     CREATE INDEX IF NOT EXISTS idx_articles_url ON articles(url);
     CREATE INDEX IF NOT EXISTS idx_digest_items_digest_id ON digest_items(digest_id);
-    CREATE INDEX IF NOT EXISTS idx_digests_type_date ON digests(type, date);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_digests_type_date ON digests(type, date);
   `);
 
   console.log("Database initialized at", DB_PATH);

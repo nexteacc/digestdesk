@@ -24,7 +24,7 @@ export async function generateDaily(date?: string): Promise<string> {
     return existing.id;
   }
 
-  // 取指定日期范围内的文章（按 publishedAt 或 fetchedAt）
+  // 取指定日期范围内的文章（仅按 publishedAt）
   const dayArticles = db
     .select({
       id: articles.id,
@@ -40,26 +40,7 @@ export async function generateDaily(date?: string): Promise<string> {
     .all();
 
   if (dayArticles.length === 0) {
-    console.log(`[digest] No articles for ${targetDate}`);
-    // 也可以尝试用 fetchedAt
-    const fetchedArticles = db
-      .select({
-        id: articles.id,
-        feedId: articles.feedId,
-        title: articles.title,
-        author: articles.author,
-        url: articles.url,
-        publishedAt: articles.publishedAt,
-        contentText: articles.contentText,
-      })
-      .from(articles)
-      .where(and(gte(articles.fetchedAt, targetDate), lt(articles.fetchedAt, nextDate)))
-      .all();
-
-    if (fetchedArticles.length === 0) {
-      throw new Error(`没有找到 ${targetDate} 的文章`);
-    }
-    dayArticles.push(...fetchedArticles);
+    throw new Error(`没有找到 ${targetDate} 的文章`);
   }
 
   console.log(`[digest] Generating daily for ${targetDate}, ${dayArticles.length} articles`);
