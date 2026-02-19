@@ -21,7 +21,7 @@ export default defineConfig({
       "@shared": path.resolve(__dirname, "./shared"),
     },
   },
-  base: "./",
+  base: "/",
   build: { outDir: "dist", emptyOutDir: true },
   server: {
     proxy: {
