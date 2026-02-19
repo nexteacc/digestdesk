@@ -25,7 +25,7 @@
 - [x] 订阅源 CRUD API（`/api/feeds`）
 - [x] Substack 搜索代理（`/api/substack/search`）
 - [x] Substack 信息获取（`/api/substack/info`）
-- [x] RSS 抓取与解析（rss-parser，node-cron 每小时同步）
+- [x] RSS 抓取与解析（rss-parser，node-cron 每天 8:00 同步）
 - [x] 内容抓取：Jina Reader API + Turndown HTML→Markdown 兜底
 - [x] AI 摘要引擎（Vercel AI SDK，默认 Gemini 2.5 Flash，Zod schema 结构化输出）
 - [x] 日报/周报生成逻辑（`/api/digests/generate`）
@@ -74,14 +74,14 @@
 
 #### 0.2 RSS 内容解析
 
-- 定时抓取已订阅源的 RSS Feed（node-cron，每小时执行）
+- 定时抓取已订阅源的 RSS Feed（node-cron，每天 8:00 执行）
 - 解析文章：标题、作者、发布时间、全文内容、原文链接
 - **两层内容抓取策略（输出 Markdown，非纯文本）：**
   1. **Jina Reader（主方案）：** 请求 `https://r.jina.ai/{articleUrl}`，返回结构化 Markdown。保留标题层级、列表、代码块等结构，LLM 理解效果优于纯文本。超时 20 秒。
   2. **Turndown（兜底）：** 当 Jina 失败或返回内容 < 500 字符时，从 RSS `content:encoded` 提取 HTML，用 Turndown 转 Markdown。转换前移除 `script`/`style`/`nav` 等噪声标签。
 - 最低内容阈值 500 字符，低于此视为抓取失败触发兜底
 - 增量去重（按文章 URL 或 GUID）
-- 处理节奏：每小时检查一次新内容，Feed 间隔 1 秒（限速）
+- 处理节奏：每天 8:00 检查新内容，Feed 间隔 1 秒（限速）
 
 #### 0.3 数据存储
 
@@ -91,14 +91,29 @@
 
 #### 0.4 Substack 搜索 API 对接 🆕
 
-用户输入关键词后，系统通过 Substack 公开搜索 API 返回匹配的出版物。
+用户输入关键词后，系统通过 Substack 搜索 API 返回匹配的出版物。
 
 **搜索端点：**
 ```
 GET https://substack.com/api/v1/publication/search?query={query}&page=0&limit=10
 ```
 
-**后端代理（同样的 CORS 问题）：**
+**生产环境问题：** Substack 封锁云服务器 IP（如 Render），导致后端直接调用搜索 API 被 403。本地开发（家庭网络）不受影响。
+
+**解决方案：Cloudflare Worker 代理**
+```
+后端 searchSubstack()
+  ↓ 有 CF_SEARCH_PROXY_URL 环境变量？
+  ├── 有 → CF Worker（边缘节点 IP，不被封）→ Substack 搜索 API
+  └── 没有 → 直接调 Substack（本地开发兼容）
+```
+
+- Worker 代码通过 Cloudflare Dashboard 部署和管理（~60 行 JS）
+- Worker 端点：`GET /search?query=xxx&page=0&limit=10`
+- 防滥用：通过 `PROXY_TOKEN` secret + `Authorization: Bearer` 验证
+- 后端通过 `CF_SEARCH_PROXY_URL` 和 `CF_SEARCH_PROXY_TOKEN` 环境变量配置
+
+**后端代理（CORS + CF Worker 代理）：**
 ```
 GET /api/substack/search?query={query}&page=0&limit=10
 
@@ -117,8 +132,8 @@ Response:
 ```
 
 **与信息获取服务的关系：**
-- 搜索 → 返回出版物列表（名称、Logo、简介）
-- 用户选择后 → 调用 0.1 信息获取服务 → 获取完整信息 + RSS Feed URL → 订阅
+- 搜索 → 返回出版物列表（名称、Logo、简介）→ 需要 CF Worker（生产环境）
+- 用户选择后 → 调用 0.1 信息获取服务（RSS Feed，公开协议，不需要代理）→ 订阅
 
 ---
 
@@ -196,9 +211,9 @@ MVP 阶段：手动触发生成。
 
 #### 2.2 订阅流程进一步优化
 
-- 首页改造（今日 Digest 直接展示）
-- 品牌更新（DigestDesk）
-- 设置页（推送时间、摘要偏好）
+- ~~首页改造（今日 Digest 直接展示）~~ ✅ T2.3 已完成
+- ~~品牌更新（DigestDesk）~~ ✅ T2.5 已完成
+- 设置页（推送时间、摘要偏好）— T2.6 待做
 
 #### 2.3 浏览器推送
 
@@ -265,9 +280,9 @@ MVP 阶段：手动触发生成。
 │              后端服务（Express v5 :3001）              │
 │  ┌──────────┐ ┌──────────┐ ┌───────────────────┐    │
 │  │ RSS 抓取  │ │ AI 摘要  │ │ Substack 搜索代理 │    │
-│  │ node-cron │ │ Vercel   │ │ (publication/     │    │
-│  │ 每小时同步│ │ AI SDK   │ │  search API)      │    │
-│  │ rss-parser│ │Gemini/GPT│ │                   │    │
+│  │ node-cron │ │ Vercel   │ │ → CF Worker 转发  │    │
+│  │ 每天8:00 │ │ AI SDK   │ │ (生产环境绕过     │    │
+│  │ rss-parser│ │Gemini/GPT│ │  IP 封锁)         │    │
 │  └──────────┘ └──────────┘ └───────────────────┘    │
 │  ┌──────────────────────────────────────┐           │
 │  │   内容抓取：Jina Reader + Turndown   │           │
@@ -291,8 +306,9 @@ MVP 阶段：手动触发生成。
                   │
 ┌─────────────────▼───────────────────────────────────┐
 │           外部服务                                    │
-│  Substack RSS + Search API │ Gemini Flash / OpenAI  │
-│  Jina Reader API           │ Web Push [MVP 后]       │
+│  Substack RSS Feed     │ Gemini Flash / OpenAI       │
+│  CF Worker 搜索代理     │ Web Push [MVP 后]           │
+│  Jina Reader API       │                             │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -317,11 +333,12 @@ MVP 阶段：手动触发生成。
 
 ### MVP 后改造
 
-| 页面/组件 | 改造内容 |
-|-----------|----------|
-| **DailyDigest** | 空状态优化、引导添加订阅 |
-| **新增：Settings** | 推送时间设置、摘要偏好、账户管理 |
-| **新增：Onboarding** | 首次使用引导流程（支持搜索 + URL 两种添加方式） |
+| 页面/组件 | 改造内容 | 状态 |
+|-----------|----------|------|
+| **DailyDigest** | 空状态优化、引导添加订阅 | ✅ T2.3 已完成 |
+| **AppShell** | 品牌 DigestDesk、导航覆盖所有页面 | ✅ T2.5 已完成 |
+| **新增：Settings** | 推送时间设置、摘要偏好、账户管理 | 待做 (T2.6) |
+| **新增：Onboarding** | 首次使用引导流程（支持搜索 + URL 两种添加方式） | 待做 (T2.7) |
 
 ---
 

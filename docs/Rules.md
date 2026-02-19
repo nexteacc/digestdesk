@@ -60,7 +60,7 @@
 - **并发控制**：p-limit（5 篇并发摘要）
 - **环境管理**：dotenv
 - **内容抓取**：Jina Reader API（主） + Turndown（兜底）
-- **定时任务**：node-cron（每小时同步 RSS）
+- **定时任务**：node-cron（每天 8:00 同步 RSS）
 - **RSS 解析**：rss-parser
 - **跨域**：cors 中间件
 
@@ -85,6 +85,8 @@
   - `OPENAI_API_KEY` — OpenAI API 密钥（备选）
   - `AI_MODEL` — 自定义模型 ID（可选，默认 gemini-2.5-flash-preview-05-20）
   - `PORT` — 后端端口（默认 3001）
+  - `CF_SEARCH_PROXY_URL` — Cloudflare Worker 搜索代理 URL（生产环境需要）
+  - `CF_SEARCH_PROXY_TOKEN` — 搜索代理认证 token
 - **前后端分离部署**：前端通过 API 调用后端，开发时前端 Vite dev server 代理到后端
 
 ### 代码风格
@@ -133,8 +135,14 @@
 | `server/src/db/index.ts` | SQLite 连接初始化（better-sqlite3, WAL 模式） |
 | `server/src/services/rss.ts` | RSS 抓取 + Jina Reader + Turndown 兜底 |
 | `server/src/services/summarizer.ts` | AI 摘要（Vercel AI SDK + Zod schema，多模型支持） |
+| `server/src/services/substack.ts` | Substack 搜索代理 + 信息获取（支持 CF Worker 代理） |
 | `server/src/services/digest.ts` | 日报/周报编排逻辑 |
-| `server/src/cron/scheduler.ts` | node-cron 定时同步（每小时） |
+| `server/src/cron/scheduler.ts` | node-cron 定时同步（每天 8:00） |
+
+**搜索代理（Cloudflare Worker）：**
+
+通过 Cloudflare Dashboard 部署和管理，代码在 Cloudflare 控制台在线编辑。
+后端通过 `CF_SEARCH_PROXY_URL` 和 `CF_SEARCH_PROXY_TOKEN` 环境变量与其交互。
 
 ---
 
@@ -145,7 +153,7 @@
 ### 数据源优先级
 
 1. **RSS Feed** — 首选，官方支持，稳定可靠
-2. **Substack 搜索 API** — 出版物发现，需后端代理（CORS）
+2. **Substack 搜索 API** — 出版物发现，需后端代理（CORS）；生产环境通过 Cloudflare Worker 代理（绕过云服务器 IP 封锁）
 3. **非官方 API** — 补充数据，不作为唯一依赖
 
 ### 数据获取原则
@@ -180,7 +188,6 @@
 - **关键洞察**：3 条，每条具体、可执行、有信息量
   - 好的：「PLG 公司的 NDR 比 Sales-led 高 15-20%」
   - 差的：「作者认为 PLG 很重要」
-- **阅读价值**：AI 判断该文章对用户的阅读价值（high/medium/low）
 
 ### 日报编排规则
 
@@ -201,7 +208,6 @@
 ### 首次使用
 
 - **3 分钟内看到第一份 Digest** — 这是转化的关键节点
-- 首份 Digest 基于过去 7 天的文章生成（数据更丰满）
 - 添加订阅支持两种方式：**搜索名称**（默认推荐） + **粘贴 URL**（备选）
 - 搜索结果必须展示 Logo、名称、简介（帮用户确认"这就是我要的"）
 - 推荐热门 Substack 降低冷启动门槛（MVP 后迭代）
@@ -274,9 +280,9 @@ server/src/
 │   ├── rss.ts            # RSS 抓取 + Jina Reader + Turndown
 │   ├── summarizer.ts     # Vercel AI SDK + Zod schema（多模型）
 │   ├── digest.ts         # 日报/周报编排逻辑
-│   └── substack.ts       # Substack API 调用封装
+│   └── substack.ts       # Substack API 调用封装（支持 CF Worker 代理）
 └── cron/
-    └── scheduler.ts      # node-cron 每小时同步
+    └── scheduler.ts      # node-cron 每天 8:00 同步
 ```
 
 ---

@@ -10,15 +10,16 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import * as api from "@/lib/api";
-import type { Digest, DigestListItem, Feed } from "@/lib/types";
+import type { Digest, DigestListItem, Feed, SubstackSearchResult } from "@/lib/types";
 import {
   ExternalLink,
   BookOpen,
   Loader2,
   CheckCircle2,
-  Rss,
+  Search,
 } from "lucide-react";
 
 const PAGE_SIZE = 20;
@@ -127,6 +128,158 @@ function ReadingComplete({ itemCount }: { itemCount: number }) {
   );
 }
 
+// --- 首页欢迎 + 内联搜索 ---
+function WelcomeSearch({ onAdded }: { onAdded: () => void }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SubstackSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [subscribing, setSubscribing] = useState<string | null>(null);
+  const requestId = useRef(0);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      requestId.current += 1;
+      setSearching(false);
+      setResults([]);
+      setHasSearched(false);
+      return;
+    }
+    const id = ++requestId.current;
+    const handler = setTimeout(async () => {
+      setSearching(true);
+      setHasSearched(true);
+      try {
+        const r = await api.searchSubstack(q);
+        if (requestId.current === id) setResults(r);
+      } catch {
+        if (requestId.current === id) toast.error("搜索失败");
+      } finally {
+        if (requestId.current === id) setSearching(false);
+      }
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [query]);
+
+  async function subscribe(url: string) {
+    setSubscribing(url);
+    try {
+      await api.createFeed(url);
+      toast.success("已订阅，正在准备你的第一份日报…");
+      onAdded();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "添加失败");
+      setSubscribing(null);
+    }
+  }
+
+  return (
+    <Card className="p-8 md:p-12">
+      <div className="max-w-md mx-auto text-center">
+        <div className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground">
+          Welcome to your desk
+        </div>
+        <h3 className="mt-4 text-2xl md:text-3xl font-semibold leading-tight">
+          集中跟踪，轻松读完
+        </h3>
+        <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
+          添加你关注的创作者，DigestDesk 每天帮你读完他们的最新文章
+        </p>
+      </div>
+
+      <div className="max-w-md mx-auto mt-8">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="搜索出版物名称或作者…"
+            className="pl-10"
+            autoFocus
+          />
+        </div>
+
+        {(searching || results.length > 0 || (hasSearched && results.length === 0)) && (
+          <div className="mt-4">
+            {searching ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="flex items-center gap-3 p-2">
+                    <Skeleton className="h-9 w-9 rounded-full shrink-0" />
+                    <div className="flex-1 space-y-1.5">
+                      <Skeleton className="h-3.5 w-[140px]" />
+                      <Skeleton className="h-3 w-[220px]" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : results.length > 0 ? (
+              <div className="space-y-2">
+                {results.map((r) => (
+                  <div
+                    key={r.url}
+                    className="flex items-center gap-3 rounded-md border border-border p-3 transition-colors hover:bg-accent/40"
+                  >
+                    <Avatar className="h-9 w-9 shrink-0">
+                      <AvatarImage src={r.logoUrl} alt={r.name} />
+                      <AvatarFallback className="text-xs">
+                        {r.name.slice(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium truncate">{r.name}</span>
+                        <span className="text-xs text-muted-foreground truncate hidden sm:inline">
+                          by {r.authorName}
+                        </span>
+                      </div>
+                      {r.description && (
+                        <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                          {r.description}
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => subscribe(r.url)}
+                      disabled={subscribing !== null}
+                      className="shrink-0 gap-1.5"
+                    >
+                      {subscribing === r.url ? (
+                        <><Loader2 className="h-3 w-3 animate-spin" />添加中</>
+                      ) : (
+                        "订阅"
+                      )}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="py-6 text-center text-sm text-muted-foreground">
+                未找到匹配的出版物，试试其他关键词
+              </div>
+            )}
+          </div>
+        )}
+
+        {!hasSearched && (
+          <p className="mt-6 text-center text-xs text-muted-foreground">
+            也可以前往
+            <Link href="/subscriptions">
+              <span className="underline underline-offset-4 hover:text-foreground mx-1">
+                订阅源管理
+              </span>
+            </Link>
+            通过 URL 添加
+          </p>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 // --- 主页面 ---
 export default function DailyDigest() {
   const [digestList, setDigestList] = useState<DigestListItem[]>([]);
@@ -152,7 +305,9 @@ export default function DailyDigest() {
         const d = await api.fetchDigest(dailyList[0].id);
         setCurrent(d);
       } else if (feeds.length > 0) {
+        setLoading(false);
         await autoGenerate();
+        return;
       }
     } catch {
       toast.error("加载失败");
@@ -174,8 +329,9 @@ export default function DailyDigest() {
       setDigestList(list);
       toast.success("日报生成成功");
     } catch (e) {
-      // 生成失败（可能没有文章），不显示错误，展示空状态
+      // 生成失败（可能没有新文章），展示空状态提示
       console.log("[DailyDigest] auto-generate failed:", e);
+      toast("暂无新文章，稍后再来看看");
     } finally {
       setGenerating(false);
     }
@@ -251,10 +407,18 @@ export default function DailyDigest() {
     }));
   }, [current, feedLogoMap]);
 
-  const handleTocClick = useCallback((id: string) => {
+  const handleTocClick = useCallback((id: string, index: number) => {
     const target = document.getElementById(id);
-    if (!target) return;
-    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    // Article not rendered yet — expand pagination to include it, then scroll
+    const neededPage = Math.ceil((index + 1) / PAGE_SIZE);
+    setPage((prev) => Math.max(prev, neededPage));
+    setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
   }, []);
 
   return (
@@ -270,7 +434,7 @@ export default function DailyDigest() {
               <Badge variant="outline" className="border-border">
                 {todayLabel}
               </Badge>
-              {!loading && current && (
+              {!loading && current && import.meta.env.DEV && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -328,25 +492,9 @@ export default function DailyDigest() {
         {/* Generating */}
         {!loading && generating && <GeneratingProgress />}
 
-        {/* Empty: no feeds */}
+        {/* Empty: no feeds — welcome + inline search */}
         {!loading && !generating && !current && !hasFeeds && (
-          <Card className="p-10 text-center">
-            <Rss className="h-8 w-8 mx-auto text-muted-foreground" />
-            <div className="mt-3 text-lg font-semibold">
-              还没有订阅源
-            </div>
-            <div className="mt-1 text-sm text-muted-foreground">
-              添加你的第一个 Substack，日报会自动为你生成
-            </div>
-            <div className="mt-4">
-              <Link href="/subscriptions">
-                <Button variant="outline" className="gap-1.5">
-                  <Rss className="h-4 w-4" />
-                  添加订阅源
-                </Button>
-              </Link>
-            </div>
-          </Card>
+          <WelcomeSearch onAdded={loadDigest} />
         )}
 
         {/* Empty: has feeds but no digest */}
@@ -390,7 +538,7 @@ export default function DailyDigest() {
 
             <div className="grid gap-4 md:grid-cols-[320px_1fr] items-start">
               {/* TOC */}
-              <Card className="p-4 md:p-5 md:sticky md:top-6 h-fit">
+              <Card id="digest-toc" className="p-4 md:p-5 md:sticky md:top-6 h-fit">
                 <div className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
                   目录
                 </div>
@@ -408,7 +556,7 @@ export default function DailyDigest() {
                         <button
                           type="button"
                           className="block w-full text-left leading-snug hover:text-foreground"
-                          onClick={() => handleTocClick(t.id)}
+                          onClick={() => handleTocClick(t.id, idx)}
                         >
                           <div className="flex items-center gap-2 text-[12px] text-muted-foreground tracking-wide">
                             <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border bg-background text-[10px]">
@@ -499,12 +647,16 @@ export default function DailyDigest() {
                       <div className="mt-5 text-xs text-muted-foreground">
                         #
                         {String(index + 1).padStart(2, "0")} ·{" "}
-                        <a
-                          href="#"
+                        <button
+                          type="button"
                           className="underline underline-offset-4 hover:text-foreground"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            document.getElementById("digest-toc")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                          }}
                         >
                           回到目录
-                        </a>
+                        </button>
                       </div>
                     </Card>
                   );

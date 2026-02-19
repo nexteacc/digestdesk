@@ -11,10 +11,13 @@ type NavItem = {
   icon: React.ReactNode;
 };
 
-const nav: NavItem[] = [
+const contentNav: NavItem[] = [
   { href: "/", label: "今日日报", icon: <Newspaper className="h-4 w-4" /> },
-  { href: "/subscriptions", label: "订阅源", icon: <Rss className="h-4 w-4" /> },
   { href: "/weekly", label: "周报", icon: <BookOpen className="h-4 w-4" /> },
+];
+
+const manageNav: NavItem[] = [
+  { href: "/subscriptions", label: "订阅源", icon: <Rss className="h-4 w-4" /> },
 ];
 
 export default function AppShell({ children }: PropsWithChildren) {
@@ -52,8 +55,33 @@ export default function AppShell({ children }: PropsWithChildren) {
                 导航
               </div>
               <Separator />
-              <nav className="mt-2 mb-1 grid gap-1">
-                {nav.map((item) => {
+              <nav className="mt-2 grid gap-1">
+                {contentNav.map((item) => {
+                  const active =
+                    location === item.href ||
+                    (item.href !== "/" && location.startsWith(item.href));
+                  return (
+                    <Link key={item.href} href={item.href}>
+                      <Button
+                        variant={active ? "secondary" : "ghost"}
+                        className={cn(
+                          "w-full justify-start gap-2",
+                          active && "border border-border"
+                        )}
+                      >
+                        {item.icon}
+                        {item.label}
+                      </Button>
+                    </Link>
+                  );
+                })}
+              </nav>
+              <Separator className="my-1.5" />
+              <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground px-2 py-1">
+                管理
+              </div>
+              <nav className="mb-1 grid gap-1">
+                {manageNav.map((item) => {
                   const active =
                     location === item.href ||
                     (item.href !== "/" && location.startsWith(item.href));

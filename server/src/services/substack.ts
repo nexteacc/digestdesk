@@ -50,20 +50,32 @@ export async function searchSubstack(
   page = 0,
   limit = 10,
 ): Promise<SubstackSearchResult[]> {
-  const url = `https://substack.com/api/v1/publication/search?query=${encodeURIComponent(query)}&page=${page}&limit=${limit}`;
+  const proxyBase = process.env.CF_SEARCH_PROXY_URL;
+  const proxyToken = process.env.CF_SEARCH_PROXY_TOKEN;
+
+  const url = proxyBase
+    ? `${proxyBase}/search?query=${encodeURIComponent(query)}&page=${page}&limit=${limit}`
+    : `https://substack.com/api/v1/publication/search?query=${encodeURIComponent(query)}&page=${page}&limit=${limit}`;
+
+  const headers: Record<string, string> = proxyBase
+    ? {
+        Accept: "application/json",
+        ...(proxyToken ? { Authorization: `Bearer ${proxyToken}` } : {}),
+      }
+    : {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        Accept: "application/json",
+        "Accept-Language": "en-US,en;q=0.9",
+        Referer: "https://substack.com/search",
+      };
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
 
   const response = await fetch(url, {
     signal: controller.signal,
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-      Accept: "application/json",
-      "Accept-Language": "en-US,en;q=0.9",
-      Referer: "https://substack.com/search",
-    },
+    headers,
   }).finally(() => clearTimeout(timeout));
 
   if (!response.ok) {

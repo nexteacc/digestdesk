@@ -73,8 +73,9 @@
 | Substack 订阅管理 | YouTube 频道（Phase 2） |
 | RSS 抓取 + AI 摘要 | Podcast / Twitter / Reddit |
 | 日报 + 周报生成 | 用户间社交分享 |
-| 网页阅读 + 浏览器推送 | 邮件投递 |
-| Substack 公开信息获取 | 付费墙内容 |
+| 网页阅读（手动打开） | 浏览器推送通知（MVP 后） |
+| Substack 公开信息获取 | 邮件投递 |
+|  | 付费墙内容 |
 
 ---
 
@@ -151,7 +152,7 @@ Phase 3（未来）：+ 更多信息源（Podcast、RSS 通用源等）
 |------|------|------|
 | AI 摘要质量不达标 | 用户失去信任，产品无价值 | 先用最强模型，早期收集用户反馈迭代 prompt |
 | 使用频率衰减 | DAU 下降，产品变成"注册后不用" | 浏览器推送建立习惯，周报做召回 |
-| Substack 限制 API 访问 | 数据源断裂 | RSS 为主（官方支持），API 为辅 |
+| Substack 限制 API 访问 | 数据源断裂 | RSS 为主（官方支持），API 为辅；搜索 API 通过 CF Worker 代理绕过 IP 封锁 |
 | 冷启动门槛高 | 用户注册后不知道订阅什么 | 提供热门 Substack 推荐列表 |
 | 信息同质化 | 用户感知不到差异 | 个性化编排，突出用户独特的订阅组合 |
 
@@ -173,7 +174,7 @@ Phase 3（未来）：+ 更多信息源（Podcast、RSS 通用源等）
 - Vercel AI SDK（ai + @ai-sdk/google + @ai-sdk/openai）— 多模型支持
 - 默认 Gemini 2.5 Flash（1M 上下文窗口，不截断全文）；可切换 GPT-4o-mini
 - Jina Reader API + Turndown（内容抓取）
-- node-cron（每小时 RSS 同步）+ rss-parser
+- node-cron（每天 8:00 RSS 同步）+ rss-parser
 - p-limit（5 篇并发摘要生成）
 - dotenv（环境变量管理）
 
@@ -182,6 +183,7 @@ Phase 3（未来）：+ 更多信息源（Podcast、RSS 通用源等）
 | 方式 | 可靠性 | 数据范围 |
 |------|--------|----------|
 | RSS Feed (`/feed`) | 高（官方支持） | 文章标题、全文HTML、作者名、发布日期 |
+| 搜索 API (`/api/v1/publication/search`) | 中（非官方，生产环境需 CF Worker 代理） | 出版物名称、Logo、简介、URL |
 | 非官方 API (`/api/v1/archive`) | 中（可能变动） | 文章列表、封面图、互动数据 |
 | 非官方 API (`/api/v1/posts/{slug}`) | 中 | 单篇完整内容、评论数、反应数 |
 | Publication 元信息 | 高 | 出版物名称、描述、Logo |

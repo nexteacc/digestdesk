@@ -15,6 +15,7 @@
 数据库：SQLite (better-sqlite3 + Drizzle ORM, WAL mode)
 AI：Vercel AI SDK + gpt-5-nano (OpenAI)，Zod schema 结构化输出
 内容抓取：Jina Reader API (主) + Turndown HTML→Markdown (兜底)
+搜索代理：Cloudflare Worker（绕过 Substack 对云服务器 IP 的封锁）
 定时任务：node-cron（进程内）
 项目结构：Monorepo（/ 前端 + /server 后端 + /shared 共享类型）
 ```
@@ -66,7 +67,7 @@ Vite dev server :5173 ──proxy /api──→ Express :3001 ──→ SQLite �
 **改动点：**
 - Express 托管前端 `dist/` 静态文件
 - 添加生产环境构建脚本（前端 build + 后端 tsc 编译）
-- cron 从每小时改为每天一次
+- cron 已改为每天 8:00 一次
 
 ### 为什么合并成一个服务
 
@@ -255,7 +256,7 @@ Body (HTML):
 
 ```typescript
 // server/src/cron/scheduler.ts
-cron.schedule("0 * * * *", async () => { ... }); // 每小时
+cron.schedule("0 8 * * *", async () => { ... }); // 每天 8:00
 ```
 
 进程内 node-cron，简单直接。
