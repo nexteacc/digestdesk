@@ -127,3 +127,104 @@ export async function searchSubstack(
     };
   });
 }
+
+/**
+ * 从用户公开主页 /@username/reads 提取订阅列表
+ */
+export async function fetchSubstackReads(
+  username: string,
+): Promise<SubstackSearchResult[]> {
+  const pageUrl = `https://substack.com/@${encodeURIComponent(username)}/reads`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+
+  const response = await fetch(pageUrl, {
+    signal: controller.signal,
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      Accept: "text/html",
+      "Accept-Language": "en-US,en;q=0.9",
+    },
+  }).finally(() => clearTimeout(timeout));
+
+  if (!response.ok) {
+    throw new Error(
+      response.status === 404
+        ? "找不到该用户，请检查用户名"
+        : `请求失败 (${response.status})`,
+    );
+  }
+
+  const html = await response.text();
+
+  // 从 HTML 中提取 window._preloads JSON
+  const match = html.match(
+    /window\._preloads\s*=\s*JSON\.parse\(("(?:[^"\\]|\\.)*")\)/,
+  );
+  if (!match) {
+    throw new Error("无法解析订阅数据，该用户可能没有公开订阅列表");
+  }
+
+  let preloads: Record<string, unknown>;
+  try {
+    // match[1] 是一个 JSON 编码的字符串（外层引号包裹，内容经过转义）
+    const jsonString = JSON.parse(match[1]) as string;
+    preloads = JSON.parse(jsonString) as Record<string, unknown>;
+  } catch {
+    throw new Error("订阅数据格式异常");
+  }
+
+  // 提取 subscriptions 中的 publications
+  const getString = (value: unknown): string =>
+    typeof value === "string" ? value : "";
+
+  const getObj = (value: unknown): Record<string, unknown> =>
+    typeof value === "object" && value !== null
+      ? (value as Record<string, unknown>)
+      : {};
+
+  // preloads 结构中可能有多种路径存放订阅数据，尝试常见路径
+  let publications: unknown[] = [];
+
+  const profile = getObj(preloads.profile);
+
+  // 路径1: preloads.profile.subscriptions (数组，每项有 publication 字段)
+  if (Array.isArray(profile.subscriptions)) {
+    publications = profile.subscriptions
+      .map((sub) => getObj(sub).publication)
+      .filter(Boolean);
+  }
+
+  // 路径2: preloads.subscriptions
+  if (publications.length === 0 && Array.isArray(preloads.subscriptions)) {
+    publications = preloads.subscriptions
+      .map((sub) => getObj(sub).publication)
+      .filter(Boolean);
+  }
+
+  if (publications.length === 0) {
+    throw new Error("该用户没有公开的订阅列表");
+  }
+
+  return publications.map((raw) => {
+    const pub = getObj(raw);
+    const name = getString(pub.name);
+    const logoUrl = getString(pub.logo_url);
+    const description = getString(pub.hero_text) || getString(pub.description);
+    const subdomain = getString(pub.subdomain);
+    const customDomain = getString(pub.custom_domain);
+
+    const author = getObj(pub.author);
+    const authorName = getString(author.name) || getString(pub.author_name);
+
+    const url = customDomain
+      ? `https://${customDomain}`
+      : subdomain
+        ? `https://${subdomain}.substack.com`
+        : "";
+
+    return { name, logoUrl, description, url, authorName };
+  }).filter((item) => item.url && item.name);
+}

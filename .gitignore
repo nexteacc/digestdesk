@@ -46,3 +46,4 @@ server/.env.*
 # Tooling caches
 .eslintcache
 .turbo
+.claude

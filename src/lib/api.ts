@@ -52,6 +52,32 @@ export function getSubstackInfo(url: string): Promise<SubstackInfo> {
   return request(`/substack/info?url=${encodeURIComponent(url)}`);
 }
 
+export async function fetchSubstackReads(
+  username: string,
+): Promise<SubstackSearchResult[]> {
+  const data = await request<{ results: SubstackSearchResult[] }>(
+    `/substack/reads?username=${encodeURIComponent(username)}`,
+  );
+  return data.results;
+}
+
+// --- Feeds (bulk) ---
+
+export function importFeeds(
+  items: Array<{
+    url: string;
+    name?: string;
+    logoUrl?: string;
+    authorName?: string;
+    description?: string;
+  }>,
+): Promise<{ created: number; skipped: number }> {
+  return request("/feeds/import", {
+    method: "POST",
+    body: JSON.stringify({ items }),
+  });
+}
+
 // --- Digests ---
 
 export function fetchDigests(

@@ -22,11 +22,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import * as api from "@/lib/api";
 import type { Feed, SubstackSearchResult, SubstackInfo } from "@/lib/types";
-import { Check, Search, Trash2, Link as LinkIcon } from "lucide-react";
+import { Check, Search, Trash2, Link as LinkIcon, Download } from "lucide-react";
+import ImportDialog from "@/components/ImportDialog";
 
 export default function SubscriptionsPage() {
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [feedsLoading, setFeedsLoading] = useState(true);
+  const [importOpen, setImportOpen] = useState(false);
 
   // search state
   const [searchQuery, setSearchQuery] = useState("");
@@ -191,6 +193,15 @@ export default function SubscriptionsPage() {
                 添加你关注的 Substack
               </p>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setImportOpen(true)}
+            >
+              <Download className="h-3.5 w-3.5" />
+              从 Substack 导入
+            </Button>
           </div>
           <Separator className="mt-4" />
         </div>
@@ -463,6 +474,12 @@ export default function SubscriptionsPage() {
           )}
         </div>
       </div>
+      <ImportDialog
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImported={refresh}
+        existingFeeds={feeds}
+      />
     </AppShell>
   );
 }

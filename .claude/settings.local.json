@@ -44,7 +44,12 @@
       "Bash(echo:*)",
       "WebFetch(domain:brightdata.com)",
       "WebFetch(domain:data4ai.com)",
-      "WebFetch(domain:www.humai.blog)"
+      "WebFetch(domain:www.humai.blog)",
+      "WebFetch(domain:gist.github.com)",
+      "WebFetch(domain:substack.com)",
+      "Bash(git status:*)",
+      "Bash(pnpm audit:*)",
+      "Bash(npx eslint:*)"
     ]
   }
 }

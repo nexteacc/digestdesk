@@ -17,7 +17,7 @@ const contentNav: NavItem[] = [
 ];
 
 const manageNav: NavItem[] = [
-  { href: "/subscriptions", label: "订阅源", icon: <Rss className="h-4 w-4" /> },
+  { href: "/subscriptions", label: "关注列表", icon: <Rss className="h-4 w-4" /> },
 ];
 
 export default function AppShell({ children }: PropsWithChildren) {
@@ -28,20 +28,24 @@ export default function AppShell({ children }: PropsWithChildren) {
       {/* Masthead */}
       <header className="hairline">
         <div className="mx-auto max-w-6xl px-4 py-4 md:px-6">
-          <h1 className="flex items-center gap-3 text-2xl md:text-3xl font-semibold leading-none">
-            <span>DigestDesk</span>
-            <span className="flex items-center gap-2">
-              <img
-                src="/logos/substack.svg"
-                alt="Substack"
-                className="h-5 w-5"
-              />
-              <img
-                src="/logos/youtube.svg"
-                alt="YouTube"
-                className="h-5 w-5"
-              />
-            </span>
+          <h1 className="text-2xl md:text-3xl font-semibold leading-none">
+            <Link href="/">
+              <span className="flex items-center gap-3 hover:opacity-90 transition-opacity">
+                <span>DigestDesk</span>
+                <span className="flex items-center gap-2">
+                  <img
+                    src="/logos/substack.svg"
+                    alt="Substack"
+                    className="h-5 w-5"
+                  />
+                  <img
+                    src="/logos/youtube.svg"
+                    alt="YouTube"
+                    className="h-5 w-5"
+                  />
+                </span>
+              </span>
+            </Link>
           </h1>
         </div>
       </header>

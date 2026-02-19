@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { eq, desc, and } from "drizzle-orm";
+import { z } from "zod";
 import { getDb } from "../db/index.js";
 import { digests, digestItems } from "../db/schema.js";
 import { generateDaily, generateWeekly, getWeeklyItems } from "../services/digest.js";
@@ -8,6 +9,23 @@ import type { Digest, DigestItem } from "../../../shared/types.js";
 
 export const digestsRouter = Router();
 
+function safeJsonParse(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+}
+
+const generateSchema = z.object({
+  type: z.enum(["daily", "weekly"], { message: "type 必须为 daily 或 weekly" }),
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "date 格式应为 YYYY-MM-DD")
+    .optional(),
+  force: z.boolean().optional(),
+});
+
 function toDigest(row: typeof digests.$inferSelect, items: DigestItem[]): Digest {
   return {
     id: row.id,
@@ -15,7 +33,7 @@ function toDigest(row: typeof digests.$inferSelect, items: DigestItem[]): Digest
     date: row.date,
     generatedAt: row.generatedAt,
     items,
-    weeklyThemes: row.weeklyThemes ? JSON.parse(row.weeklyThemes) : undefined,
+    weeklyThemes: row.weeklyThemes ? safeJsonParse(row.weeklyThemes) as string[] : undefined,
   };
 }
 
@@ -27,7 +45,7 @@ function toDigestItem(row: typeof digestItems.$inferSelect): DigestItem {
     author: row.author ?? undefined,
     url: row.url,
     oneLiner: row.oneLiner,
-    keyInsights: JSON.parse(row.keyInsights),
+    keyInsights: (safeJsonParse(row.keyInsights) as string[]) ?? [],
     publishedAt: row.publishedAt,
   };
 }
@@ -47,7 +65,7 @@ digestsRouter.get("/", (req, res) => {
     type: row.type,
     date: row.date,
     generatedAt: row.generatedAt,
-    weeklyThemes: row.weeklyThemes ? JSON.parse(row.weeklyThemes) : undefined,
+    weeklyThemes: row.weeklyThemes ? safeJsonParse(row.weeklyThemes) as string[] : undefined,
   }));
 
   res.json(result);
@@ -86,16 +104,12 @@ digestsRouter.get("/:id", (req, res) => {
 
 // POST /api/digests/generate — 手动触发生成
 digestsRouter.post("/generate", async (req, res) => {
-  const { type, date, force } = req.body as {
-    type?: "daily" | "weekly";
-    date?: string;
-    force?: boolean;
-  };
-
-  if (!type || !["daily", "weekly"].includes(type)) {
-    res.status(400).json({ error: "type 必须为 daily 或 weekly" });
+  const parsed = generateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0].message });
     return;
   }
+  const { type, date, force } = parsed.data;
 
   try {
     let digestId: string;
@@ -116,6 +130,10 @@ digestsRouter.post("/generate", async (req, res) => {
     // 返回完整的 digest
     const db = getDb();
     const digest = db.select().from(digests).where(eq(digests.id, digestId)).get();
+    if (!digest) {
+      res.status(500).json({ error: "生成后未找到记录" });
+      return;
+    }
     const items = db
       .select()
       .from(digestItems)
@@ -124,7 +142,7 @@ digestsRouter.post("/generate", async (req, res) => {
       .all()
       .map(toDigestItem);
 
-    res.status(201).json(toDigest(digest!, items));
+    res.status(201).json(toDigest(digest, items));
   } catch (err: unknown) {
     console.error("[digests/generate] Error:", err);
     if (err instanceof Error) {
