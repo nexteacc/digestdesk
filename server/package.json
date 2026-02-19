@@ -34,13 +34,5 @@
     "@types/turndown": "^5.0.6",
     "drizzle-kit": "^0.31.4",
     "typescript": "~5.9.3"
-  },
-  "pnpm": {
-    "ignoredBuiltDependencies": [
-      "better-sqlite3"
-    ],
-    "onlyBuiltDependencies": [
-      "better-sqlite3"
-    ]
   }
 }
