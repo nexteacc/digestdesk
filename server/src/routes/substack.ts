@@ -1,5 +1,8 @@
 import { Router } from "express";
+import { like } from "drizzle-orm";
 import { getSubstackInfo, searchSubstack } from "../services/substack.js";
+import { getDb } from "../db/index.js";
+import { feeds } from "../db/schema.js";
 
 export const substackRouter = Router();
 
@@ -40,8 +43,37 @@ substackRouter.get("/search", async (req, res) => {
   try {
     const page = parseInt(req.query.page as string) || 0;
     const limit = parseInt(req.query.limit as string) || 10;
-    const results = await searchSubstack(query, page, limit);
-    res.json({ results });
+
+    // 第一层：本地 DB 搜索已订阅的出版物
+    const db = getDb();
+    const localFeeds = await db
+      .select()
+      .from(feeds)
+      .where(like(feeds.name, `%${query}%`));
+
+    const localResults = localFeeds.map((f) => ({
+      name: f.name,
+      logoUrl: f.logoUrl || "",
+      description: f.description || "",
+      url: f.publicationUrl,
+      authorName: f.authorName || "",
+      isLocal: true,
+    }));
+
+    // 第二层：远程 Substack API（失败不阻塞）
+    let remoteResults: typeof localResults = [];
+    try {
+      const remote = await searchSubstack(query, page, limit);
+      // 过滤掉本地已有的（按 URL 去重）
+      const localUrls = new Set(localResults.map((r) => r.url));
+      remoteResults = remote
+        .filter((r) => !localUrls.has(r.url))
+        .map((r) => ({ ...r, isLocal: false }));
+    } catch (err) {
+      console.warn("[substack/search] Remote search failed, using local only:", err instanceof Error ? err.message : err);
+    }
+
+    res.json({ results: [...localResults, ...remoteResults] });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[substack/search] Error:", msg);
