@@ -36,7 +36,7 @@ const frontendDist = path.resolve(__dirname, "../../dist");
 if (fs.existsSync(frontendDist)) {
   app.use(express.static(frontendDist));
   // SPA fallback: 非 API 路由返回 index.html
-  app.get("/{*path}", (_req, res) => {
+  app.get("*", (_req, res) => {
     res.sendFile(path.join(frontendDist, "index.html"));
   });
   console.log(`Serving frontend from ${frontendDist}`);
