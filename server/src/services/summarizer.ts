@@ -65,19 +65,27 @@ const WEEKLY_SYSTEM_PROMPT = `你是一位资深编辑。以下是本周多篇 N
 
 export async function summarizeArticle(markdown: string): Promise<ArticleSummary> {
   const model = getModel();
+  const provider = getProvider();
+  console.log(`[summarizer] Starting AI summary with ${provider}... (Input length: ${markdown.length})`);
 
-  const { object } = await generateObject({
-    model,
-    schema: ArticleSummarySchema,
-    system: ARTICLE_SYSTEM_PROMPT,
-    prompt: markdown,
-    temperature: 0.3,
-  });
+  try {
+    const { object } = await generateObject({
+      model,
+      schema: ArticleSummarySchema,
+      system: ARTICLE_SYSTEM_PROMPT,
+      prompt: markdown,
+      temperature: 0.3,
+    });
 
-  return {
-    oneLiner: object.oneLiner || "暂无摘要",
-    keyInsights: object.keyInsights.slice(0, 5),
-  };
+    console.log(`[summarizer] AI summary complete. One-liner: ${object.oneLiner?.slice(0, 50)}...`);
+    return {
+      oneLiner: object.oneLiner || "暂无摘要",
+      keyInsights: object.keyInsights.slice(0, 5),
+    };
+  } catch (err) {
+    console.error(`[summarizer] AI summary failed (${provider}):`, err instanceof Error ? err.message : err);
+    throw err;
+  }
 }
 
 export async function generateWeeklyAnalysis(
