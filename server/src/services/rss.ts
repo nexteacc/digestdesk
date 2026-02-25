@@ -137,7 +137,6 @@ export async function syncFeed(feedId: string): Promise<number> {
       url: articleUrl,
       guid,
       publishedAt: item.isoDate || item.pubDate || now,
-      contentHtml: contentHtml || null,
       contentText: contentMarkdown || null,
       coverImageUrl: item.enclosure?.url || null,
       fetchedAt: now,

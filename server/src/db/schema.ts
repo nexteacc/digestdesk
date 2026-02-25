@@ -20,7 +20,6 @@ export const articles = sqliteTable("articles", {
   url: text("url").notNull(),
   guid: text("guid"),
   publishedAt: text("published_at").notNull(),
-  contentHtml: text("content_html"),
   contentText: text("content_text"),
   coverImageUrl: text("cover_image_url"),
   fetchedAt: text("fetched_at").notNull(),
