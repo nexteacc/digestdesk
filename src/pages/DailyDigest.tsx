@@ -548,18 +548,17 @@ export default function DailyDigest() {
                 <div className="mt-2 text-xs text-muted-foreground">
                   {current.items.length} 篇文章
                 </div>
-                <Separator className="my-4" />
-                <ScrollArea className="h-[340px] pr-3">
+                <div className="mt-4">
                   <ol className="space-y-3">
                     {toc.map((t, idx) => (
                       <li key={t.id}>
                         <button
                           type="button"
-                          className="block w-full text-left leading-snug hover:text-foreground"
+                          className="block w-full text-left leading-snug hover:text-foreground group"
                           onClick={() => handleTocClick(t.id, idx)}
                         >
-                          <div className="flex items-center gap-2 text-[12px] text-muted-foreground tracking-wide">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border bg-background text-[10px]">
+                          <div className="flex items-center gap-2 text-[12px] text-muted-foreground tracking-wide group-hover:text-foreground transition-colors">
+                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border bg-background text-[10px] group-hover:border-foreground/30 transition-colors">
                               {String(idx + 1).padStart(2, "0")}
                             </span>
                             <Avatar className="h-5 w-5 border border-border bg-muted">
@@ -570,14 +569,14 @@ export default function DailyDigest() {
                             </Avatar>
                             <span className="truncate">{t.feedTitle}</span>
                           </div>
-                          <div className="mt-1 text-sm underline underline-offset-4 decoration-border">
+                          <div className="mt-1 text-sm underline underline-offset-4 decoration-border group-hover:decoration-foreground/30 transition-colors">
                             {t.title}
                           </div>
                         </button>
                       </li>
                     ))}
                   </ol>
-                </ScrollArea>
+                </div>
               </Card>
 
               {/* Articles */}
