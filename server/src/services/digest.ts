@@ -5,26 +5,52 @@ import { getDb } from "../db/index.js";
 import { feeds, articles, digests, digestItems } from "../db/schema.js";
 import { summarizeArticle, generateWeeklyAnalysis } from "./summarizer.js";
 
-const CONCURRENCY = 5; // 并发摘要数
+const CONCURRENCY = 5; // AI summary concurrency
 
+/**
+ * Generate daily digest:
+ * 1. Set reference time: default to now, or a specific date.
+ * 2. Set lookback window: 24 hours back from reference time.
+ */
 export async function generateDaily(date?: string): Promise<string> {
   const db = getDb();
-  const targetDate = date || new Date().toISOString().slice(0, 10);
-  const nextDate = getNextDate(targetDate);
+  
+  // 1. Determine reference time
+  const baseTime = date ? new Date(date) : new Date();
+  
+  // Date label (YYYY-MM-DD) for DB indexing
+  const dateLabel = baseTime.toISOString().slice(0, 10);
 
-  // 检查当天是否已生成
+  // 2. Set lookback window: 24 hours back from reference time
+  const startTime = new Date(baseTime.getTime() - 24 * 60 * 60 * 1000).toISOString();
+  const endTime = baseTime.toISOString();
+
+  // Check if already exists
   const existing = db
     .select()
     .from(digests)
-    .where(and(eq(digests.type, "daily"), eq(digests.date, targetDate)))
+    .where(and(eq(digests.type, "daily"), eq(digests.date, dateLabel)))
     .get();
 
   if (existing) {
-    console.log(`[digest] Daily for ${targetDate} already exists: ${existing.id}`);
-    return existing.id;
+    console.log(`[digest] Daily for ${dateLabel} already exists. Cleaning up old items for regeneration...`);
+    // Cleanup old items to prevent duplicates on regeneration
+    db.delete(digestItems).where(eq(digestItems.digestId, existing.id)).run();
+    // Reuse existing digestId
+    return generateWithId(existing.id, dateLabel, startTime, endTime);
   }
 
-  // 取指定日期范围内的文章（仅按 publishedAt）
+  const digestId = nanoid();
+  return generateWithId(digestId, dateLabel, startTime, endTime);
+}
+
+/**
+ * Core generation logic
+ */
+async function generateWithId(digestId: string, dateLabel: string, startTime: string, endTime: string): Promise<string> {
+  const db = getDb();
+  
+  // Get articles within 24h window
   const dayArticles = db
     .select({
       id: articles.id,
@@ -36,20 +62,22 @@ export async function generateDaily(date?: string): Promise<string> {
       contentText: articles.contentText,
     })
     .from(articles)
-    .where(and(gte(articles.publishedAt, targetDate), lt(articles.publishedAt, nextDate)))
+    .where(and(gte(articles.publishedAt, startTime), lt(articles.publishedAt, endTime)))
     .all();
 
-  if (dayArticles.length === 0) {
-    throw new Error(`没有找到 ${targetDate} 的文章`);
+  // Deduplicate by URL manually
+  const uniqueArticles = Array.from(new Map(dayArticles.map(a => [a.url, a])).values());
+
+  if (uniqueArticles.length === 0) {
+    throw new Error(`No articles found between ${startTime} and ${endTime}`);
   }
 
-  console.log(`[digest] Generating daily for ${targetDate}, ${dayArticles.length} articles`);
+  console.log(`[digest] Processing ${uniqueArticles.length} unique articles`);
 
-  // 获取 feed 名称映射
+  // Get feed name map
   const allFeeds = db.select({ id: feeds.id, name: feeds.name }).from(feeds).all();
   const feedMap = new Map(allFeeds.map((f) => [f.id, f.name]));
 
-  const toProcess = dayArticles;
   const limit = pLimit(CONCURRENCY);
 
   type ItemResult = {
@@ -63,10 +91,10 @@ export async function generateDaily(date?: string): Promise<string> {
     keyInsights: string[];
   };
 
-  const tasks = toProcess.map((article) =>
+  const tasks = uniqueArticles.map((article) =>
     limit(async (): Promise<ItemResult> => {
       const contentText = article.contentText || "";
-      const feedName = feedMap.get(article.feedId) || "未知来源";
+      const feedName = feedMap.get(article.feedId) || "Unknown Source";
       const base = {
         articleId: article.id,
         feedName,
@@ -77,7 +105,7 @@ export async function generateDaily(date?: string): Promise<string> {
       };
 
       if (!contentText || contentText.length < 50) {
-        return { ...base, oneLiner: "内容过短，无法生成摘要", keyInsights: [] };
+        return { ...base, oneLiner: "Content too short for summary", keyInsights: [] };
       }
 
       try {
@@ -90,28 +118,36 @@ export async function generateDaily(date?: string): Promise<string> {
         };
       } catch (err) {
         console.error(`[digest] Failed to summarize article ${article.id}:`, err);
-        return { ...base, oneLiner: "摘要生成失败", keyInsights: [] };
+        return { ...base, oneLiner: "Summary generation failed", keyInsights: [] };
       }
     }),
   );
 
   const items = await Promise.all(tasks);
-
   items.sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : -1));
 
-  // 写入数据库
-  const digestId = nanoid();
-  const now = new Date().toISOString();
+  // Write/Update Digests table
+  const generationTime = new Date().toISOString();
+  
+  // UPSERT logic
+  const exists = db.select().from(digests).where(eq(digests.id, digestId)).get();
+  if (!exists) {
+    db.insert(digests)
+      .values({
+        id: digestId,
+        type: "daily",
+        date: dateLabel,
+        generatedAt: generationTime,
+      })
+      .run();
+  } else {
+    db.update(digests)
+      .set({ generatedAt: generationTime })
+      .where(eq(digests.id, digestId))
+      .run();
+  }
 
-  db.insert(digests)
-    .values({
-      id: digestId,
-      type: "daily",
-      date: targetDate,
-      generatedAt: now,
-    })
-    .run();
-
+  // Insert new items
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
     db.insert(digestItems)
@@ -131,20 +167,21 @@ export async function generateDaily(date?: string): Promise<string> {
       .run();
   }
 
-  console.log(`[digest] Daily digest ${digestId} created with ${items.length} items`);
+  console.log(`[digest] Daily digest ${digestId} updated with ${items.length} items`);
   return digestId;
 }
 
 /**
- * 生成周报：汇总本周日报 → AI 归纳主题 + 编辑推荐 → 存入 DB
+ * Generate weekly digest:
+ * Aggregates daily digests -> AI themes -> Save to DB
  */
 export async function generateWeekly(weekStartDate?: string): Promise<string> {
   const db = getDb();
 
-  // 默认取本周一
+  // Default to this Monday
   const start = weekStartDate || getMonday(new Date()).toISOString().slice(0, 10);
 
-  // 检查是否已生成
+  // Check if exists
   const existing = db
     .select()
     .from(digests)
@@ -159,10 +196,10 @@ export async function generateWeekly(weekStartDate?: string): Promise<string> {
   const allItems = getWeeklyItems(start);
 
   if (allItems.length === 0) {
-    throw new Error(`没有找到 ${start} 这一周的日报`);
+    throw new Error(`No daily digests found for week starting ${start}`);
   }
 
-  // 调用 AI 生成周报分析
+  // Call AI for analysis
   const inputForAI = allItems.map((it) => ({
     id: it.articleId || it.id,
     feedTitle: it.feedName,
@@ -173,7 +210,7 @@ export async function generateWeekly(weekStartDate?: string): Promise<string> {
 
   const analysis = await generateWeeklyAnalysis(inputForAI);
 
-  // 写入数据库
+  // Write to DB
   const digestId = nanoid();
   const now = new Date().toISOString();
 
@@ -217,7 +254,7 @@ export function getWeeklyItems(start: string) {
   return allItems;
 }
 
-// --- 工具函数 ---
+// --- Utils ---
 
 function getNextDate(dateStr: string, days = 1): string {
   const d = new Date(dateStr);

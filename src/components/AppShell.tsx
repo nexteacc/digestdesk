@@ -1,9 +1,9 @@
-import type { PropsWithChildren } from "react";
+import { useState, type PropsWithChildren } from "react";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Newspaper, Rss, BookOpen } from "lucide-react";
+import { Newspaper, Rss, BookOpen, ChevronLeft, PanelLeft } from "lucide-react";
 
 type NavItem = {
   href: string;
@@ -22,6 +22,7 @@ const manageNav: NavItem[] = [
 
 export default function AppShell({ children }: PropsWithChildren) {
   const [location] = useLocation();
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
     <div className="min-h-screen paper-noise">
@@ -51,14 +52,26 @@ export default function AppShell({ children }: PropsWithChildren) {
       </header>
 
       <div className="mx-auto max-w-6xl px-4 py-6 md:px-6">
-        <div className="grid gap-6 md:grid-cols-[240px_1fr]">
+        <div className={cn(
+          "grid gap-6 transition-all duration-300",
+          isCollapsed ? "md:grid-cols-[60px_1fr]" : "md:grid-cols-[240px_1fr]"
+        )}>
           {/* Sidebar */}
-          <aside className="md:sticky md:top-6 h-fit">
-            <div className="rounded-lg border border-border bg-card/70 backdrop-blur p-3">
-              <div className="text-xs tracking-[0.18em] uppercase text-muted-foreground px-2 py-2">
-                导航
+          <aside className="md:sticky md:top-6 h-fit overflow-hidden">
+            <div className="rounded-lg border border-border bg-card/70 backdrop-blur p-2 shadow-sm">
+              <div 
+                onClick={() => setIsCollapsed(!isCollapsed)}
+                className="flex items-center justify-between cursor-pointer hover:bg-accent/50 rounded-md transition-colors px-2 py-2"
+                title={isCollapsed ? "展开导航" : "折叠导航"}
+              >
+                {!isCollapsed && (
+                  <span className="text-xs tracking-[0.18em] uppercase text-muted-foreground">导航</span>
+                )}
+                <PanelLeft className={cn("h-4 w-4 text-muted-foreground transition-transform duration-300", isCollapsed && "mx-auto")} />
               </div>
-              <Separator />
+              
+              <Separator className="my-1" />
+              
               <nav className="mt-2 grid gap-1">
                 {contentNav.map((item) => {
                   const active =
@@ -69,22 +82,29 @@ export default function AppShell({ children }: PropsWithChildren) {
                       <Button
                         variant={active ? "secondary" : "ghost"}
                         className={cn(
-                          "w-full justify-start gap-2",
-                          active && "border border-border"
+                          "w-full gap-2 transition-all duration-300",
+                          active && "border border-border",
+                          isCollapsed ? "justify-center px-0" : "justify-start"
                         )}
+                        title={isCollapsed ? item.label : ""}
                       >
                         {item.icon}
-                        {item.label}
+                        {!isCollapsed && <span>{item.label}</span>}
                       </Button>
                     </Link>
                   );
                 })}
               </nav>
-              <Separator className="my-1.5" />
-              <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground px-2 py-1">
-                管理
-              </div>
-              <nav className="mb-1 grid gap-1">
+              
+              {!isCollapsed && <Separator className="my-2" />}
+              
+              {!isCollapsed && (
+                <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground px-2 py-1">
+                  管理
+                </div>
+              )}
+              
+              <nav className={cn("mb-1 grid gap-1", isCollapsed && "mt-1")}>
                 {manageNav.map((item) => {
                   const active =
                     location === item.href ||
@@ -94,12 +114,14 @@ export default function AppShell({ children }: PropsWithChildren) {
                       <Button
                         variant={active ? "secondary" : "ghost"}
                         className={cn(
-                          "w-full justify-start gap-2",
-                          active && "border border-border"
+                          "w-full gap-2 transition-all duration-300",
+                          active && "border border-border",
+                          isCollapsed ? "justify-center px-0" : "justify-start"
                         )}
+                        title={isCollapsed ? item.label : ""}
                       >
                         {item.icon}
-                        {item.label}
+                        {!isCollapsed && <span>{item.label}</span>}
                       </Button>
                     </Link>
                   );
@@ -108,11 +130,9 @@ export default function AppShell({ children }: PropsWithChildren) {
             </div>
           </aside>
 
-          {/* Main */}
-          <main>
-            <div className="rounded-lg border border-border bg-card/80 backdrop-blur px-4 py-4 md:px-6 md:py-6">
-              {children}
-            </div>
+          {/* Main Content */}
+          <main className="min-w-0">
+            {children}
           </main>
         </div>
       </div>

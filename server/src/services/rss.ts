@@ -2,6 +2,7 @@ import RssParser from "rss-parser";
 import TurndownService from "turndown";
 import { nanoid } from "nanoid";
 import { eq } from "drizzle-orm";
+import pLimit from "p-limit";
 import { getDb } from "../db/index.js";
 import { feeds, articles } from "../db/schema.js";
 
@@ -17,53 +18,68 @@ const turndown = new TurndownService({
   codeBlockStyle: "fenced",
 });
 
-// 跳过导航、页眉页脚等无用元素
-turndown.remove(["script", "style", "nav", "footer", "header"]);
+let isSyncingGlobal = false;
+
+const jinaLimit = pLimit(2);
 
 const JINA_READER_BASE = "https://r.jina.ai/";
-const MIN_CONTENT_LENGTH = 500; // Markdown 最少字数，低于此认为内容不完整
+const MIN_CONTENT_LENGTH = 500;
 
-/**
- * 用 Jina Reader 抓取文章全文 Markdown
- */
-export async function fetchMarkdown(articleUrl: string): Promise<string | null> {
+async function fetchWithRetry(url: string, options: any, retries = 2, backoff = 1000): Promise<Response> {
   try {
-    const response = await fetch(`${JINA_READER_BASE}${articleUrl}`, {
-      headers: {
-        Accept: "text/markdown",
-        "User-Agent": "DigestDesk/1.0",
-      },
-      signal: AbortSignal.timeout(20000),
-    });
-
-    if (!response.ok) {
-      console.warn(`[rss] Jina Reader returned ${response.status} for ${articleUrl}`);
-      return null;
+    const response = await fetch(url, options);
+    if (response.status === 429 && retries > 0) {
+      console.log(`[rss] Rate limited (429), retrying in ${backoff}ms...`);
+      await new Promise(r => setTimeout(r, backoff));
+      return fetchWithRetry(url, options, retries - 1, backoff * 2);
     }
-
-    const markdown = await response.text();
-
-    // 提取正文部分（跳过 Jina 返回的 Title/URL Source/Published Time 头部）
-    const contentStart = markdown.indexOf("Markdown Content:");
-    const content = contentStart !== -1
-      ? markdown.slice(contentStart + "Markdown Content:".length).trim()
-      : markdown;
-
-    if (content.length < MIN_CONTENT_LENGTH) {
-      console.warn(`[rss] Jina content too short (${content.length} chars) for ${articleUrl}`);
-      return null;
-    }
-
-    return content;
+    return response;
   } catch (err) {
-    console.warn(`[rss] Jina Reader failed for ${articleUrl}:`, err);
-    return null;
+    if (retries > 0) {
+      console.log(`[rss] Fetch failed, retrying in ${backoff}ms...`, err);
+      await new Promise(r => setTimeout(r, backoff));
+      return fetchWithRetry(url, options, retries - 1, backoff * 2);
+    }
+    throw err;
   }
 }
 
-/**
- * RSS HTML → Markdown（兜底方案）
- */
+export async function fetchMarkdown(articleUrl: string): Promise<string | null> {
+  return jinaLimit(async () => {
+    try {
+      const response = await fetchWithRetry(`${JINA_READER_BASE}${articleUrl}`, {
+        headers: {
+          Accept: "text/markdown",
+          "User-Agent": "DigestDesk/1.0",
+        },
+        signal: AbortSignal.timeout(20000),
+      });
+
+      if (!response.ok) {
+        console.warn(`[rss] Jina Reader returned ${response.status} for ${articleUrl}`);
+        return null;
+      }
+
+      const markdown = await response.text();
+
+      const contentStart = markdown.indexOf("Markdown Content:");
+      const content = contentStart !== -1
+        ? markdown.slice(contentStart + "Markdown Content:".length).trim()
+        : markdown;
+
+      if (content.length < MIN_CONTENT_LENGTH) {
+        console.warn(`[rss] Jina content too short (${content.length} chars) for ${articleUrl}`);
+        return null;
+      }
+
+      return content;
+    } catch (err) {
+      console.warn(`[rss] Jina Reader failed for ${articleUrl}:`, err);
+      return null;
+    }
+  });
+}
+
 function htmlToMarkdown(html: string): string {
   if (!html) return "";
   return turndown.turndown(html);
@@ -96,7 +112,6 @@ export async function syncFeed(feedId: string): Promise<number> {
 
     if (!articleUrl) continue;
 
-    // 增量去重：按 URL 检查
     const existing = db
       .select({ id: articles.id })
       .from(articles)
@@ -105,10 +120,8 @@ export async function syncFeed(feedId: string): Promise<number> {
 
     if (existing) continue;
 
-    // 1) 先尝试 Jina Reader 抓全文 Markdown
     let contentMarkdown = await fetchMarkdown(articleUrl);
 
-    // 2) 兜底：RSS content:encoded → Turndown 转 Markdown
     if (!contentMarkdown) {
       const contentHtml = item["content:encoded"] || item.content || "";
       contentMarkdown = contentHtml ? htmlToMarkdown(contentHtml) : "";
@@ -125,7 +138,7 @@ export async function syncFeed(feedId: string): Promise<number> {
       guid,
       publishedAt: item.isoDate || item.pubDate || now,
       contentHtml: contentHtml || null,
-      contentText: contentMarkdown || null, // 现在存的是 Markdown 而非纯文本
+      contentText: contentMarkdown || null,
       coverImageUrl: item.enclosure?.url || null,
       fetchedAt: now,
     };
@@ -134,7 +147,6 @@ export async function syncFeed(feedId: string): Promise<number> {
     newCount++;
   }
 
-  // 更新 lastFetchedAt
   db.update(feeds).set({ lastFetchedAt: now }).where(eq(feeds.id, feedId)).run();
 
   console.log(`[rss] ${feed.name}: ${newCount} new articles`);
@@ -142,18 +154,28 @@ export async function syncFeed(feedId: string): Promise<number> {
 }
 
 export async function syncAllFeeds(): Promise<void> {
+  if (isSyncingGlobal) {
+    console.log("[rss] A sync job is already in progress, skipping...");
+    return;
+  }
+
+  isSyncingGlobal = true;
   const db = getDb();
   const allFeeds = db.select().from(feeds).all();
 
   console.log(`[rss] Syncing ${allFeeds.length} feeds...`);
 
-  for (const feed of allFeeds) {
-    try {
-      await syncFeed(feed.id);
-    } catch (err) {
-      console.error(`[rss] Error syncing ${feed.name}:`, err);
+  try {
+    for (const feed of allFeeds) {
+      try {
+        await syncFeed(feed.id);
+      } catch (err) {
+        console.error(`[rss] Error syncing ${feed.name}:`, err);
+      }
+      await new Promise((r) => setTimeout(r, 1000));
     }
-    // 请求间隔 1 秒，尊重服务器
-    await new Promise((r) => setTimeout(r, 1000));
+  } finally {
+    isSyncingGlobal = false;
+    console.log("[rss] All feeds sync complete.");
   }
 }
