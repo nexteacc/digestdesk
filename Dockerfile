@@ -27,7 +27,7 @@ WORKDIR /app
 
 # 设置生产环境
 ENV NODE_ENV=production
-ENV PORT=3001
+ENV PORT=8080
 
 # 复制构建产物和后端源码
 COPY --from=builder /app/dist ./dist
@@ -36,7 +36,7 @@ COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/node_modules ./node_modules
 
 # 暴露端口 (Zeabur 会自动识别并映射)
-EXPOSE 3001
+EXPOSE 8080
 
 # 启动命令
 # 1. 确保数据目录存在并有权限 (SQLite 使用)

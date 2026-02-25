@@ -13,7 +13,11 @@
 
 2.  **环境变量**:
     *   `OPENAI_API_KEY`: 必填。用于生成摘要。
-    *   `PORT`: 选填。默认为 `3001`。大多数平台会自动注入此变量，建议保持默认或根据平台要求设置。
+    *   `CF_SEARCH_PROXY_URL`: 必填。Cloudflare Worker 代理地址，用于绕过 Substack 搜索限制。
+    *   `CF_SEARCH_PROXY_TOKEN`: 必填。Cloudflare Worker 访问令牌。
+    *   `PORT`: 选填。默认为 `3001`。
+    *   `NODE_ENV`: 选填。默认为 `production`。
+    *   `AI_MODEL`: 选填。指定 AI 模型，如 `gpt-4o`。
 
 ---
 
@@ -31,7 +35,7 @@ Railway 对全栈应用支持极佳，配置 Volume 非常直观。
     4.  **Mount Path** (挂载路径) 填写: `/app/server/data`
 *   **环境变量**:
     1.  进入 `Variables` 选项卡。
-    2.  添加 `OPENAI_API_KEY`。
+    2.  添加 `OPENAI_API_KEY`、`CF_SEARCH_PROXY_URL`、`CF_SEARCH_PROXY_TOKEN` 等。
 *   **域名**:
     1.  进入 `Settings` -> `Networking`。
     2.  点击 `Generate Domain` 生成一个公网访问地址。
@@ -49,7 +53,7 @@ Zeabur 操作简单，且服务器位置通常对国内访问更友好。
     5.  Name 随意（例如 `data`）。
 *   **环境变量**:
     1.  进入 `Variables`。
-    2.  添加 `OPENAI_API_KEY`。
+    2.  添加 `OPENAI_API_KEY`、`CF_SEARCH_PROXY_URL`、`CF_SEARCH_PROXY_TOKEN` 等。
 *   **域名**:
     1.  进入 `Networking` -> `Public`。
     2.  点击 `Generate Domain` 或绑定自定义域名。
