@@ -22,8 +22,6 @@ import {
   Search,
 } from "lucide-react";
 
-const PAGE_SIZE = 20;
-
 function slugify(s: string) {
   return s
     .toLowerCase()
@@ -289,6 +287,7 @@ export default function DailyDigest() {
   const [regenerating, setRegenerating] = useState(false);
   const [hasFeeds, setHasFeeds] = useState(true);
   const [feeds, setFeeds] = useState<Feed[]>([]);
+  const [selectingId, setSelectingId] = useState<string | null>(null);
 
   const loadDigest = useCallback(async () => {
     setLoading(true);
@@ -358,11 +357,14 @@ export default function DailyDigest() {
   }
 
   async function selectDigest(item: DigestListItem) {
+    setSelectingId(item.id);
     try {
       const full = await api.fetchDigest(item.id);
       setCurrent(full);
     } catch {
       toast.error("加载失败");
+    } finally {
+      setSelectingId(null);
     }
   }
 
@@ -380,13 +382,6 @@ export default function DailyDigest() {
   }, [feeds, digestList, current]);
 
   const { feedCount, digestDays, articleCount } = stats;
-
-  const [page, setPage] = useState(1);
-
-  const visibleItems = useMemo(() => {
-    if (!current) return [];
-    return current.items.slice(0, page * PAGE_SIZE);
-  }, [current, page]);
 
   // --- TOC ---
   const feedLogoMap = useMemo(() => {
@@ -407,18 +402,8 @@ export default function DailyDigest() {
     }));
   }, [current, feedLogoMap]);
 
-  const handleTocClick = useCallback((id: string, index: number) => {
-    const target = document.getElementById(id);
-    if (target) {
-      target.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
-    // Article not rendered yet — expand pagination to include it, then scroll
-    const neededPage = Math.ceil((index + 1) / PAGE_SIZE);
-    setPage((prev) => Math.max(prev, neededPage));
-    setTimeout(() => {
-      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 100);
+  const handleTocClick = useCallback((id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
   return (
@@ -526,6 +511,7 @@ export default function DailyDigest() {
                           size="sm"
                           className={active ? "border border-border" : ""}
                           onClick={() => selectDigest(d)}
+                          disabled={selectingId !== null}
                         >
                           {d.date}
                         </Button>
@@ -555,7 +541,7 @@ export default function DailyDigest() {
                         <button
                           type="button"
                           className="block w-full text-left leading-snug hover:text-foreground group"
-                          onClick={() => handleTocClick(t.id, idx)}
+                          onClick={() => handleTocClick(t.id)}
                         >
                           <div className="flex items-center gap-2 text-[12px] text-muted-foreground tracking-wide group-hover:text-foreground transition-colors">
                             <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border bg-background text-[10px] group-hover:border-foreground/30 transition-colors">
@@ -581,11 +567,10 @@ export default function DailyDigest() {
 
               {/* Articles */}
               <div className="space-y-4">
-                {visibleItems.map((it) => {
-                  const index = current.items.findIndex((orig) => orig.id === it.id);
-                  const anchorId = index >= 0 ? toc[index]?.id : undefined;
+                {current.items.map((it, index) => {
+                  const anchorId = toc[index]?.id;
                   return (
-                    <Card key={it.id} className="p-5" id={anchorId}>
+                    <Card key={it.id} className="p-5 scroll-mt-8" id={anchorId}>
                       <div className="flex items-start justify-between gap-3 flex-wrap">
                         <div>
                           <div className="flex items-center gap-2">
@@ -636,8 +621,8 @@ export default function DailyDigest() {
                             关键洞察
                           </div>
                           <ul className="mt-2 list-disc pl-5 space-y-2 text-sm leading-relaxed">
-                            {it.keyInsights.map((k) => (
-                              <li key={k}>{k}</li>
+                            {it.keyInsights.map((k, i) => (
+                              <li key={i}>{k}</li>
                             ))}
                           </ul>
                         </div>
@@ -660,18 +645,6 @@ export default function DailyDigest() {
                     </Card>
                   );
                 })}
-
-                {current.items.length > visibleItems.length && (
-                  <div className="flex justify-center">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPage((p) => p + 1)}
-                    >
-                      加载更多
-                    </Button>
-                  </div>
-                )}
 
                 {/* Reading completion ritual */}
                 <ReadingComplete itemCount={current.items.length} />

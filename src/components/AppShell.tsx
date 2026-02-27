@@ -1,4 +1,4 @@
-import { useState, type PropsWithChildren } from "react";
+import { useEffect, useState, type PropsWithChildren } from "react";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,15 @@ const manageNav: NavItem[] = [
 
 export default function AppShell({ children }: PropsWithChildren) {
   const [location] = useLocation();
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    try { return localStorage.getItem("sidebar-collapsed") === "true"; }
+    catch { return false; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem("sidebar-collapsed", String(isCollapsed)); }
+    catch { /* ignore */ }
+  }, [isCollapsed]);
 
   return (
     <div className="min-h-screen paper-noise">

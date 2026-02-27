@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { nanoid } from "nanoid";
-import { eq } from "drizzle-orm";
+import { eq, inArray, desc } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "../db/index.js";
 import { feeds } from "../db/schema.js";
@@ -51,8 +51,8 @@ function toFeed(row: typeof feeds.$inferSelect): Feed {
 // GET /api/feeds
 feedsRouter.get("/", (_req, res) => {
   const db = getDb();
-  const rows = db.select().from(feeds).all();
-  const result = rows.map(toFeed).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  const rows = db.select().from(feeds).orderBy(desc(feeds.createdAt)).all();
+  const result = rows.map(toFeed);
   res.json(result);
 });
 
@@ -130,6 +130,20 @@ feedsRouter.post("/", async (req, res) => {
     console.error("[feeds/create] Error:", err);
     res.status(500).json({ error: "添加订阅失败" });
   }
+});
+
+// DELETE /api/feeds/batch — 批量取消订阅（必须在 /:id 之前）
+feedsRouter.delete("/batch", (req, res) => {
+  const parsed = z
+    .object({ ids: z.array(z.string().min(1)).min(1).max(200) })
+    .safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0].message });
+    return;
+  }
+  const db = getDb();
+  const result = db.delete(feeds).where(inArray(feeds.id, parsed.data.ids)).run();
+  res.json({ deleted: result.changes });
 });
 
 // DELETE /api/feeds/:id

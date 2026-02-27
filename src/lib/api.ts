@@ -78,6 +78,17 @@ export function importFeeds(
   });
 }
 
+// --- Feeds (batch delete) ---
+
+export function batchDeleteFeeds(
+  ids: string[],
+): Promise<{ deleted: number }> {
+  return request("/feeds/batch", {
+    method: "DELETE",
+    body: JSON.stringify({ ids }),
+  });
+}
+
 // --- Digests ---
 
 export function fetchDigests(

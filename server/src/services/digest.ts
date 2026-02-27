@@ -1,18 +1,29 @@
 import { nanoid } from "nanoid";
-import { eq, and, gte, lt } from "drizzle-orm";
+import { eq, and, gte, lt, inArray } from "drizzle-orm";
 import pLimit from "p-limit";
-import { getDb } from "../db/index.js";
+import { getDb, getSqlite } from "../db/index.js";
 import { feeds, articles, digests, digestItems } from "../db/schema.js";
 import { summarizeArticle, generateWeeklyAnalysis } from "./summarizer.js";
 
 const CONCURRENCY = 5; // AI summary concurrency
 
+// Serialize concurrent generateDaily calls to prevent duplicate digest items.
+// Without this, multiple fire-and-forget callers (scheduler, feed add, import)
+// can race through the delete-then-insert gap and accumulate duplicates.
+let _dailyQueue: Promise<string | void> = Promise.resolve();
+
 /**
- * Generate daily digest:
+ * Generate daily digest (serialized — concurrent calls are queued):
  * 1. Set reference time: default to now, or a specific date.
  * 2. Set lookback window: 24 hours back from reference time.
  */
-export async function generateDaily(date?: string): Promise<string> {
+export function generateDaily(date?: string): Promise<string> {
+  const task = _dailyQueue.catch(() => {}).then(() => _generateDailyCore(date));
+  _dailyQueue = task;
+  return task;
+}
+
+async function _generateDailyCore(date?: string): Promise<string> {
   const db = getDb();
   
   // 1. Determine reference time
@@ -33,10 +44,7 @@ export async function generateDaily(date?: string): Promise<string> {
     .get();
 
   if (existing) {
-    console.log(`[digest] Daily for ${dateLabel} already exists. Cleaning up old items for regeneration...`);
-    // Cleanup old items to prevent duplicates on regeneration
-    db.delete(digestItems).where(eq(digestItems.digestId, existing.id)).run();
-    // Reuse existing digestId
+    console.log(`[digest] Daily for ${dateLabel} already exists, regenerating...`);
     return generateWithId(existing.id, dateLabel, startTime, endTime);
   }
 
@@ -69,7 +77,8 @@ async function generateWithId(digestId: string, dateLabel: string, startTime: st
   const uniqueArticles = Array.from(new Map(dayArticles.map(a => [a.url, a])).values());
 
   if (uniqueArticles.length === 0) {
-    throw new Error(`No articles found between ${startTime} and ${endTime}`);
+    console.log(`[digest] No articles found for ${dateLabel}, skipping.`);
+    return "";
   }
 
   console.log(`[digest] Processing ${uniqueArticles.length} unique articles`);
@@ -126,46 +135,49 @@ async function generateWithId(digestId: string, dateLabel: string, startTime: st
   const items = await Promise.all(tasks);
   items.sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : -1));
 
-  // Write/Update Digests table
+  // Write digest + items in a single transaction (atomic upsert + replace).
   const generationTime = new Date().toISOString();
-  
-  // UPSERT logic
-  const exists = db.select().from(digests).where(eq(digests.id, digestId)).get();
-  if (!exists) {
-    db.insert(digests)
-      .values({
-        id: digestId,
-        type: "daily",
-        date: dateLabel,
-        generatedAt: generationTime,
-      })
-      .run();
-  } else {
-    db.update(digests)
-      .set({ generatedAt: generationTime })
-      .where(eq(digests.id, digestId))
-      .run();
-  }
 
-  // Insert new items
-  for (let i = 0; i < items.length; i++) {
-    const it = items[i];
-    db.insert(digestItems)
-      .values({
-        id: nanoid(),
-        digestId,
-        articleId: it.articleId,
-        feedName: it.feedName,
-        articleTitle: it.title,
-        author: it.author || null,
-        url: it.url,
-        oneLiner: it.oneLiner,
-        keyInsights: JSON.stringify(it.keyInsights),
-        publishedAt: it.publishedAt,
-        sortOrder: i,
-      })
-      .run();
-  }
+  getSqlite().transaction(() => {
+    // UPSERT digest record
+    const exists = db.select().from(digests).where(eq(digests.id, digestId)).get();
+    if (!exists) {
+      db.insert(digests)
+        .values({
+          id: digestId,
+          type: "daily",
+          date: dateLabel,
+          generatedAt: generationTime,
+        })
+        .run();
+    } else {
+      db.update(digests)
+        .set({ generatedAt: generationTime })
+        .where(eq(digests.id, digestId))
+        .run();
+    }
+
+    // Replace items
+    db.delete(digestItems).where(eq(digestItems.digestId, digestId)).run();
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      db.insert(digestItems)
+        .values({
+          id: nanoid(),
+          digestId,
+          articleId: it.articleId,
+          feedName: it.feedName,
+          articleTitle: it.title,
+          author: it.author || null,
+          url: it.url,
+          oneLiner: it.oneLiner,
+          keyInsights: JSON.stringify(it.keyInsights),
+          publishedAt: it.publishedAt,
+          sortOrder: i,
+        })
+        .run();
+    }
+  })();
 
   console.log(`[digest] Daily digest ${digestId} updated with ${items.length} items`);
   return digestId;
@@ -208,7 +220,13 @@ export async function generateWeekly(weekStartDate?: string): Promise<string> {
     url: it.url,
   }));
 
-  const analysis = await generateWeeklyAnalysis(inputForAI);
+  let analysis: { weeklyThemes: string[] };
+  try {
+    analysis = await generateWeeklyAnalysis(inputForAI);
+  } catch (err) {
+    console.error("[digest] Weekly analysis failed:", err);
+    analysis = { weeklyThemes: [] };
+  }
 
   // Write to DB
   const digestId = nanoid();
@@ -248,8 +266,8 @@ export function getWeeklyItems(start: string) {
   const allItems = db
     .select()
     .from(digestItems)
-    .all()
-    .filter((item) => digestIds.includes(item.digestId));
+    .where(inArray(digestItems.digestId, digestIds))
+    .all();
 
   return allItems;
 }

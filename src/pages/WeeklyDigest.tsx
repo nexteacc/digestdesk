@@ -55,6 +55,7 @@ export default function WeeklyDigest() {
   const [current, setCurrent] = useState<Digest | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [selectingId, setSelectingId] = useState<string | null>(null);
 
   const loadWeekly = useCallback(async () => {
     setLoading(true);
@@ -89,17 +90,21 @@ export default function WeeklyDigest() {
       toast.success("周报生成成功");
     } catch (e) {
       console.log("[WeeklyDigest] auto-generate failed:", e);
+      toast("暂无新的日报数据，稍后再来看看");
     } finally {
       setGenerating(false);
     }
   }
 
   async function selectDigest(item: DigestListItem) {
+    setSelectingId(item.id);
     try {
       const full = await api.fetchDigest(item.id);
       setCurrent(full);
     } catch {
       toast.error("加载失败");
+    } finally {
+      setSelectingId(null);
     }
   }
 
@@ -164,6 +169,7 @@ export default function WeeklyDigest() {
                           size="sm"
                           className={active ? "border border-border" : ""}
                           onClick={() => selectDigest(d)}
+                          disabled={selectingId !== null}
                         >
                           {d.date}
                         </Button>
@@ -186,7 +192,7 @@ export default function WeeklyDigest() {
                 <Separator className="my-4" />
                 <div className="space-y-3">
                   {current.weeklyThemes.map((theme, i) => (
-                    <div key={theme} className="flex items-start gap-3">
+                    <div key={i} className="flex items-start gap-3">
                       <span className="text-xs text-muted-foreground mt-0.5 font-mono">
                         {String(i + 1).padStart(2, "0")}
                       </span>

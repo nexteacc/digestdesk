@@ -21,6 +21,9 @@ export function initDb() {
   sqlite = new Database(DB_PATH);
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
+  sqlite.pragma("busy_timeout = 5000");
+  sqlite.pragma("cache_size = -20000");
+  sqlite.pragma("synchronous = NORMAL");
 
   db = drizzle(sqlite, { schema });
 
@@ -46,7 +49,6 @@ export function initDb() {
       url TEXT NOT NULL,
       guid TEXT,
       published_at TEXT NOT NULL,
-      content_html TEXT,
       content_text TEXT,
       cover_image_url TEXT,
       fetched_at TEXT NOT NULL
@@ -80,6 +82,7 @@ export function initDb() {
     CREATE INDEX IF NOT EXISTS idx_articles_url ON articles(url);
     CREATE INDEX IF NOT EXISTS idx_digest_items_digest_id ON digest_items(digest_id);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_digests_type_date ON digests(type, date);
+    CREATE INDEX IF NOT EXISTS idx_articles_published_at ON articles(published_at);
   `);
 
   console.log("Database initialized at", DB_PATH);

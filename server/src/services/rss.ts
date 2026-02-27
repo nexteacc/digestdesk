@@ -25,11 +25,11 @@ const jinaLimit = pLimit(2);
 const JINA_READER_BASE = "https://r.jina.ai/";
 const MIN_CONTENT_LENGTH = 500;
 
-async function fetchWithRetry(url: string, options: any, retries = 2, backoff = 1000): Promise<Response> {
+async function fetchWithRetry(url: string, options: RequestInit, retries = 2, backoff = 1000): Promise<Response> {
   try {
     const response = await fetch(url, options);
-    if (response.status === 429 && retries > 0) {
-      console.log(`[rss] Rate limited (429), retrying in ${backoff}ms...`);
+    if ([429, 502, 503, 504].includes(response.status) && retries > 0) {
+      console.log(`[rss] Server returned ${response.status}, retrying in ${backoff}ms...`);
       await new Promise(r => setTimeout(r, backoff));
       return fetchWithRetry(url, options, retries - 1, backoff * 2);
     }
@@ -126,8 +126,6 @@ export async function syncFeed(feedId: string): Promise<number> {
       const contentHtml = item["content:encoded"] || item.content || "";
       contentMarkdown = contentHtml ? htmlToMarkdown(contentHtml) : "";
     }
-
-    const contentHtml = item["content:encoded"] || item.content || null;
 
     const article = {
       id: nanoid(),

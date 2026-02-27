@@ -22,13 +22,18 @@ import {
 } from "@/components/ui/alert-dialog";
 import * as api from "@/lib/api";
 import type { Feed, SubstackSearchResult, SubstackInfo } from "@/lib/types";
-import { Check, Search, Trash2, Link as LinkIcon, Download } from "lucide-react";
+import { Check, Search, Trash2, Link as LinkIcon, Download, X } from "lucide-react";
 import ImportDialog from "@/components/ImportDialog";
 
 export default function SubscriptionsPage() {
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [feedsLoading, setFeedsLoading] = useState(true);
   const [importOpen, setImportOpen] = useState(false);
+
+  // batch unsubscribe state
+  const [batchMode, setBatchMode] = useState(false);
+  const [batchSelected, setBatchSelected] = useState<Set<string>>(new Set());
+  const [batchDeleting, setBatchDeleting] = useState(false);
 
   // search state
   const [searchQuery, setSearchQuery] = useState("");
@@ -176,6 +181,48 @@ export default function SubscriptionsPage() {
       await refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "删除失败");
+    }
+  }
+
+  function enterBatchMode() {
+    setBatchMode(true);
+    setBatchSelected(new Set());
+  }
+
+  function exitBatchMode() {
+    setBatchMode(false);
+    setBatchSelected(new Set());
+  }
+
+  function toggleBatchItem(id: string) {
+    setBatchSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleBatchAll() {
+    if (batchSelected.size === feeds.length) {
+      setBatchSelected(new Set());
+    } else {
+      setBatchSelected(new Set(feeds.map((f) => f.id)));
+    }
+  }
+
+  async function onBatchDelete() {
+    if (batchSelected.size === 0) return;
+    setBatchDeleting(true);
+    try {
+      const result = await api.batchDeleteFeeds(Array.from(batchSelected));
+      toast.success(`已取消订阅 ${result.deleted} 个源`);
+      exitBatchMode();
+      await refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "批量取消失败");
+    } finally {
+      setBatchDeleting(false);
     }
   }
 
@@ -390,9 +437,81 @@ export default function SubscriptionsPage() {
 
         {/* Subscriptions List */}
         <div>
-          <div className="text-xs tracking-[0.18em] uppercase text-muted-foreground mb-3">
-            已订阅 · {count}
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
+              已订阅 · {count}
+            </span>
+            {!feedsLoading && feeds.length > 0 && !batchMode && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={enterBatchMode}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                一键取消
+              </Button>
+            )}
           </div>
+
+          {/* Batch mode action bar */}
+          {batchMode && (
+            <Card className="p-3 mb-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <Button variant="ghost" size="sm" onClick={toggleBatchAll}>
+                    {batchSelected.size === feeds.length ? "取消全选" : "全选"}
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    已选择 <span className="font-medium text-foreground">{batchSelected.size}</span> 个
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={exitBatchMode}
+                    className="gap-1.5"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    取消
+                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        disabled={batchSelected.size === 0 || batchDeleting}
+                        className="gap-1.5"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        {batchDeleting
+                          ? "删除中…"
+                          : `取消订阅 (${batchSelected.size})`}
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>
+                          确定一键取消？
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                          将取消订阅 {batchSelected.size} 个源，后续日报将不再包含这些来源的内容。
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>取消</AlertDialogCancel>
+                        <AlertDialogAction onClick={onBatchDelete}>
+                          确认取消订阅
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              </div>
+            </Card>
+          )}
+
           {feedsLoading ? (
             <div className="space-y-2">
               {[1, 2, 3].map((i) => (
@@ -407,69 +526,90 @@ export default function SubscriptionsPage() {
             </Card>
           ) : (
             <div className="space-y-2">
-              {feeds.map((f) => (
-                <Card key={f.id} className="p-3">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-9 w-9">
-                      {f.logoUrl ? (
-                        <AvatarImage src={f.logoUrl} alt={f.title} />
-                      ) : null}
-                      <AvatarFallback className="text-xs">
-                        {f.title.slice(0, 2).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium truncate">
-                          {f.title}
-                        </span>
-                        {f.authorName && (
-                          <span className="text-xs text-muted-foreground hidden sm:inline">
-                            by {f.authorName}
+              {feeds.map((f) => {
+                const checked = batchSelected.has(f.id);
+                return (
+                  <Card
+                    key={f.id}
+                    className={`p-3 transition-colors ${batchMode ? "cursor-pointer hover:bg-accent/40" : ""} ${checked ? "border-foreground/20 bg-accent/50" : ""}`}
+                    onClick={batchMode ? () => toggleBatchItem(f.id) : undefined}
+                  >
+                    <div className="flex items-center gap-3">
+                      {batchMode && (
+                        <div
+                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
+                            checked
+                              ? "border-foreground bg-foreground text-background"
+                              : "border-muted-foreground/40"
+                          }`}
+                        >
+                          {checked && <Check className="h-3 w-3" />}
+                        </div>
+                      )}
+                      <Avatar className="h-9 w-9">
+                        {f.logoUrl ? (
+                          <AvatarImage src={f.logoUrl} alt={f.title} />
+                        ) : null}
+                        <AvatarFallback className="text-xs">
+                          {f.title.slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium truncate">
+                            {f.title}
                           </span>
-                        )}
+                          {f.authorName && (
+                            <span className="text-xs text-muted-foreground hidden sm:inline">
+                              by {f.authorName}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <a
+                            className="text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground truncate"
+                            href={f.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => batchMode && e.preventDefault()}
+                          >
+                            {f.url}
+                          </a>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <a
-                          className="text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground truncate"
-                          href={f.url}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          {f.url}
-                        </a>
-                      </div>
+                      {!batchMode && (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-muted-foreground hover:text-destructive shrink-0"
+                              aria-label="删除"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>确定取消订阅？</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                取消订阅「{f.title}
+                                」后，后续日报将不再包含该来源的内容。
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>取消</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => onRemove(f.id)}>
+                                确认取消订阅
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
                     </div>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-muted-foreground hover:text-destructive shrink-0"
-                          aria-label="删除"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>确定取消订阅？</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            取消订阅「{f.title}
-                            」后，后续日报将不再包含该来源的内容。
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>取消</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => onRemove(f.id)}>
-                            确认取消订阅
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-                </Card>
-              ))}
+                  </Card>
+                );
+              })}
             </div>
           )}
         </div>
