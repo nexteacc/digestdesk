@@ -49,7 +49,8 @@
       "WebFetch(domain:substack.com)",
       "Bash(git status:*)",
       "Bash(pnpm audit:*)",
-      "Bash(npx eslint:*)"
+      "Bash(npx eslint:*)",
+      "Bash(echo === $c ===:*)"
     ]
   }
 }

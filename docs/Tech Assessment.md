@@ -12,8 +12,8 @@
 ```
 前端：React 19 + TypeScript + Vite 7 + TailwindCSS 4 + shadcn/ui + wouter (hash route)
 后端：Express 5 + TypeScript + tsx (dev runner)
-数据库：SQLite (better-sqlite3 + Drizzle ORM, WAL mode)
-AI：Vercel AI SDK + gpt-5-nano (OpenAI)，Zod schema 结构化输出
+数据库：SQLite (better-sqlite3 + Drizzle ORM, WAL mode, busy_timeout/cache_size/synchronous 已调优)
+AI：Vercel AI SDK + Gemini 2.5 Flash（默认，Google API Key 优先）/ gpt-5-nano（OpenAI 备选），Zod schema 结构化输出
 内容抓取：Jina Reader API (主) + Turndown HTML→Markdown (兜底)
 搜索代理：Cloudflare Worker（绕过 Substack 对云服务器 IP 的封锁）
 定时任务：node-cron（进程内）
@@ -49,7 +49,7 @@ AI：Vercel AI SDK + gpt-5-nano (OpenAI)，Zod schema 结构化输出
 ### 当前开发模式
 
 ```
-Vite dev server :5173 ──proxy /api──→ Express :3001 ──→ SQLite 文件
+Vite dev server :5173 ──proxy /api──→ Express :8080 ──→ SQLite 文件
 ```
 
 前后端分别运行，Vite 配置了 `/api` 代理转发到后端。
@@ -57,7 +57,7 @@ Vite dev server :5173 ──proxy /api──→ Express :3001 ──→ SQLite �
 ### 生产部署目标架构
 
 ```
-单进程 Express :3001
+单进程 Express :8080
   ├── /api/*     → 后端路由（REST API）
   ├── /*         → 前端静态文件（vite build 产物）
   ├── node-cron  → 每日定时 RSS 同步 + 日报生成
@@ -125,6 +125,27 @@ Vite dev server :5173 ──proxy /api──→ Express :3001 ──→ SQLite �
 ---
 
 ## 4. 数据库演进评估
+
+### SQLite 当前配置（2026-02-27 优化后）
+
+```
+Pragma 配置：
+  journal_mode = WAL          — 并发读写
+  foreign_keys = ON           — 引用完整性
+  busy_timeout = 5000         — 锁等待 5 秒，防 SQLITE_BUSY
+  cache_size = -20000         — 20MB 页缓存
+  synchronous = NORMAL        — WAL 模式下安全且高效
+
+索引：
+  idx_articles_feed_id        — 按 feed 查文章
+  idx_articles_url            — 文章去重
+  idx_articles_published_at   — 日报生成的时间范围查询
+  idx_digest_items_digest_id  — 按 digest 查条目
+  idx_digests_type_date       — UNIQUE, 防重复日报/周报
+
+事务使用：
+  digest 写入（UPSERT + items replace）已包裹在单一事务内
+```
 
 ### SQLite 的适用边界
 

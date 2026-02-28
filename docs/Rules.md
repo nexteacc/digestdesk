@@ -60,7 +60,7 @@
 - **并发控制**：p-limit（5 篇并发摘要）
 - **环境管理**：dotenv
 - **内容抓取**：Jina Reader API（主） + Turndown（兜底）
-- **定时任务**：node-cron（每天 8:00 同步 RSS）
+- **定时任务**：node-cron（每天 8:00 UTC 同步 RSS + 生成日报，启动时也会执行一次）
 - **RSS 解析**：rss-parser
 - **跨域**：cors 中间件
 
@@ -78,13 +78,13 @@
 ### 部署与环境
 
 - **前端**：Vite 构建，静态文件部署（可部署至任意静态托管）
-- **后端**：Node.js 进程，端口 `3001`
+- **后端**：Node.js 进程，端口 `8080`
 - **数据库文件**：`server/data/digestdesk.db`（自动创建）
 - **环境变量**：
   - `GOOGLE_GENERATIVE_AI_API_KEY` — Google AI API 密钥（推荐，Gemini Flash）
   - `OPENAI_API_KEY` — OpenAI API 密钥（备选）
   - `AI_MODEL` — 自定义模型 ID（可选，默认 gemini-2.5-flash-preview-05-20）
-  - `PORT` — 后端端口（默认 3001）
+  - `PORT` — 后端端口（默认 8080）
   - `CF_SEARCH_PROXY_URL` — Cloudflare Worker 搜索代理 URL（生产环境需要）
   - `CF_SEARCH_PROXY_TOKEN` — 搜索代理认证 token
 - **前后端分离部署**：前端通过 API 调用后端，开发时前端 Vite dev server 代理到后端
@@ -117,10 +117,11 @@
 
 | 文件 | 职责 |
 |------|------|
-| `src/lib/types.ts` | 所有 TypeScript 类型定义 |
+| `src/lib/types.ts` | 所有 TypeScript 类型定义（re-export shared/types） |
 | `src/lib/api.ts` | 统一 API 客户端（封装所有后端调用） |
-| `src/lib/storage.ts` | URL 归一化工具函数 |
-| `src/components/AppShell.tsx` | 全局布局（masthead + sidebar + main） |
+| `src/lib/utils.ts` | 工具函数（cn） |
+| `src/components/AppShell.tsx` | 全局布局（masthead + 可折叠 sidebar + main），sidebar 状态持久化到 localStorage |
+| `src/components/ImportDialog.tsx` | Substack 批量导入弹窗 |
 | `src/App.tsx` | 路由和 Provider 配置 |
 | `src/pages/DailyDigest.tsx` | 日报阅读页（同时作为首页，路由 `/`） |
 | `src/pages/WeeklyDigest.tsx` | 周报阅读页（路由 `/weekly`） |
@@ -130,14 +131,14 @@
 
 | 文件 | 职责 |
 |------|------|
-| `server/src/index.ts` | Express v5 入口，挂载路由和 cron |
+| `server/src/index.ts` | Express v5 入口，挂载路由和 cron，监听 0.0.0.0:8080 |
 | `server/src/db/schema.ts` | Drizzle ORM 表定义（feeds, articles, digests, digest_items） |
-| `server/src/db/index.ts` | SQLite 连接初始化（better-sqlite3, WAL 模式） |
-| `server/src/services/rss.ts` | RSS 抓取 + Jina Reader + Turndown 兜底 |
+| `server/src/db/index.ts` | SQLite 连接初始化（better-sqlite3, WAL 模式, pragma 调优） |
+| `server/src/services/rss.ts` | RSS 抓取 + Jina Reader（并发控制 pLimit(2)）+ fetchWithRetry + Turndown 兜底 |
 | `server/src/services/summarizer.ts` | AI 摘要（Vercel AI SDK + Zod schema，多模型支持） |
 | `server/src/services/substack.ts` | Substack 搜索代理 + 信息获取（支持 CF Worker 代理） |
-| `server/src/services/digest.ts` | 日报/周报编排逻辑 |
-| `server/src/cron/scheduler.ts` | node-cron 定时同步（每天 8:00） |
+| `server/src/services/digest.ts` | 日报/周报编排逻辑（串行化队列 + 事务写入） |
+| `server/src/cron/scheduler.ts` | node-cron 每天 8:00 同步 + 启动时立即执行 |
 
 **搜索代理（Cloudflare Worker）：**
 
@@ -192,7 +193,7 @@
 ### 日报编排规则
 
 - 按发布时间排序，体现订阅源的时间节奏
-- 保留全部符合条件的摘要，通过前端分页/加载更多控制阅读负担
+- 保留全部符合条件的摘要，全量展示（无分页）
 - 无新内容时不生成空日报
 
 ### 周报编排规则
@@ -237,17 +238,17 @@
 src/
 ├── components/
 │   ├── ui/              # shadcn/ui 组件（不手动修改）
-│   ├── AppShell.tsx      # 全局布局
-│   └── ErrorBoundary.tsx # 错误边界
+│   ├── AppShell.tsx      # 全局布局（可折叠 sidebar + localStorage 持久化）
+│   ├── ErrorBoundary.tsx # 错误边界
+│   └── ImportDialog.tsx  # Substack 批量导入弹窗
 ├── pages/
-│   ├── DailyDigest.tsx   # 日报阅读页（同时作为首页，路由 /）
+│   ├── DailyDigest.tsx   # 日报阅读页（同时作为首页，路由 /，全量展示无分页）
 │   ├── WeeklyDigest.tsx  # 周报阅读页（路由 /weekly）
-│   ├── Subscriptions.tsx # 订阅管理页（路由 /subscriptions）
+│   ├── Subscriptions.tsx # 订阅管理页（搜索/URL 双 Tab + 批量导入 + 批量退订）
 │   └── NotFound.tsx      # 404 页面
 ├── lib/
 │   ├── types.ts          # 类型定义（re-export shared/types）
 │   ├── api.ts            # 统一 API 客户端
-│   ├── storage.ts        # URL 归一化工具（normalizeSubstackUrl）
 │   └── utils.ts          # 工具函数（cn）
 ├── contexts/
 │   ├── ThemeContext.tsx   # 主题 Provider
@@ -265,24 +266,25 @@ docs/
 ├── Design Guidelines.md
 ├── User Journeys.md
 ├── Tasks.md
+├── Tech Assessment.md
 └── Rules.md
 
 server/src/
-├── index.ts              # Express v5 入口（端口 3001）
+├── index.ts              # Express v5 入口（端口 8080，监听 0.0.0.0）
 ├── db/
-│   ├── index.ts          # SQLite + Drizzle 初始化（WAL 模式）
+│   ├── index.ts          # SQLite + Drizzle 初始化（WAL 模式 + pragma 调优）
 │   └── schema.ts         # Drizzle 表定义
 ├── routes/
-│   ├── feeds.ts          # /api/feeds CRUD
+│   ├── feeds.ts          # /api/feeds CRUD + /batch 批量删除 + /import 批量导入 + /sync 手动同步
 │   ├── digests.ts        # /api/digests 生成与查询
-│   └── substack.ts       # /api/substack/search + info 代理
+│   └── substack.ts       # /api/substack/search（本地 + 远程去重）
 ├── services/
-│   ├── rss.ts            # RSS 抓取 + Jina Reader + Turndown
-│   ├── summarizer.ts     # Vercel AI SDK + Zod schema（多模型）
-│   ├── digest.ts         # 日报/周报编排逻辑
+│   ├── rss.ts            # RSS 抓取 + Jina Reader（pLimit(2) + fetchWithRetry）+ Turndown
+│   ├── summarizer.ts     # Vercel AI SDK + Zod schema（Google 优先，OpenAI 备选）
+│   ├── digest.ts         # 日报/周报编排（串行化队列 + 事务写入）
 │   └── substack.ts       # Substack API 调用封装（支持 CF Worker 代理）
 └── cron/
-    └── scheduler.ts      # node-cron 每天 8:00 同步
+    └── scheduler.ts      # node-cron 每天 8:00 + 启动时立即执行
 ```
 
 ---

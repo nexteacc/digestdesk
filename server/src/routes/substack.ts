@@ -7,7 +7,6 @@ import { feeds } from "../db/schema.js";
 
 export const substackRouter = Router();
 
-// GET /api/substack/info?url=xxx
 substackRouter.get("/info", async (req, res) => {
   const url = z.string().min(1, "参数 url 不能为空").safeParse(req.query.url);
   if (!url.success) {
@@ -16,12 +15,10 @@ substackRouter.get("/info", async (req, res) => {
   }
 
   try {
-    // 自动补全协议
     let normalizedUrl = url.data.trim();
     if (!/^https?:\/\//i.test(normalizedUrl)) {
       normalizedUrl = `https://${normalizedUrl}`;
     }
-    // 只保留 origin
     const parsed = new URL(normalizedUrl);
     const publicationUrl = parsed.origin;
 
@@ -33,7 +30,6 @@ substackRouter.get("/info", async (req, res) => {
   }
 });
 
-// GET /api/substack/search?query=xxx
 substackRouter.get("/search", async (req, res) => {
   const query = z.string().min(1, "参数 query 不能为空").safeParse(req.query.query);
   if (!query.success) {
@@ -45,7 +41,6 @@ substackRouter.get("/search", async (req, res) => {
     const page = Math.max(0, parseInt(req.query.page as string) || 0);
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 10));
 
-    // 第一层：本地 DB 搜索已订阅的出版物
     const db = getDb();
     const escaped = query.data.replace(/%/g, "\\%").replace(/_/g, "\\_");
     const localFeeds = await db
@@ -62,11 +57,9 @@ substackRouter.get("/search", async (req, res) => {
       isLocal: true,
     }));
 
-    // 第二层：远程 Substack API（失败不阻塞）
     let remoteResults: typeof localResults = [];
     try {
       const remote = await searchSubstack(query.data, page, limit);
-      // 过滤掉本地已有的（按 URL 去重）
       const localUrls = new Set(localResults.map((r) => r.url));
       remoteResults = remote
         .filter((r) => !localUrls.has(r.url))
@@ -83,7 +76,6 @@ substackRouter.get("/search", async (req, res) => {
   }
 });
 
-// GET /api/substack/reads?username=xxx
 substackRouter.get("/reads", async (req, res) => {
   const username = z.string().min(1, "参数 username 不能为空").safeParse(req.query.username);
   if (!username.success) {

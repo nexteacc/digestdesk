@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Newspaper, Rss, BookOpen, ChevronLeft, PanelLeft } from "lucide-react";
+import { Newspaper, Rss, BookOpen, PanelLeft } from "lucide-react";
 
 type NavItem = {
   href: string;

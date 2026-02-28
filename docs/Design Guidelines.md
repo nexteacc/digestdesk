@@ -82,7 +82,8 @@ DigestDesk 的设计语言源自两个传统：
 │  DigestDesk · Anti-Overload             │
 ├─────────┬───────────────────────────────┤
 │ Sidebar │  Main Content                 │
-│ (240px) │  (flex-1)                     │
+│ (240px, │  (flex-1)                     │
+│可折叠)  │                               │
 │         │                               │
 │ 导航    │  ┌───────────────────────┐    │
 │ 状态    │  │  Page Content          │    │
@@ -97,7 +98,7 @@ DigestDesk 的设计语言源自两个传统：
 ### 栅格
 
 - 最大宽度：`max-w-6xl`（1152px）
-- 侧边栏宽度：240px（固定）
+- 侧边栏宽度：240px（可折叠，展开/收起状态持久化到 localStorage）
 - 内容区内边距：`px-4 py-4 md:px-6 md:py-6`
 - 卡片间距：`gap-4`（紧凑）或 `gap-6`（宽松）
 

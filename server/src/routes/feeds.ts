@@ -48,7 +48,6 @@ function toFeed(row: typeof feeds.$inferSelect): Feed {
   };
 }
 
-// GET /api/feeds
 feedsRouter.get("/", (_req, res) => {
   const db = getDb();
   const rows = db.select().from(feeds).orderBy(desc(feeds.createdAt)).all();
@@ -56,7 +55,6 @@ feedsRouter.get("/", (_req, res) => {
   res.json(result);
 });
 
-// POST /api/feeds { url: string, title?: string }
 feedsRouter.post("/", async (req, res) => {
   const parsed = createFeedSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -66,7 +64,6 @@ feedsRouter.post("/", async (req, res) => {
   const { url: rawUrl, title, description, logoUrl, authorName } = parsed.data;
 
   try {
-    // 归一化 URL
     let normalizedUrl = rawUrl.trim();
     if (!/^https?:\/\//i.test(normalizedUrl)) {
       normalizedUrl = `https://${normalizedUrl}`;
@@ -75,7 +72,6 @@ feedsRouter.post("/", async (req, res) => {
     const publicationUrl = parsed.origin;
     const feedUrl = `${publicationUrl}/feed`;
 
-    // 检查重复
     const db = getDb();
     const existing = db.select().from(feeds).where(eq(feeds.feedUrl, feedUrl)).get();
     if (existing) {
@@ -83,7 +79,6 @@ feedsRouter.post("/", async (req, res) => {
       return;
     }
 
-    // 尝试自动获取出版物信息
     let info = { name: title || "", description: description || "", logoUrl: logoUrl || "", authorName: authorName || "" };
     try {
       const substackInfo = await getSubstackInfo(publicationUrl);
@@ -94,7 +89,6 @@ feedsRouter.post("/", async (req, res) => {
         authorName: authorName || substackInfo.authorName,
       };
     } catch {
-      // 获取失败时使用传入的信息或域名
       if (!info.name) {
         info.name = parsed.hostname.replace(/^www\./, "");
       }
@@ -117,14 +111,12 @@ feedsRouter.post("/", async (req, res) => {
 
     res.status(201).json(toFeed(feed));
 
-    // Fire-and-forget: 同步该 feed 的文章，然后自动生成今日日报
     syncFeed(feed.id)
       .then(() => {
         const today = new Date().toISOString().slice(0, 10);
         return generateDaily(today);
       })
       .catch(() => {
-        // 静默处理，不影响已返回的响应
       });
   } catch (err) {
     console.error("[feeds/create] Error:", err);
@@ -132,7 +124,6 @@ feedsRouter.post("/", async (req, res) => {
   }
 });
 
-// DELETE /api/feeds/batch — 批量取消订阅（必须在 /:id 之前）
 feedsRouter.delete("/batch", (req, res) => {
   const parsed = z
     .object({ ids: z.array(z.string().min(1)).min(1).max(200) })
@@ -146,7 +137,6 @@ feedsRouter.delete("/batch", (req, res) => {
   res.json({ deleted: result.changes });
 });
 
-// DELETE /api/feeds/:id
 feedsRouter.delete("/:id", (req, res) => {
   const db = getDb();
   const result = db.delete(feeds).where(eq(feeds.id, req.params.id)).run();
@@ -157,7 +147,6 @@ feedsRouter.delete("/:id", (req, res) => {
   res.json({ success: true });
 });
 
-// POST /api/feeds/sync — 手动触发 RSS 同步
 feedsRouter.post("/sync", async (_req, res) => {
   try {
     await syncAllFeeds();
@@ -172,7 +161,6 @@ feedsRouter.post("/sync", async (_req, res) => {
   }
 });
 
-// POST /api/feeds/import — 批量导入订阅源
 feedsRouter.post("/import", async (req, res) => {
   const parsed = importFeedsSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -210,7 +198,6 @@ feedsRouter.post("/import", async (req, res) => {
         continue;
       }
 
-      // 查重
       const existing = db
         .select({ id: feeds.id })
         .from(feeds)
@@ -241,23 +228,21 @@ feedsRouter.post("/import", async (req, res) => {
 
     res.status(201).json({ created, skipped });
 
-    // Fire-and-forget: 后台逐个同步新导入的 feed
     if (newFeedIds.length > 0) {
       (async () => {
         for (const feedId of newFeedIds) {
           try {
             await syncFeed(feedId);
-          } catch {
-            // 静默跳过
+          } catch (e) {
+            void e;
           }
           await new Promise((r) => setTimeout(r, 1000));
         }
-        // 同步完后尝试生成今日日报
         try {
           const today = new Date().toISOString().slice(0, 10);
           await generateDaily(today);
-        } catch {
-          // 没有新文章等情况静默跳过
+        } catch (e) {
+          void e;
         }
       })();
     }

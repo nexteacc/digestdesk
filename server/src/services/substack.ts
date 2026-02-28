@@ -31,7 +31,6 @@ export async function getSubstackInfo(publicationUrl: string): Promise<SubstackI
   const description = feed.description || "";
   const logoUrl = feed.image?.url || "";
 
-  // 从第一篇文章提取作者名
   const firstItem = feed.items?.[0];
   const authorName = firstItem?.creator || firstItem?.["dc:creator"] || "";
 
@@ -128,9 +127,6 @@ export async function searchSubstack(
   });
 }
 
-/**
- * 从用户公开主页 /@username/reads 提取订阅列表
- */
 export async function fetchSubstackReads(
   username: string,
 ): Promise<SubstackSearchResult[]> {
@@ -159,7 +155,6 @@ export async function fetchSubstackReads(
 
   const html = await response.text();
 
-  // 从 HTML 中提取 window._preloads JSON
   const match = html.match(
     /window\._preloads\s*=\s*JSON\.parse\(("(?:[^"\\]|\\.)*")\)/,
   );
@@ -169,14 +164,12 @@ export async function fetchSubstackReads(
 
   let preloads: Record<string, unknown>;
   try {
-    // match[1] 是一个 JSON 编码的字符串（外层引号包裹，内容经过转义）
     const jsonString = JSON.parse(match[1]) as string;
     preloads = JSON.parse(jsonString) as Record<string, unknown>;
   } catch {
     throw new Error("订阅数据格式异常");
   }
 
-  // 提取 subscriptions 中的 publications
   const getString = (value: unknown): string =>
     typeof value === "string" ? value : "";
 
@@ -185,19 +178,16 @@ export async function fetchSubstackReads(
       ? (value as Record<string, unknown>)
       : {};
 
-  // preloads 结构中可能有多种路径存放订阅数据，尝试常见路径
   let publications: unknown[] = [];
 
   const profile = getObj(preloads.profile);
 
-  // 路径1: preloads.profile.subscriptions (数组，每项有 publication 字段)
   if (Array.isArray(profile.subscriptions)) {
     publications = profile.subscriptions
       .map((sub) => getObj(sub).publication)
       .filter(Boolean);
   }
 
-  // 路径2: preloads.subscriptions
   if (publications.length === 0 && Array.isArray(preloads.subscriptions)) {
     publications = preloads.subscriptions
       .map((sub) => getObj(sub).publication)

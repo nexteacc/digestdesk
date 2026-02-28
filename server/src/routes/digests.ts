@@ -50,7 +50,6 @@ function toDigestItem(row: typeof digestItems.$inferSelect): DigestItem {
   };
 }
 
-// GET /api/digests — 列出所有日报/周报（不含 items，减少数据量）
 digestsRouter.get("/", (req, res) => {
   const db = getDb();
   const type = req.query.type as string | undefined;
@@ -71,7 +70,6 @@ digestsRouter.get("/", (req, res) => {
   res.json(result);
 });
 
-// GET /api/digests/:id — 单份详情（含 items）
 digestsRouter.get("/:id", (req, res) => {
   const db = getDb();
   const digest = db
@@ -102,7 +100,6 @@ digestsRouter.get("/:id", (req, res) => {
   res.json(toDigest(digest, items));
 });
 
-// POST /api/digests/generate — 手动触发生成
 digestsRouter.post("/generate", async (req, res) => {
   const parsed = generateSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -127,7 +124,6 @@ digestsRouter.post("/generate", async (req, res) => {
       digestId = await generateWeekly(date);
     }
 
-    // 返回完整的 digest
     const db = getDb();
     const digest = db.select().from(digests).where(eq(digests.id, digestId)).get();
     if (!digest) {

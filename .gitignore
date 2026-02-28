@@ -42,7 +42,9 @@ coverage
 # Environment variants
 .env.*
 server/.env.*
+.claude
 
 # Tooling caches
 .eslintcache
 .turbo
+*.tsbuildinfo

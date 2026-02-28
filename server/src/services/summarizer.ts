@@ -1,29 +1,30 @@
 import { generateObject } from "ai";
 import { google } from "@ai-sdk/google";
-import { openai } from "@ai-sdk/openai";
+import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
 
-// --- 模型配置 ---
-
-type ProviderType = "google" | "openai";
-
-function getProvider(): ProviderType {
-  if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) return "google";
-  if (process.env.OPENAI_API_KEY) return "openai";
-  throw new Error("请设置 GOOGLE_GENERATIVE_AI_API_KEY 或 OPENAI_API_KEY 环境变量");
-}
-
 function getModel() {
-  const provider = getProvider();
-  if (provider === "google") {
-    const modelId = process.env.AI_MODEL || "gemini-2.5-flash-preview-05-20";
-    return google(modelId);
-  }
-  const modelId = process.env.AI_MODEL || "gpt-5-nano";
-  return openai(modelId);
-}
+  const modelId = process.env.AI_MODEL;
+  const baseURL = process.env.AI_BASE_URL;
+  const apiKey = process.env.AI_API_KEY || process.env.OPENAI_API_KEY;
 
-// --- Zod Schemas ---
+  if (process.env.AI_PROVIDER !== "google" && (apiKey || baseURL)) {
+    const provider = createOpenAI({
+      apiKey,
+      baseURL: baseURL || undefined,
+    });
+    return provider(modelId || "gpt-5-mini");
+  }
+
+  if (process.env.AI_PROVIDER === "google" || process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+    return google(modelId || "gemini-2.0-flash-exp");
+  }
+
+  const defaultProvider = createOpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+  return defaultProvider(modelId || "gpt-5-mini");
+}
 
 const ArticleSummarySchema = z.object({
   oneLiner: z
@@ -44,29 +45,21 @@ const WeeklyAnalysisSchema = z.object({
 
 export type WeeklyAnalysis = z.infer<typeof WeeklyAnalysisSchema>;
 
-// --- Prompts ---
+const ARTICLE_SYSTEM_PROMPT = `你是 DigestDesk 的编辑。目标：高密度、可执行、少废话。
 
-const ARTICLE_SYSTEM_PROMPT = `你是一位资深编辑助手。你的任务是将一篇 Newsletter 文章提炼成结构化摘要。
+输入是 Markdown 文章。利用标题/列表/引用/数据点，提炼关键信息，不要复述段落。
 
-文章内容以 Markdown 格式提供，可能包含标题、列表、引用、链接和图片描述。请充分利用这些结构化信息来提高摘要质量。
-
-要求：
-1. "oneLiner"：用一句话（不超过50字）概括文章最核心的观点或结论。不要用"作者认为..."开头。
-2. "keyInsights"：提炼3条关键洞察。每条要具体、有信息量、可执行。
-   - 好的例子："PLG 公司的 NDR 比 Sales-led 高 15-20%"
-   - 差的例子："作者认为 PLG 很重要"`;
+输出：
+1. oneLiner：≤50字，直接给结论；不要以“作者认为”开头。
+2. keyInsights：3条要点；每条必须具体，优先包含数字/对比/因果/做法；避免空话与口号。`;
 
 const WEEKLY_SYSTEM_PROMPT = `你是一位资深编辑。以下是本周多篇 Newsletter 文章的摘要列表。
 
-请完成一个任务：
-1. "weeklyThemes"：归纳本周 2-3 个跨源共性话题，每个用一句话描述趋势。`;
-
-// --- API Functions ---
+请输出 weeklyThemes：2-3 个跨源主题；每个用一句话写“趋势 + 含义/影响”，避免泛泛而谈。`;
 
 export async function summarizeArticle(markdown: string): Promise<ArticleSummary> {
   const model = getModel();
-  const provider = getProvider();
-  console.log(`[summarizer] Starting AI summary with ${provider}... (Input length: ${markdown.length})`);
+  console.log(`[summarizer] Starting AI summary... (Input length: ${markdown.length})`);
 
   try {
     const { object } = await generateObject({
@@ -83,7 +76,7 @@ export async function summarizeArticle(markdown: string): Promise<ArticleSummary
       keyInsights: object.keyInsights.slice(0, 5),
     };
   } catch (err) {
-    console.error(`[summarizer] AI summary failed (${provider}):`, err instanceof Error ? err.message : err);
+    console.error(`[summarizer] AI summary failed:`, err instanceof Error ? err.message : err);
     throw err;
   }
 }

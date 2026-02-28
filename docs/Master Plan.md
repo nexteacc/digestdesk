@@ -169,10 +169,10 @@ Phase 3（未来）：+ 更多信息源（Podcast、RSS 通用源等）
 - API 客户端层（src/lib/api.ts）— 统一封装后端 API 调用
 
 **后端（MVP 已建成）：**
-- Express.js v5（端口 3001）
+- Express.js v5（端口 8080）
 - SQLite + Drizzle ORM（better-sqlite3，WAL 模式）
 - Vercel AI SDK（ai + @ai-sdk/google + @ai-sdk/openai）— 多模型支持
-- 默认 Gemini 2.5 Flash（1M 上下文窗口，不截断全文）；可切换 GPT-4o-mini
+- 默认 Gemini 2.5 Flash（Google API Key 优先，1M 上下文窗口，不截断全文）；可切换 gpt-5-nano（OpenAI 备选）
 - Jina Reader API + Turndown（内容抓取）
 - node-cron（每天 8:00 RSS 同步）+ rss-parser
 - p-limit（5 篇并发摘要生成）

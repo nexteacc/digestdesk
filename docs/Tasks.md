@@ -14,7 +14,7 @@
 | MVP — 前端改造 | 2 | MVP ✅ | T2.1、T2.2+T2.4：类型扩展、订阅页+Digest 页+首页+AppShell 全面改造 |
 | 后续 — 前端完善 | 4 | T2.3 ✅ T2.5 ✅ | T2.3、T2.5：首页空状态+品牌（已完成）；T2.6、T2.7：设置、Onboarding（待做） |
 | 后续 — 推送与账户 | 4 | 迭代 | T3.1–T3.4：账户体系、浏览器推送、调度、偏好 |
-| 后续 — 打磨优化 | 4 | 迭代 | T4.1–T4.4：推荐、统计、移动端、性能 |
+| 后续 — 打磨优化 | 4 | T4.5 ✅ T4.6 ✅ | T4.1–T4.4：推荐、统计、移动端、性能；T4.5：数据库层优化（已完成）；T4.6：后端容错改进（已完成） |
 | 后续 — 质量保障 | 2 | 迭代 | T1.4、T1.5：反馈机制、缓存去重 |
 
 **MVP 最小范围：11 项任务** — 单用户模式，无账户体系，无浏览器推送，手动打开查看。
@@ -142,7 +142,6 @@ Response:
   author: string,
   url: string,
   publishedAt: string,
-  contentHtml: string,
   contentText: string,   // Markdown 格式（Jina Reader 或 Turndown 输出）
   coverImageUrl?: string
 }
@@ -187,18 +186,23 @@ DigestItems (摘要条目)
 核心 API 端点：
 ```
 # 订阅管理
-GET    /api/feeds              # 获取所有订阅
-POST   /api/feeds              # 添加订阅（含自动获取信息）
-DELETE /api/feeds/:id          # 删除订阅
+GET    /api/feeds              # 获取所有订阅（按 createdAt DESC）
+POST   /api/feeds              # 添加订阅（含自动获取信息 + fire-and-forget 同步）
+DELETE /api/feeds/:id          # 删除单个订阅
+DELETE /api/feeds/batch        # 批量删除订阅（{ ids: string[] }）
+POST   /api/feeds/import       # 批量导入订阅源
+POST   /api/feeds/sync         # 手动触发 RSS 同步
 
 # Substack 信息
-GET    /api/substack/info      # 获取出版物公开信息（T0.2）
-GET    /api/substack/search    # 搜索出版物（T0.7）
+GET    /api/substack/search    # 搜索出版物（本地 DB + 远程去重）
 
 # Digest
 GET    /api/digests            # 获取所有 Digest 列表
 GET    /api/digests/:id        # 获取单份 Digest 详情
 POST   /api/digests/generate   # 手动触发生成
+
+# 健康检查
+GET    /api/health             # 服务健康检查
 ```
 
 > 注意：MVP 阶段不含 `/api/auth/*` 用户认证端点，单用户模式。
@@ -657,6 +661,72 @@ export type DigestItem = {
 - [ ] 首屏加载 < 2 秒
 - [ ] 滚动流畅无卡顿
 - [ ] 离线可查看最近一期 Digest
+
+---
+
+### T4.5 — 数据库层优化 ✅
+
+**描述：** 修正 SQLite 数据库层的查询写法、事务使用和配置，属于"写对代码"而非性能优化。
+
+**完成日期：** 2026-02-27
+
+改动清单（3 个文件，约 20 行变更）：
+
+1. **补充 SQLite Pragma**（`server/src/db/index.ts`）
+   - `busy_timeout = 5000`：防止并发时 SQLITE_BUSY 报错
+   - `cache_size = -20000`：页缓存从默认 2MB 提升到 20MB
+   - `synchronous = NORMAL`：WAL 模式下的标准安全配置
+
+2. **新增索引 `idx_articles_published_at`**（`server/src/db/index.ts`）
+   - 日报生成的核心查询对 `published_at` 做范围筛选，补索引是基本功
+
+3. **修复 `getWeeklyItems` 查询**（`server/src/services/digest.ts`）
+   - 从 `.all().filter()`（全表加载到内存再过滤）改为 `.where(inArray(...))`（SQL 层过滤）
+
+4. **事务包裹 digest 写入**（`server/src/services/digest.ts`）
+   - 将 digest 的 UPSERT + items 的 delete/insert 合并为单一事务，保证原子性
+
+5. **feeds 排序下推 SQL**（`server/src/routes/feeds.ts`）
+   - 从 JS 层 `.sort()` 改为 SQL `ORDER BY desc(created_at)`
+
+6. **清理遗留代码**
+   - 删除建表 SQL 中的 `content_html` 列定义（Drizzle schema 已移除）
+   - 删除 `rss.ts` 中 `contentHtml` 死代码变量
+
+验收标准：
+- [x] TypeScript 编译无错误
+- [x] 前后端数据联调一致，无 breaking change
+- [x] 服务启动日志正常
+
+---
+
+### T4.6 — 后端容错性改进 ✅
+
+**描述：** 修正后端服务层的异常处理、重试逻辑和类型安全问题，提升服务在异常场景下的稳定性。
+
+**完成日期：** 2026-02-27
+
+改动清单（2 个文件，4 处变更）：
+
+1. **无文章时不再抛异常**（`server/src/services/digest.ts:79-81`）
+   - 新用户、凌晨无更新、feed 未同步完等正常场景下 `generateDaily()` 不再 throw
+   - 改为 `console.log` + `return ""`，避免 cron 打 error 日志、前端收到 500
+
+2. **`fetchWithRetry` 扩展可重试状态码**（`server/src/services/rss.ts:31`）
+   - 从仅重试 429（Rate Limit）扩展到 429/502/503/504
+   - 502/503/504 为暂时性网关错误，重试可恢复
+
+3. **`fetchWithRetry` 参数类型修正**（`server/src/services/rss.ts:28`）
+   - `options: any` → `options: RequestInit`，消除 strict TypeScript 下的类型破窗
+
+4. **周报 AI 分析加 try-catch**（`server/src/services/digest.ts:222`）
+   - `generateWeeklyAnalysis()` 调用原先无容错，AI API 临时故障会导致整个周报生成崩溃
+   - 与日报中 `summarizeArticle()` 的容错模式保持一致：catch 后 fallback 为空 `weeklyThemes`
+
+验收标准：
+- [x] TypeScript 编译无错误
+- [x] 无文章时 cron 不再打 error 日志
+- [x] AI API 故障时周报仍可生成（主题为空）
 
 ---
 

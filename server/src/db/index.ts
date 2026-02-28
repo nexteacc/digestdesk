@@ -12,7 +12,6 @@ let sqlite: Database.Database;
 let db: ReturnType<typeof drizzle<typeof schema>>;
 
 export function initDb() {
-  // 确保 data 目录存在
   const dataDir = path.dirname(DB_PATH);
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
@@ -27,7 +26,6 @@ export function initDb() {
 
   db = drizzle(sqlite, { schema });
 
-  // 自动建表
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS feeds (
       id TEXT PRIMARY KEY,

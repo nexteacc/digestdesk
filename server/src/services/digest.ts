@@ -5,18 +5,10 @@ import { getDb, getSqlite } from "../db/index.js";
 import { feeds, articles, digests, digestItems } from "../db/schema.js";
 import { summarizeArticle, generateWeeklyAnalysis } from "./summarizer.js";
 
-const CONCURRENCY = 5; // AI summary concurrency
+const CONCURRENCY = 5;
 
-// Serialize concurrent generateDaily calls to prevent duplicate digest items.
-// Without this, multiple fire-and-forget callers (scheduler, feed add, import)
-// can race through the delete-then-insert gap and accumulate duplicates.
 let _dailyQueue: Promise<string | void> = Promise.resolve();
 
-/**
- * Generate daily digest (serialized — concurrent calls are queued):
- * 1. Set reference time: default to now, or a specific date.
- * 2. Set lookback window: 24 hours back from reference time.
- */
 export function generateDaily(date?: string): Promise<string> {
   const task = _dailyQueue.catch(() => {}).then(() => _generateDailyCore(date));
   _dailyQueue = task;
@@ -26,17 +18,13 @@ export function generateDaily(date?: string): Promise<string> {
 async function _generateDailyCore(date?: string): Promise<string> {
   const db = getDb();
   
-  // 1. Determine reference time
   const baseTime = date ? new Date(date) : new Date();
   
-  // Date label (YYYY-MM-DD) for DB indexing
   const dateLabel = baseTime.toISOString().slice(0, 10);
 
-  // 2. Set lookback window: 24 hours back from reference time
   const startTime = new Date(baseTime.getTime() - 24 * 60 * 60 * 1000).toISOString();
   const endTime = baseTime.toISOString();
 
-  // Check if already exists
   const existing = db
     .select()
     .from(digests)
@@ -52,13 +40,9 @@ async function _generateDailyCore(date?: string): Promise<string> {
   return generateWithId(digestId, dateLabel, startTime, endTime);
 }
 
-/**
- * Core generation logic
- */
 async function generateWithId(digestId: string, dateLabel: string, startTime: string, endTime: string): Promise<string> {
   const db = getDb();
   
-  // Get articles within 24h window
   const dayArticles = db
     .select({
       id: articles.id,
@@ -73,7 +57,6 @@ async function generateWithId(digestId: string, dateLabel: string, startTime: st
     .where(and(gte(articles.publishedAt, startTime), lt(articles.publishedAt, endTime)))
     .all();
 
-  // Deduplicate by URL manually
   const uniqueArticles = Array.from(new Map(dayArticles.map(a => [a.url, a])).values());
 
   if (uniqueArticles.length === 0) {
@@ -83,7 +66,6 @@ async function generateWithId(digestId: string, dateLabel: string, startTime: st
 
   console.log(`[digest] Processing ${uniqueArticles.length} unique articles`);
 
-  // Get feed name map
   const allFeeds = db.select({ id: feeds.id, name: feeds.name }).from(feeds).all();
   const feedMap = new Map(allFeeds.map((f) => [f.id, f.name]));
 
@@ -135,11 +117,9 @@ async function generateWithId(digestId: string, dateLabel: string, startTime: st
   const items = await Promise.all(tasks);
   items.sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : -1));
 
-  // Write digest + items in a single transaction (atomic upsert + replace).
   const generationTime = new Date().toISOString();
 
   getSqlite().transaction(() => {
-    // UPSERT digest record
     const exists = db.select().from(digests).where(eq(digests.id, digestId)).get();
     if (!exists) {
       db.insert(digests)
@@ -157,7 +137,6 @@ async function generateWithId(digestId: string, dateLabel: string, startTime: st
         .run();
     }
 
-    // Replace items
     db.delete(digestItems).where(eq(digestItems.digestId, digestId)).run();
     for (let i = 0; i < items.length; i++) {
       const it = items[i];
@@ -183,17 +162,11 @@ async function generateWithId(digestId: string, dateLabel: string, startTime: st
   return digestId;
 }
 
-/**
- * Generate weekly digest:
- * Aggregates daily digests -> AI themes -> Save to DB
- */
 export async function generateWeekly(weekStartDate?: string): Promise<string> {
   const db = getDb();
 
-  // Default to this Monday
   const start = weekStartDate || getMonday(new Date()).toISOString().slice(0, 10);
 
-  // Check if exists
   const existing = db
     .select()
     .from(digests)
@@ -211,7 +184,6 @@ export async function generateWeekly(weekStartDate?: string): Promise<string> {
     throw new Error(`No daily digests found for week starting ${start}`);
   }
 
-  // Call AI for analysis
   const inputForAI = allItems.map((it) => ({
     id: it.articleId || it.id,
     feedTitle: it.feedName,
@@ -228,7 +200,6 @@ export async function generateWeekly(weekStartDate?: string): Promise<string> {
     analysis = { weeklyThemes: [] };
   }
 
-  // Write to DB
   const digestId = nanoid();
   const now = new Date().toISOString();
 
@@ -271,8 +242,6 @@ export function getWeeklyItems(start: string) {
 
   return allItems;
 }
-
-// --- Utils ---
 
 function getNextDate(dateStr: string, days = 1): string {
   const d = new Date(dateStr);
