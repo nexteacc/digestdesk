@@ -13,7 +13,7 @@ function getModel() {
       apiKey,
       baseURL: baseURL || undefined,
     });
-    return provider(modelId || "gpt-5-mini");
+    return provider(modelId || "gpt-4o-mini");
   }
 
   if (process.env.AI_PROVIDER === "google" || process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
@@ -23,7 +23,7 @@ function getModel() {
   const defaultProvider = createOpenAI({
     apiKey: process.env.OPENAI_API_KEY,
   });
-  return defaultProvider(modelId || "gpt-5-mini");
+  return defaultProvider(modelId || "gpt-4o-mini");
 }
 
 const ArticleSummarySchema = z.object({
@@ -67,7 +67,6 @@ export async function summarizeArticle(markdown: string): Promise<ArticleSummary
       schema: ArticleSummarySchema,
       system: ARTICLE_SYSTEM_PROMPT,
       prompt: markdown,
-      temperature: 0.3,
     });
 
     console.log(`[summarizer] AI summary complete. One-liner: ${object.oneLiner?.slice(0, 50)}...`);
@@ -104,7 +103,6 @@ export async function generateWeeklyAnalysis(
     schema: WeeklyAnalysisSchema,
     system: WEEKLY_SYSTEM_PROMPT,
     prompt: input,
-    temperature: 0.4,
   });
 
   return object;
