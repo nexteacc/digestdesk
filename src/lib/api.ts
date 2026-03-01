@@ -98,16 +98,16 @@ export function fetchDigests(
   return request(`/digests${q}`);
 }
 
-export function fetchDigest(id: string): Promise<Digest> {
-  return request(`/digests/${id}`);
-}
-
 export function generateDigest(
-  type: "daily",
+  type: "daily" = "daily",
   options?: { date?: string; force?: boolean },
-): Promise<Digest> {
+): Promise<{ id: string }> {
   return request("/digests/generate", {
     method: "POST",
     body: JSON.stringify({ type, ...options }),
   });
+}
+
+export function fetchDigest(id: string): Promise<Digest> {
+  return request(`/digests/${id}`);
 }

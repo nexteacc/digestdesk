@@ -19,6 +19,7 @@ import {
   Loader2,
   CheckCircle2,
   Search,
+  RefreshCw,
 } from "lucide-react";
 
 function slugify(s: string) {
@@ -277,7 +278,6 @@ export default function DailyDigest() {
   const [current, setCurrent] = useState<Digest | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [regenerating, setRegenerating] = useState(false);
   const [hasFeeds, setHasFeeds] = useState(true);
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [selectingId, setSelectingId] = useState<string | null>(null);
@@ -315,7 +315,8 @@ export default function DailyDigest() {
   async function autoGenerate() {
     setGenerating(true);
     try {
-      const digest = await api.generateDigest("daily");
+      const { id } = await api.generateDigest("daily");
+      const digest = await api.fetchDigest(id);
       setCurrent(digest);
       const list = await api.fetchDigests("daily");
       setDigestList(list);
@@ -329,23 +330,21 @@ export default function DailyDigest() {
     }
   }
 
-  // 重新生成当前选中日期的日报（测试用）
-  async function regenerateCurrent() {
-    if (!current) return;
-    setRegenerating(true);
+  // 立即同步并生成今日日报
+  async function syncNow() {
+    setGenerating(true);
     try {
-      const digest = await api.generateDigest("daily", {
-        date: current.date,
-        force: true,
-      });
+      const today = new Date().toISOString().slice(0, 10);
+      const { id } = await api.generateDigest("daily", { date: today, force: true });
+      const digest = await api.fetchDigest(id);
       setCurrent(digest);
       const list = await api.fetchDigests("daily");
       setDigestList(list);
-      toast.success(`已重新生成 ${current.date} 的日报`);
-    } catch {
-      toast.error("重新生成失败");
+      toast.success("同步并生成今日日报成功");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "同步失败");
     } finally {
-      setRegenerating(false);
+      setGenerating(false);
     }
   }
 
@@ -404,32 +403,31 @@ export default function DailyDigest() {
       <div className="flex flex-col gap-6">
         {/* Header */}
         <div>
-          <div className="flex items-end justify-between gap-4 flex-wrap">
+          <div className="flex-1 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
             <div>
-              <h2 className="text-2xl md:text-3xl font-semibold">今日日报</h2>
+              <div className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground">
+                Daily Digest
+              </div>
+              <h2 className="mt-1 text-3xl font-semibold tracking-tight">
+                今日日报
+              </h2>
             </div>
             <div className="flex items-center gap-3">
-              <Badge variant="outline" className="border-border">
-                {todayLabel}
-              </Badge>
-              {!loading && current && import.meta.env.DEV && (
+              {hasFeeds && (
                 <Button
                   variant="outline"
                   size="sm"
-                  className="gap-1.5"
-                  onClick={regenerateCurrent}
-                  disabled
+                  className="gap-1.5 h-8 text-xs"
+                  onClick={syncNow}
+                  disabled={generating || loading}
                 >
-                  {regenerating ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      正在重新生成
-                    </>
-                  ) : (
-                    <>重新生成（已禁用）</>
-                  )}
+                  <RefreshCw className={`h-3.5 w-3.5 ${generating ? "animate-spin" : ""}`} />
+                  {generating ? "正在同步" : "立即同步"}
                 </Button>
               )}
+              <Badge variant="outline" className="border-border">
+                {todayLabel}
+              </Badge>
             </div>
           </div>
           <Separator className="mt-4" />
