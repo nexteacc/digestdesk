@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import { syncAllFeeds } from "../services/rss.js";
-import { generateDaily, generateWeekly } from "../services/digest.js";
+import { generateDaily } from "../services/digest.js";
 
 export function startScheduler() {
   const runDailyJob = async (reason: string) => {
@@ -20,22 +20,20 @@ export function startScheduler() {
     } catch (err) {
       console.error(`[cron] ${reason}: Daily digest generation failed or no new articles:`, err instanceof Error ? err.message : err);
     }
-
-    const now = new Date();
-    if (now.getDay() === 1) {
-      console.log(`[cron] ${reason}: Monday detected, generating weekly digest...`);
-      try {
-        const weeklyId = await generateWeekly();
-        console.log(`[cron] ${reason}: Weekly digest generated successfully: ${weeklyId}`);
-      } catch (err) {
-        console.error(`[cron] ${reason}: Weekly digest generation failed:`, err instanceof Error ? err.message : err);
-      }
-    }
   };
 
-  setImmediate(() => runDailyJob("Startup"));
+  // setImmediate 确保端口先打开，添加 .catch 防止未捕获的 Promise 拒绝
+  setImmediate(() => {
+    runDailyJob("Startup").catch(err => {
+      console.error("[cron] Startup job failed:", err);
+    });
+  });
 
-  cron.schedule("0 8 * * *", () => runDailyJob("Scheduled (08:00)"));
+  cron.schedule("0 8 * * *", () => {
+    runDailyJob("Scheduled (08:00)").catch(err => {
+      console.error("[cron] Scheduled job failed:", err);
+    });
+  });
 
   console.log("Scheduler initialized: Run on startup + daily at 08:00");
 }

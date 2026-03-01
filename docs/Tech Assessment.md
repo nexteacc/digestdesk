@@ -28,7 +28,6 @@ AI：Vercel AI SDK + Gemini 2.5 Flash（默认，Google API Key 优先）/ gpt-5
 | 文章总量 | 47 篇 | 首次同步历史积压 40 + 增量 7 |
 | 实际送 AI 总结 | 7 篇 / 4 天 | 仅当天发布的文章进入日报 |
 | 日报 | 4 份 | 每份 1-3 篇文章 |
-| 周报 | 1 份 | 汇总本周日报 oneLiner |
 | SQLite 文件 | ~2 MB | 含全文 Markdown 存储 |
 
 ### AI 调用成本（实测）
@@ -141,7 +140,7 @@ Pragma 配置：
   idx_articles_url            — 文章去重
   idx_articles_published_at   — 日报生成的时间范围查询
   idx_digest_items_digest_id  — 按 digest 查条目
-  idx_digests_type_date       — UNIQUE, 防重复日报/周报
+  idx_digests_type_date       — UNIQUE, 防重复日报
 
 事务使用：
   digest 写入（UPSERT + items replace）已包裹在单一事务内
@@ -185,7 +184,7 @@ Pragma 配置：
 
 当前 MVP 是单用户模式（无 Users 表）。后续需要：
 - 用户注册/登录（邮箱+密码，可选 OAuth）
-- 每个用户有独立的订阅、日报、周报
+- 每个用户有独立的订阅、日报
 - 登录状态管理（JWT 或 Session）
 
 ### 方案对比
@@ -222,7 +221,7 @@ Pragma 配置：
 
 ### 需求场景
 
-将日报/周报以邮件形式发送到用户邮箱，是产品核心交付方式之一。
+将日报以邮件形式发送到用户邮箱，是产品核心交付方式之一。
 
 ### 邮件服务对比
 
@@ -238,7 +237,7 @@ Pragma 配置：
 理由：
 - **React Email**：用 React 组件写邮件模板，可以复用现有的日报排版逻辑
 - API 简洁：`resend.emails.send({ to, subject, react: <DigestEmail /> })`
-- 免费额度足够：3,000 封/月，按 30 天 × 1 封日报 + 4 封周报 = 34 封/用户/月，免费层可支撑 ~80 个用户
+- 免费额度足够：3,000 封/月，按 30 天 × 1 封日报 = 30 封/用户/月，免费层可支撑 ~100 个用户
 - 与 Express 集成零摩擦
 
 ### 邮件内容设计

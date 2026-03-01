@@ -140,7 +140,7 @@ export async function syncFeed(feedId: string): Promise<number> {
       fetchedAt: now,
     };
 
-    db.insert(articles).values(article).run();
+    db.insert(articles).values(article).onConflictDoNothing().run();
     newCount++;
   }
 

@@ -25,11 +25,10 @@ export type DigestItem = {
 
 export type Digest = {
   id: string;
-  type: "daily" | "weekly";
+  type: "daily";
   date: string; // YYYY-MM-DD
   generatedAt: string; // ISO
   items: DigestItem[];
-  weeklyThemes?: string[];
 };
 
 export type SubstackSearchResult = {
@@ -57,10 +56,9 @@ export type SubstackInfo = {
 // GET /api/digests 列表接口返回（不含 items）
 export type DigestListItem = {
   id: string;
-  type: "daily" | "weekly";
+  type: "daily";
   date: string;
   generatedAt: string;
-  weeklyThemes?: string[];
 };
 
 // 后端专用：文章（前端不直接使用）

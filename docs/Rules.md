@@ -6,7 +6,7 @@
 
 ## 项目身份
 
-你正在构建 **DigestDesk** — 一个个人编辑助手，帮助用户将订阅的 Substack Newsletter 自动编辑成每日/每周 Digest。
+你正在构建 **DigestDesk** — 一个个人编辑助手，帮助用户将订阅的 Substack Newsletter 自动编辑成每日 Digest。
 
 ---
 
@@ -16,7 +16,7 @@
 
 - DigestDesk 是**个人编辑助手**，不是阅读器，不是 RSS 客户端
 - 核心价值是**压缩**：帮用户从"读 30 分钟"变成"读 5 分钟"
-- 产品的交付物是**日报和周报**，这是用户每天接触的核心界面
+- 产品的交付物是**日报**，这是用户每天接触的核心界面
 - 推送渠道是**网页 + 浏览器推送通知**
 
 ### 2. MVP 范围
@@ -124,7 +124,6 @@
 | `src/components/ImportDialog.tsx` | Substack 批量导入弹窗 |
 | `src/App.tsx` | 路由和 Provider 配置 |
 | `src/pages/DailyDigest.tsx` | 日报阅读页（同时作为首页，路由 `/`） |
-| `src/pages/WeeklyDigest.tsx` | 周报阅读页（路由 `/weekly`） |
 | `src/pages/Subscriptions.tsx` | 订阅管理页（搜索/URL 双 Tab） |
 
 **后端：**
@@ -137,7 +136,7 @@
 | `server/src/services/rss.ts` | RSS 抓取 + Jina Reader（并发控制 pLimit(2)）+ fetchWithRetry + Turndown 兜底 |
 | `server/src/services/summarizer.ts` | AI 摘要（Vercel AI SDK + Zod schema，多模型支持） |
 | `server/src/services/substack.ts` | Substack 搜索代理 + 信息获取（支持 CF Worker 代理） |
-| `server/src/services/digest.ts` | 日报/周报编排逻辑（串行化队列 + 事务写入） |
+| `server/src/services/digest.ts` | 日报编排逻辑（串行化队列 + 事务写入） |
 | `server/src/cron/scheduler.ts` | node-cron 每天 8:00 同步 + 启动时立即执行 |
 
 **搜索代理（Cloudflare Worker）：**
@@ -180,7 +179,7 @@
 ### AI 输出控制
 
 - Zod schema 定义输出结构，`generateObject()` 结构化输出
-- 温度：文章 0.3，周报 0.4
+- 温度：文章 0.3
 - 并发：5 篇（p-limit）
 
 ### 摘要质量标准
@@ -195,14 +194,6 @@
 - 按发布时间排序，体现订阅源的时间节奏
 - 保留全部符合条件的摘要，全量展示（无分页）
 - 无新内容时不生成空日报
-
-### 周报编排规则
-
-- 本周主题归纳：2-3 个跨源共性话题
-- 逐日回顾：可折叠
-- 总阅读时长控制在 10 分钟
-
----
 
 ## 用户体验原则
 
@@ -243,7 +234,6 @@ src/
 │   └── ImportDialog.tsx  # Substack 批量导入弹窗
 ├── pages/
 │   ├── DailyDigest.tsx   # 日报阅读页（同时作为首页，路由 /，全量展示无分页）
-│   ├── WeeklyDigest.tsx  # 周报阅读页（路由 /weekly）
 │   ├── Subscriptions.tsx # 订阅管理页（搜索/URL 双 Tab + 批量导入 + 批量退订）
 │   └── NotFound.tsx      # 404 页面
 ├── lib/
@@ -281,7 +271,7 @@ server/src/
 ├── services/
 │   ├── rss.ts            # RSS 抓取 + Jina Reader（pLimit(2) + fetchWithRetry）+ Turndown
 │   ├── summarizer.ts     # Vercel AI SDK + Zod schema（Google 优先，OpenAI 备选）
-│   ├── digest.ts         # 日报/周报编排（串行化队列 + 事务写入）
+│   ├── digest.ts         # 日报编排（串行化队列 + 事务写入）
 │   └── substack.ts       # Substack API 调用封装（支持 CF Worker 代理）
 └── cron/
     └── scheduler.ts      # node-cron 每天 8:00 + 启动时立即执行

@@ -9,13 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import * as api from "@/lib/api";
 import type { Digest, DigestListItem, Feed, SubstackSearchResult } from "@/lib/types";
 import {
   ExternalLink,
-  BookOpen,
   Loader2,
   CheckCircle2,
   Search,
@@ -112,12 +112,6 @@ function ReadingComplete({ itemCount }: { itemCount: number }) {
             共 {itemCount} 篇文章 · 阅读用时约 {readingMinutes} 分钟
           </div>
           <div className="mt-4">
-            <Link href="/weekly">
-              <Button variant="outline" size="sm" className="gap-1.5">
-                <BookOpen className="h-3.5 w-3.5" />
-                查看周报
-              </Button>
-            </Link>
           </div>
         </Card>
       )}
@@ -523,7 +517,7 @@ export default function DailyDigest() {
 
             <div className="grid gap-4 md:grid-cols-[320px_1fr] items-start">
               {/* TOC */}
-              <Card id="digest-toc" className="p-4 md:p-5 md:sticky md:top-6 h-fit">
+              <Card id="digest-toc" className="p-4 md:p-5 md:sticky md:top-6 h-fit max-h-[calc(100vh-120px)] flex flex-col">
                 <div className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
                   目录
                 </div>
@@ -533,8 +527,8 @@ export default function DailyDigest() {
                 <div className="mt-2 text-xs text-muted-foreground">
                   {current.items.length} 篇文章
                 </div>
-                <div className="mt-4">
-                  <ol className="space-y-3">
+                <ScrollArea className="mt-4 flex-1 min-h-0 -mx-2 px-2">
+                  <ol className="space-y-3 pb-2">
                     {toc.map((t, idx) => (
                       <li key={t.id}>
                         <button
@@ -561,7 +555,7 @@ export default function DailyDigest() {
                       </li>
                     ))}
                   </ol>
-                </div>
+                </ScrollArea>
               </Card>
 
               {/* Articles */}

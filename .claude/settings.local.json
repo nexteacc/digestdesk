@@ -50,7 +50,11 @@
       "Bash(git status:*)",
       "Bash(pnpm audit:*)",
       "Bash(npx eslint:*)",
-      "Bash(echo === $c ===:*)"
+      "Bash(echo === $c ===:*)",
+      "Bash(pnpm:*)",
+      "Bash(rm:*)",
+      "Bash(npx esbuild:*)",
+      "Bash(/Volumes/Sheng/AIcases/digestdesk/node_modules/.bin/esbuild:*)"
     ]
   }
 }

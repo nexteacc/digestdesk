@@ -334,11 +334,10 @@ export type Feed = {
 
 export type Digest = {
   id: string;
-  type: 'daily' | 'weekly';  // 新增：日报/周报类型
+  type: 'daily';
   date: string;
   generatedAt: string;
   items: DigestItem[];
-  weeklyThemes?: string[];       // 新增：周报主题
 };
 
 export type DigestItem = {
@@ -362,7 +361,7 @@ export type DigestItem = {
 
 ### T2.2 — 订阅管理页 + Digest 阅读页改造
 
-**描述：** 改造 `Subscriptions.tsx`、`DailyDigest.tsx` 和 `WeeklyDigest.tsx`，支持搜索添加、自动获取信息、真实数据。
+**描述：** 改造 `Subscriptions.tsx` 和 `DailyDigest.tsx`，支持搜索添加、自动获取信息、真实数据。
 
 > 原 T2.2（订阅页）与 T2.4（Digest 页）合并为一项任务。
 
@@ -381,12 +380,11 @@ export type DigestItem = {
 - 获取失败时的错误处理
 - 订阅确认对话框
 
-**Digest 阅读页改造（DailyDigest.tsx + WeeklyDigest.tsx）：**
+**Digest 阅读页改造（DailyDigest.tsx）：**
 
 1. DailyDigest 同时作为首页（路由 `/`），展示今日日报
-2. WeeklyDigest 独立页面（路由 `/weekly`），展示周报主题归纳 + 逐日回顾
-3. 归档选择器支持日报/周报分开浏览
-4. 接入真实 API 数据
+2. 归档选择器支持日报浏览
+3. 接入真实 API 数据
 
 验收标准：
 - [x] 搜索添加和 URL 添加双入口可用
@@ -395,7 +393,6 @@ export type DigestItem = {
 - [x] 用户无需手动输入任何信息
 - [x] 订阅列表展示 Logo 和名称
 - [x] 日报视图保留现有排版（TOC + 卡片）
-- [x] 周报视图新增主题 + 回顾
 - [x] 从 API 获取真实数据
 - [x] 加载状态和错误状态处理完善
 
@@ -437,7 +434,7 @@ export type DigestItem = {
 
 已完成改造：
 1. 品牌名 "DigestDesk"，报纸式 masthead 风格
-2. 导航分层：内容消费组（今日日报 / 周报）+ 管理组（订阅源），用分隔线和"管理"标签区分
+2. 导航分层：内容消费组（今日日报）+ 管理组（订阅源），用分隔线和"管理"标签区分
 3. 设计风格保持一致
 
 验收标准：
@@ -454,7 +451,7 @@ export type DigestItem = {
 **描述：** 新增 `Settings.tsx` 页面。
 
 功能：
-- 推送设置：日报推送时间、周报推送日/时间、开关
+- 推送设置：日报推送时间、开关
 - 摘要偏好：语言（中文/英文/跟随原文）、详略程度
 - 账户信息：邮箱、退出登录
 - 数据管理：导出订阅列表
@@ -719,14 +716,14 @@ export type DigestItem = {
 3. **`fetchWithRetry` 参数类型修正**（`server/src/services/rss.ts:28`）
    - `options: any` → `options: RequestInit`，消除 strict TypeScript 下的类型破窗
 
-4. **周报 AI 分析加 try-catch**（`server/src/services/digest.ts:222`）
-   - `generateWeeklyAnalysis()` 调用原先无容错，AI API 临时故障会导致整个周报生成崩溃
-   - 与日报中 `summarizeArticle()` 的容错模式保持一致：catch 后 fallback 为空 `weeklyThemes`
+4. **摘要失败兜底**（`server/src/services/digest.ts`）
+   - AI API 临时故障不再导致日报生成崩溃
+   - 失败时保留文章条目并输出降级文案
 
 验收标准：
 - [x] TypeScript 编译无错误
 - [x] 无文章时 cron 不再打 error 日志
-- [x] AI API 故障时周报仍可生成（主题为空）
+- [x] AI API 故障时日报仍可生成（摘要降级）
 
 ---
 
@@ -742,8 +739,7 @@ T0.1 (URL解析)
               └─→ T0.4 (数据库+API) ──→ T0.6 (前端Storage抽象)
 
 T1.1 (摘要Prompt)
-  ├─→ T1.2 (日报生成) ──→ T2.2 (订阅页+Digest页改造)
-  └─→ T1.3 (周报生成) ──→ T2.2
+  └─→ T1.2 (日报生成) ──→ T2.2 (订阅页+Digest页改造)
 
 T2.1 (类型扩展) ──→ T2.2
 
@@ -770,7 +766,7 @@ T1.4 (反馈)、T1.5 (缓存) 可在 MVP 后任意时间点加入
 T0.1 → T0.2 → T0.7 → T0.4 → T0.3 → T0.6
 
 **Phase 2 — AI 引擎：**
-T1.1 → T1.2 → T1.3
+T1.1 → T1.2
 
 **Phase 3 — 前端整合：**
 T2.1 → T2.2

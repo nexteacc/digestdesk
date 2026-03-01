@@ -5,7 +5,6 @@ import { useHashLocation } from "wouter/use-hash-location";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import DailyDigest from "@/pages/DailyDigest";
-import WeeklyDigest from "@/pages/WeeklyDigest";
 import SubscriptionsPage from "@/pages/Subscriptions";
 import NotFound from "@/pages/NotFound";
 
@@ -14,18 +13,12 @@ function AppRouter() {
     <Router hook={useHashLocation}>
       <Switch>
         <Route path="/" component={DailyDigest} />
-        <Route path="/weekly" component={WeeklyDigest} />
         <Route path="/subscriptions" component={SubscriptionsPage} />
         <Route component={NotFound} />
       </Switch>
     </Router>
   );
 }
-
-// Note on theming:
-// - Choose defaultTheme based on your design (light or dark background)
-// - Update the color palette in index.css to match
-// - If you want switchable themes, add `switchable` prop and use `useTheme` hook
 
 function App() {
   return (
@@ -41,4 +34,3 @@ function App() {
 }
 
 export default App;
-

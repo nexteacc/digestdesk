@@ -1,9 +1,9 @@
 import { nanoid } from "nanoid";
-import { eq, and, gte, lt, inArray } from "drizzle-orm";
+import { eq, and, gte, lt } from "drizzle-orm";
 import pLimit from "p-limit";
 import { getDb, getSqlite } from "../db/index.js";
 import { feeds, articles, digests, digestItems } from "../db/schema.js";
-import { summarizeArticle, generateWeeklyAnalysis } from "./summarizer.js";
+import { summarizeArticle } from "./summarizer.js";
 
 const CONCURRENCY = 5;
 
@@ -138,10 +138,9 @@ async function generateWithId(digestId: string, dateLabel: string, startTime: st
     }
 
     db.delete(digestItems).where(eq(digestItems.digestId, digestId)).run();
-    for (let i = 0; i < items.length; i++) {
-      const it = items[i];
-      db.insert(digestItems)
-        .values({
+    db.insert(digestItems)
+      .values(
+        items.map((it, i) => ({
           id: nanoid(),
           digestId,
           articleId: it.articleId,
@@ -153,107 +152,11 @@ async function generateWithId(digestId: string, dateLabel: string, startTime: st
           keyInsights: JSON.stringify(it.keyInsights),
           publishedAt: it.publishedAt,
           sortOrder: i,
-        })
-        .run();
-    }
+        }))
+      )
+      .run();
   })();
 
   console.log(`[digest] Daily digest ${digestId} updated with ${items.length} items`);
   return digestId;
-}
-
-export async function generateWeekly(weekStartDate?: string): Promise<string> {
-  const db = getDb();
-
-  const start = weekStartDate || getMonday(new Date()).toISOString().slice(0, 10);
-
-  const existing = db
-    .select()
-    .from(digests)
-    .where(and(eq(digests.type, "weekly"), eq(digests.date, start)))
-    .get();
-
-  if (existing) {
-    console.log(`[digest] Weekly for ${start} already exists: ${existing.id}`);
-    return existing.id;
-  }
-
-  const allItems = getWeeklyItems(start);
-
-  if (allItems.length === 0) {
-    throw new Error(`No daily digests found for week starting ${start}`);
-  }
-
-  const inputForAI = allItems.map((it) => ({
-    id: it.articleId || it.id,
-    feedTitle: it.feedName,
-    title: it.articleTitle,
-    oneLiner: it.oneLiner,
-    url: it.url,
-  }));
-
-  let analysis: { weeklyThemes: string[] };
-  try {
-    analysis = await generateWeeklyAnalysis(inputForAI);
-  } catch (err) {
-    console.error("[digest] Weekly analysis failed:", err);
-    analysis = { weeklyThemes: [] };
-  }
-
-  const digestId = nanoid();
-  const now = new Date().toISOString();
-
-  db.insert(digests)
-    .values({
-      id: digestId,
-      type: "weekly",
-      date: start,
-      generatedAt: now,
-      weeklyThemes: JSON.stringify(analysis.weeklyThemes),
-    })
-    .run();
-
-  console.log(`[digest] Weekly digest ${digestId} created`);
-  return digestId;
-}
-
-export function getWeeklyItems(start: string) {
-  const db = getDb();
-  const end = getNextDate(start, 7);
-
-  const weeklyDigests = db
-    .select({ id: digests.id })
-    .from(digests)
-    .where(
-      and(eq(digests.type, "daily"), gte(digests.date, start), lt(digests.date, end)),
-    )
-    .all();
-
-  if (weeklyDigests.length === 0) {
-    return [];
-  }
-
-  const digestIds = weeklyDigests.map((d) => d.id);
-  const allItems = db
-    .select()
-    .from(digestItems)
-    .where(inArray(digestItems.digestId, digestIds))
-    .all();
-
-  return allItems;
-}
-
-function getNextDate(dateStr: string, days = 1): string {
-  const d = new Date(dateStr);
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-function getMonday(d: Date): Date {
-  const date = new Date(d);
-  const day = date.getDay();
-  const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-  date.setDate(diff);
-  date.setHours(0, 0, 0, 0);
-  return date;
 }

@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:all": "vite build",
-    "start": "cd server && npx tsx src/index.ts",
+    "build:all": "vite build && pnpm --filter substack-digest-server build",
+    "start": "node server/dist/index.js",
     "lint": "eslint .",
     "preview": "vite preview"
   },

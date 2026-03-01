@@ -17,7 +17,7 @@ export const articles = sqliteTable("articles", {
   feedId: text("feed_id").notNull().references(() => feeds.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   author: text("author"),
-  url: text("url").notNull(),
+  url: text("url").notNull().unique(),
   guid: text("guid"),
   publishedAt: text("published_at").notNull(),
   contentText: text("content_text"),
@@ -27,11 +27,9 @@ export const articles = sqliteTable("articles", {
 
 export const digests = sqliteTable("digests", {
   id: text("id").primaryKey(),
-  type: text("type", { enum: ["daily", "weekly"] }).notNull(),
+  type: text("type", { enum: ["daily"] }).notNull(),
   date: text("date").notNull(), // YYYY-MM-DD
   generatedAt: text("generated_at").notNull(),
-  weeklyThemes: text("weekly_themes"), // JSON array
-  editorPicks: text("editor_picks"),   // JSON array
 });
 
 export const digestItems = sqliteTable("digest_items", {

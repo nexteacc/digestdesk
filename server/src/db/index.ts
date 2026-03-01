@@ -54,11 +54,9 @@ export function initDb() {
 
     CREATE TABLE IF NOT EXISTS digests (
       id TEXT PRIMARY KEY,
-      type TEXT NOT NULL CHECK(type IN ('daily', 'weekly')),
+      type TEXT NOT NULL CHECK(type IN ('daily')),
       date TEXT NOT NULL,
-      generated_at TEXT NOT NULL,
-      weekly_themes TEXT,
-      editor_picks TEXT
+      generated_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS digest_items (
@@ -77,7 +75,7 @@ export function initDb() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_articles_feed_id ON articles(feed_id);
-    CREATE INDEX IF NOT EXISTS idx_articles_url ON articles(url);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_articles_url ON articles(url);
     CREATE INDEX IF NOT EXISTS idx_digest_items_digest_id ON digest_items(digest_id);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_digests_type_date ON digests(type, date);
     CREATE INDEX IF NOT EXISTS idx_articles_published_at ON articles(published_at);

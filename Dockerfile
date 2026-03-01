@@ -18,7 +18,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/server/node_modules ./server/node_modules
 COPY . .
-# 构建前端到 /app/dist
+# 构建前端 + 编译后端 TypeScript
 RUN pnpm build:all
 
 # --- 运行阶段 (Runner) ---
@@ -29,16 +29,21 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=8080
 
-# 复制构建产物和后端源码
+# 复制前端构建产物
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/server ./server
+# 复制后端编译产物（JS，非 .ts 源码）
+COPY --from=builder /app/server/dist ./server/dist
+COPY --from=builder /app/server/package.json ./server/package.json
+# 复制运行时依赖
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/server/node_modules ./server/node_modules
+
+# 创建 SQLite 数据目录
+RUN mkdir -p server/data
 
 # 暴露端口 (Zeabur 会自动识别并映射)
 EXPOSE 8080
 
-# 启动命令
-# 1. 确保数据目录存在并有权限 (SQLite 使用)
-# 2. 直接启动后端服务
-CMD mkdir -p server/data && pnpm start
+# 启动命令：直接用 node 执行预编译的 JS（无需 tsx 运行时转译）
+CMD ["node", "server/dist/index.js"]

@@ -5,10 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "start": "tsx src/index.ts"
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && mv dist/server/src/* dist/ && rm -rf dist/server dist/shared",
+    "start": "node dist/index.js"
   },
   "dependencies": {
-    "@ai-sdk/google": "^3.0.29",
     "@ai-sdk/openai": "^3.0.29",
     "ai": "^6.0.86",
     "better-sqlite3": "^11.9.1",
@@ -18,7 +18,6 @@
     "express": "^5.1.0",
     "nanoid": "^5.1.6",
     "node-cron": "^4.0.7",
-    "openai": "^5.8.2",
     "p-limit": "^7.3.0",
     "rss-parser": "^3.13.0",
     "tsx": "^4.19.4",

@@ -13,7 +13,7 @@
 - [x] 项目脚手架（React 19 + TypeScript + Vite + Tailwind + shadcn/ui）
 - [x] AppShell 布局（报纸式 masthead + 侧边栏 + 主内容区）
 - [x] 日报阅读页 DailyDigest（TOC + 文章卡片，同时作为首页）
-- [x] 周报阅读页 WeeklyDigest（主题归纳 + 逐日回顾）
+- [x] 周报阅读页（已暂停，待重构恢复）
 - [x] 订阅管理页 Subscriptions（搜索/URL 双 Tab 添加）
 - [x] 统一 API 客户端层（src/lib/api.ts）
 - [x] URL 归一化工具（src/lib/storage.ts）
@@ -28,7 +28,7 @@
 - [x] RSS 抓取与解析（rss-parser，node-cron 每天 8:00 同步）
 - [x] 内容抓取：Jina Reader API + Turndown HTML→Markdown 兜底
 - [x] AI 摘要引擎（Vercel AI SDK，默认 Gemini 2.5 Flash，Zod schema 结构化输出）
-- [x] 日报/周报生成逻辑（`/api/digests/generate`）
+- [x] 日报生成逻辑（`/api/digests/generate`）
 
 ### 需要构建（MVP 剩余）
 
@@ -36,7 +36,7 @@
 - [x] **Substack 搜索添加**（关键词搜索出版物）
 - [x] RSS 抓取与内容解析
 - [x] AI 摘要生成引擎
-- [x] 日报/周报生成逻辑
+- [x] 日报生成逻辑
 - [x] 后端服务与数据库（单用户模式）
 - [x] 前端页面改造（订阅页搜索入口 + Digest 页真实数据）
 
@@ -176,23 +176,16 @@ Response:
 
 已实现：定时自动生成（每天 8:00 + 启动时执行） + 手动触发。日报生成使用 24 小时滚动窗口，并发调用串行化排队。
 
-#### 1.3 周报编排
+#### 1.3 周报编排（暂停）
 
-输入：本周所有日报内容
-输出：一份周报
-
-周报额外内容：
-- 本周热门主题提炼（跨源归纳共性话题）
-- 简要趋势观察（"本周你关注的领域在讨论什么"）
-
-MVP 阶段：手动触发 + 每周一自动生成。AI 分析失败时 fallback 为空主题列表，不阻塞周报创建。
+周报功能已暂停，相关实现已移除，待后续重构恢复。
 
 #### 1.4 前端整合（MVP 收尾） ✅ 已完成
 
 - 类型扩展（shared/types.ts 定义 Feed/Digest/DigestItem 等类型）
 - 订阅管理页（Subscriptions.tsx）：搜索添加 + URL 添加双入口、预览卡片
 - 日报阅读页（DailyDigest.tsx）：TOC + 文章卡片，接入真实数据
-- 周报阅读页（WeeklyDigest.tsx）：主题归纳 + 逐日回顾
+- 周报阅读页（已暂停）
 - Storage 层抽象：localStorage → API 调用（api.ts）
 
 ---
@@ -220,7 +213,7 @@ MVP 阶段：手动触发 + 每周一自动生成。AI 分析失败时 fallback 
 - 用户授权浏览器通知权限
 - 日报生成后推送通知："你的今日 Digest 已就绪"
 - 点击通知 → 直达当日 Digest 页面
-- 用户可设置推送时间（默认日报 8:00，周报周日 20:00）
+- 用户可设置推送时间（默认日报 8:00）
 - 推送调度服务 + 偏好设置
 
 #### 2.4 Onboarding 引导流程
@@ -245,7 +238,7 @@ MVP 阶段：手动触发 + 每周一自动生成。AI 分析失败时 fallback 
 
 - 摘要详略程度设置（精简 / 标准 / 详细）
 - 摘要语言偏好
-- 推送频率调整（仅日报 / 仅周报 / 都要）
+- 推送频率调整（仅日报 / 关闭）
 - 关注主题权重（AI 优先展示相关内容）
 
 #### 3.3 质量与数据
@@ -270,7 +263,7 @@ MVP 阶段：手动触发 + 每周一自动生成。AI 分析失败时 fallback 
 ┌─────────────────────────────────────────────────────┐
 │                   前端（已有）                         │
 │  React 19 + TypeScript + Vite + shadcn/ui            │
-│  页面：DailyDigest(首页) / WeeklyDigest / Subscriptions│
+│  页面：DailyDigest(首页) / Subscriptions               │
 │  ┌─────────────────────────────────────────────┐     │
 │  │  MVP 改造：搜索添加入口 / Digest 真实数据    │     │
 │  └─────────────────────────────────────────────┘     │
@@ -323,9 +316,8 @@ MVP 阶段：手动触发 + 每周一自动生成。AI 分析失败时 fallback 
 | 页面/组件 | 改造内容 | 状态 |
 |-----------|----------|------|
 | **DailyDigest** | 日报阅读页，同时作为首页（路由 `/`）；接入真实 API 数据 | ✅ |
-| **WeeklyDigest** | 周报阅读页（路由 `/weekly`）；主题归纳 + 逐日回顾 | ✅ |
 | **Subscriptions** | 搜索添加 Tab + URL 预览添加；真实 API 数据 | ✅ |
-| **AppShell** | 品牌 DigestDesk；中文导航（今日日报/订阅源/周报） | ✅ |
+| **AppShell** | 品牌 DigestDesk；中文导航（今日日报/订阅源） | ✅ |
 | **types.ts** | Feed/Digest/DigestListItem/SubstackInfo 类型 | ✅ |
 | **api.ts** | 新建统一 API 客户端（替代 localStorage） | ✅ |
 | **storage.ts** | 精简为仅 URL 归一化工具（normalizeSubstackUrl） | ✅ |
@@ -351,7 +343,7 @@ MVP 阶段：手动触发 + 每周一自动生成。AI 分析失败时 fallback 
 | M0 | Substack 信息获取 + **搜索添加** | 输入 URL → 返回出版物名称、Logo、最近文章；输入关键词 → 返回匹配出版物列表 |
 | M1 | AI 摘要引擎 | 输入文章 → 输出一句话+3条洞察，质量可接受 |
 | M2 | 日报生成 | 手动触发生成 Digest，内容来自真实订阅 |
-| M3 | 周报生成 + 前端整合 | 周报可生成；订阅页搜索入口可用；Digest 页展示真实数据 |
+| M3 | 日报生成 + 前端整合 | 日报可生成；订阅页搜索入口可用；Digest 页展示真实数据 |
 
 ### MVP 后里程碑
 

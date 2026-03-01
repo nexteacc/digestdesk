@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Newspaper, Rss, BookOpen, PanelLeft } from "lucide-react";
+import { Newspaper, Rss, PanelLeft } from "lucide-react";
 
 type NavItem = {
   href: string;
@@ -13,7 +13,6 @@ type NavItem = {
 
 const contentNav: NavItem[] = [
   { href: "/", label: "今日日报", icon: <Newspaper className="h-4 w-4" /> },
-  { href: "/weekly", label: "周报", icon: <BookOpen className="h-4 w-4" /> },
 ];
 
 const manageNav: NavItem[] = [

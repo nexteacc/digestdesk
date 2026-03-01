@@ -92,7 +92,7 @@ export function batchDeleteFeeds(
 // --- Digests ---
 
 export function fetchDigests(
-  type?: "daily" | "weekly",
+  type?: "daily",
 ): Promise<DigestListItem[]> {
   const q = type ? `?type=${type}` : "";
   return request(`/digests${q}`);
@@ -103,18 +103,11 @@ export function fetchDigest(id: string): Promise<Digest> {
 }
 
 export function generateDigest(
-  type: "daily" | "weekly",
+  type: "daily",
   options?: { date?: string; force?: boolean },
 ): Promise<Digest> {
-  const body: Record<string, unknown> = { type };
-  if (options?.date) {
-    body.date = options.date;
-  }
-  if (options?.force && type === "daily") {
-    body.force = true;
-  }
   return request("/digests/generate", {
     method: "POST",
-    body: JSON.stringify(body),
+    body: JSON.stringify({ type, ...options }),
   });
 }
