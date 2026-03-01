@@ -70,7 +70,6 @@ export type Article = {
   url: string;
   guid?: string;
   publishedAt: string; // ISO
-  contentHtml?: string;
   contentText?: string;
   coverImageUrl?: string;
   fetchedAt: string; // ISO

@@ -69,7 +69,6 @@ export function initDb() {
       url TEXT NOT NULL,
       one_liner TEXT NOT NULL,
       key_insights TEXT NOT NULL,
-      reading_value TEXT CHECK(reading_value IN ('high', 'medium', 'low')),
       published_at TEXT NOT NULL,
       sort_order INTEGER NOT NULL DEFAULT 0
     );

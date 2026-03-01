@@ -18,12 +18,41 @@ const turndown = new TurndownService({
   codeBlockStyle: "fenced",
 });
 
-let isSyncingGlobal = false;
-
 const jinaLimit = pLimit(2);
-
 const JINA_READER_BASE = "https://r.jina.ai/";
 const MIN_CONTENT_LENGTH = 500;
+
+let _syncPromise: Promise<void> | null = null;
+
+export async function syncAllFeeds(): Promise<void> {
+  if (_syncPromise) {
+    console.log("[rss] A sync job is already in progress, sharing existing promise...");
+    return _syncPromise;
+  }
+
+  _syncPromise = (async () => {
+    const db = getDb();
+    const allFeeds = db.select().from(feeds).all();
+
+    console.log(`[rss] Starting sync job for ${allFeeds.length} feeds...`);
+
+    try {
+      for (const feed of allFeeds) {
+        try {
+          await syncFeed(feed.id);
+        } catch (err) {
+          console.error(`[rss] Error syncing ${feed.name}:`, err);
+        }
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    } finally {
+      _syncPromise = null;
+      console.log("[rss] All feeds sync complete.");
+    }
+  })();
+
+  return _syncPromise;
+}
 
 async function fetchWithRetry(url: string, options: RequestInit, retries = 2, backoff = 1000): Promise<Response> {
   try {
@@ -148,31 +177,4 @@ export async function syncFeed(feedId: string): Promise<number> {
 
   console.log(`[rss] ${feed.name}: ${newCount} new articles`);
   return newCount;
-}
-
-export async function syncAllFeeds(): Promise<void> {
-  if (isSyncingGlobal) {
-    console.log("[rss] A sync job is already in progress, skipping...");
-    return;
-  }
-
-  isSyncingGlobal = true;
-  const db = getDb();
-  const allFeeds = db.select().from(feeds).all();
-
-  console.log(`[rss] Syncing ${allFeeds.length} feeds...`);
-
-  try {
-    for (const feed of allFeeds) {
-      try {
-        await syncFeed(feed.id);
-      } catch (err) {
-        console.error(`[rss] Error syncing ${feed.name}:`, err);
-      }
-      await new Promise((r) => setTimeout(r, 1000));
-    }
-  } finally {
-    isSyncingGlobal = false;
-    console.log("[rss] All feeds sync complete.");
-  }
 }

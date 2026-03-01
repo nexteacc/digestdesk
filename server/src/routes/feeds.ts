@@ -116,7 +116,8 @@ feedsRouter.post("/", async (req, res) => {
         const today = new Date().toISOString().slice(0, 10);
         return generateDaily(today);
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error(`[feeds/create] Initial sync/digest failed for ${feed.name}:`, err);
       });
   } catch (err) {
     console.error("[feeds/create] Error:", err);
@@ -234,7 +235,7 @@ feedsRouter.post("/import", async (req, res) => {
           try {
             await syncFeed(feedId);
           } catch (e) {
-            void e;
+            console.error(`[feeds/import] Initial sync failed for feed ${feedId}:`, e);
           }
           await new Promise((r) => setTimeout(r, 1000));
         }
@@ -242,7 +243,7 @@ feedsRouter.post("/import", async (req, res) => {
           const today = new Date().toISOString().slice(0, 10);
           await generateDaily(today);
         } catch (e) {
-          void e;
+          console.error(`[feeds/import] Initial digest generation failed:`, e);
         }
       })();
     }

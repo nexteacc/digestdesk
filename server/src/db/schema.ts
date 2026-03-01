@@ -42,7 +42,6 @@ export const digestItems = sqliteTable("digest_items", {
   url: text("url").notNull(),
   oneLiner: text("one_liner").notNull(),
   keyInsights: text("key_insights").notNull(), // JSON array
-  readingValue: text("reading_value", { enum: ["high", "medium", "low"] }),
   publishedAt: text("published_at").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
 });
