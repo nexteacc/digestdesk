@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "build:all": "vite build && pnpm --filter substack-digest-server build",
+    "build": "vite build && pnpm --filter substack-digest-server build",
     "start": "node server/dist/index.js",
     "lint": "eslint .",
     "preview": "vite preview"
