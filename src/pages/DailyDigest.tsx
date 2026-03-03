@@ -21,6 +21,8 @@ import {
   Search,
   RefreshCw,
 } from "lucide-react";
+import { useZenMode } from "@/hooks/useZenMode";
+import { cn } from "@/lib/utils";
 
 function slugify(s: string) {
   return s
@@ -281,6 +283,7 @@ export default function DailyDigest() {
   const [hasFeeds, setHasFeeds] = useState(true);
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [selectingId, setSelectingId] = useState<string | null>(null);
+  const { isZen } = useZenMode();
 
   const loadDigest = useCallback(async () => {
     setLoading(true);
@@ -400,9 +403,12 @@ export default function DailyDigest() {
 
   return (
     <AppShell>
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col">
         {/* Header */}
-        <div>
+        <div className={cn(
+          "transition-all duration-500 ease-in-out overflow-hidden",
+          isZen ? "max-h-0 opacity-0 mb-0" : "max-h-[300px] opacity-100 mb-6"
+        )}>
           <div className="flex-1 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
             <div>
               <div className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground">
@@ -415,9 +421,8 @@ export default function DailyDigest() {
             <div className="flex items-center gap-3">
               {hasFeeds && (
                 <Button
-                  variant="outline"
                   size="sm"
-                  className="gap-1.5 h-8 text-xs"
+                  className="gap-1.5 h-8 text-xs font-medium shadow-sm rounded-full"
                   onClick={syncNow}
                   disabled={generating || loading}
                 >
@@ -432,15 +437,15 @@ export default function DailyDigest() {
           </div>
           <Separator className="mt-4" />
           {!loading && (
-            <div className="mt-3 grid gap-3 text-xs text-muted-foreground md:grid-cols-2">
+            <div className="mt-3 grid gap-3 text-xs text-muted-foreground md:grid-cols-2 items-center">
               <div>
-                <span className="font-semibold text-foreground">{feedCount}</span>
+                <span className="font-bold text-primary text-sm">{feedCount}</span>
                 <span className="ml-1">个订阅源</span>
                 {digestDays > 0 && (
                   <>
                     <span className="mx-1">·</span>
                     <span className="ml-1">做编辑的第</span>
-                    <span className="mx-1 font-semibold text-foreground">
+                    <span className="mx-1 font-bold text-primary text-sm">
                       {digestDays}
                     </span>
                     <span className="ml-1">天</span>
@@ -448,7 +453,7 @@ export default function DailyDigest() {
                 )}
               </div>
               <div className="md:text-right">
-                <span className="font-semibold text-foreground">
+                <span className="font-bold text-primary text-sm">
                   {articleCount}
                 </span>
                 <span className="ml-1">篇文章收录</span>
@@ -487,33 +492,38 @@ export default function DailyDigest() {
           <>
             {/* Archive selector */}
             {digestList.length > 1 && (
-              <Card className="p-4">
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <div className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
-                    归档
+              <div className={cn(
+                "transition-all duration-500 ease-in-out overflow-hidden",
+                isZen ? "max-h-0 opacity-0 mb-0" : "max-h-[200px] opacity-100 mb-6"
+              )}>
+                <Card className="p-4">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
+                      归档
+                    </div>
+                    <div className="flex flex-wrap gap-2 justify-end">
+                      {digestList.slice(0, 7).map((d) => {
+                        const active = current.id === d.id;
+                        return (
+                          <Button
+                            key={d.id}
+                            variant={active ? "secondary" : "outline"}
+                            size="sm"
+                            className={active ? "border border-border" : ""}
+                            onClick={() => selectDigest(d)}
+                            disabled={selectingId !== null}
+                          >
+                            {d.date}
+                          </Button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-2 justify-end">
-                    {digestList.slice(0, 7).map((d) => {
-                      const active = current.id === d.id;
-                      return (
-                        <Button
-                          key={d.id}
-                          variant={active ? "secondary" : "outline"}
-                          size="sm"
-                          className={active ? "border border-border" : ""}
-                          onClick={() => selectDigest(d)}
-                          disabled={selectingId !== null}
-                        >
-                          {d.date}
-                        </Button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </Card>
+                </Card>
+              </div>
             )}
 
-            <div className="grid gap-4 md:grid-cols-[320px_1fr] items-start">
+            <div className="grid gap-4 md:grid-cols-[320px_1fr] items-start transition-all duration-500">
               {/* TOC */}
               <Card id="digest-toc" className="p-4 md:p-5 md:sticky md:top-6 h-fit max-h-[calc(100vh-120px)] flex flex-col">
                 <div className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
@@ -562,7 +572,7 @@ export default function DailyDigest() {
                   const anchorId = toc[index]?.id;
                   return (
                     <Card key={it.id} className="p-5 scroll-mt-8" id={anchorId}>
-                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div className="flex flex-col gap-3">
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
@@ -572,36 +582,39 @@ export default function DailyDigest() {
                           <h4 className="mt-2 text-xl md:text-2xl font-semibold leading-snug">
                             {it.title}
                           </h4>
+                        </div>
+                        
+                        <div className="flex flex-col gap-3 items-start">
                           {it.author && (
-                            <div className="mt-2 text-xs text-muted-foreground">
+                            <div className="text-xs text-muted-foreground">
                               作者：{it.author}
                             </div>
                           )}
-                        </div>
-                        <a
-                          href={it.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex"
-                        >
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="gap-1.5"
+                          <a
+                            href={it.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex"
                           >
-                            阅读原文
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </Button>
-                        </a>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-1.5"
+                            >
+                              阅读原文
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </Button>
+                          </a>
+                        </div>
                       </div>
 
                       <Separator className="my-4" />
 
-                      <div className="rounded-md border border-border bg-accent/60 p-4">
-                        <div className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
+                      <div className="pl-4 border-l-4 border-primary my-6">
+                        <div className="text-xs tracking-[0.18em] uppercase text-primary mb-2 font-medium">
                           一句话总结
                         </div>
-                        <div className="mt-2 text-sm leading-relaxed">
+                        <div className="text-base italic leading-relaxed text-foreground/90">
                           {it.oneLiner}
                         </div>
                       </div>
@@ -620,17 +633,19 @@ export default function DailyDigest() {
                       )}
 
                       <div className="mt-5 text-xs text-muted-foreground">
-                        #
-                        {String(index + 1).padStart(2, "0")} ·{" "}
+                        <span className="text-primary font-semibold mr-1">
+                          #{String(index + 1).padStart(2, "0")}
+                        </span>
+                        ·{" "}
                         <button
                           type="button"
                           className="underline underline-offset-4 hover:text-foreground"
                           onClick={(e) => {
                             e.preventDefault();
-                            document.getElementById("digest-toc")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                            window.scrollTo({ top: 0, behavior: "smooth" });
                           }}
                         >
-                          回到目录
+                          回到顶部
                         </button>
                       </div>
                     </Card>

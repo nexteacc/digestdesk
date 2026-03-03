@@ -1,9 +1,11 @@
 import { useEffect, useState, type PropsWithChildren } from "react";
 import { Link, useLocation } from "wouter";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Newspaper, Rss, PanelLeft } from "lucide-react";
+import { Newspaper, Rss, PanelLeft, Maximize, Minimize } from "lucide-react";
+import { useZenMode } from "@/hooks/useZenMode";
 
 type NavItem = {
   href: string;
@@ -25,16 +27,31 @@ export default function AppShell({ children }: PropsWithChildren) {
     try { return localStorage.getItem("sidebar-collapsed") === "true"; }
     catch { return false; }
   });
+  const { isZen, toggleZenMode } = useZenMode();
 
   useEffect(() => {
     try { localStorage.setItem("sidebar-collapsed", String(isCollapsed)); }
     catch { /* ignore */ }
   }, [isCollapsed]);
 
+  function handleToggleZen() {
+    toggleZenMode();
+    if (!isZen) {
+      toast("已进入沉浸模式", {
+        description: "按 ESC 键即可退出",
+        duration: 3000,
+        className: "toast-zen",
+      });
+    }
+  }
+
   return (
     <div className="min-h-screen paper-noise">
       {/* Masthead */}
-      <header className="hairline">
+      <header className={cn(
+        "relative transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] overflow-hidden",
+        isZen ? "max-h-0 opacity-0 border-none" : "max-h-[100px] opacity-100 hairline"
+      )}>
         <div className="mx-auto max-w-6xl px-4 py-4 md:px-6">
           <h1 className="text-2xl md:text-3xl font-semibold leading-none">
             <Link href="/">
@@ -58,13 +75,44 @@ export default function AppShell({ children }: PropsWithChildren) {
         </div>
       </header>
 
-      <div className="mx-auto max-w-6xl px-4 py-6 md:px-6">
+      <div className="relative z-50 flex justify-center h-0">
         <div className={cn(
-          "grid gap-6 transition-all duration-300",
-          isCollapsed ? "md:grid-cols-[60px_1fr]" : "md:grid-cols-[240px_1fr]"
+          "absolute transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
+          isZen ? "opacity-0 scale-0 pointer-events-none -top-4" : "-top-0 -translate-y-1/2 opacity-100 scale-100"
+        )}>
+          <Button
+            variant="outline"
+            size="icon"
+            className="rounded-full h-9 w-9 shadow-md"
+            onClick={handleToggleZen}
+            title={isZen ? "退出禅意模式" : "进入禅意模式"}
+          >
+            {isZen ? (
+              <Minimize className="h-4 w-4" />
+            ) : (
+              <Maximize className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+      </div>
+
+      <div className={cn(
+        "mx-auto max-w-6xl px-4 transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
+        "py-6"
+      )}>
+        <div className={cn(
+          "grid transition-[grid-template-columns,gap] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
+          isZen 
+            ? "grid-cols-[0px_1fr] gap-0" 
+            : isCollapsed 
+              ? "md:grid-cols-[60px_1fr] gap-6" 
+              : "md:grid-cols-[240px_1fr] gap-6"
         )}>
           {/* Sidebar */}
-          <aside className="md:sticky md:top-6 h-fit overflow-hidden">
+          <aside className={cn(
+            "md:sticky md:top-6 h-fit overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] whitespace-nowrap",
+            isZen ? "opacity-0 -translate-x-4" : "opacity-100 translate-x-0"
+          )}>
             <div className="rounded-lg border border-border bg-card/70 backdrop-blur p-2 shadow-sm">
               <div 
                 onClick={() => setIsCollapsed(!isCollapsed)}
@@ -76,8 +124,6 @@ export default function AppShell({ children }: PropsWithChildren) {
                 )}
                 <PanelLeft className={cn("h-4 w-4 text-muted-foreground transition-transform duration-300", isCollapsed && "mx-auto")} />
               </div>
-              
-              <Separator className="my-1" />
               
               <nav className="mt-2 grid gap-1">
                 {contentNav.map((item) => {
@@ -103,10 +149,8 @@ export default function AppShell({ children }: PropsWithChildren) {
                 })}
               </nav>
               
-              {!isCollapsed && <Separator className="my-2" />}
-              
               {!isCollapsed && (
-                <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground px-2 py-1">
+                <div className="mt-4 text-[10px] tracking-[0.2em] uppercase text-muted-foreground px-2 py-1">
                   管理
                 </div>
               )}

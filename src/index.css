@@ -63,8 +63,8 @@ Design reminder (commitment):
   --popover-foreground: var(--foreground);
 
   /* Accent: Substack orange-ish, but deeper */
-  --primary: oklch(0.67 0.22 45);
-  --primary-foreground: oklch(0.985 0.01 95);
+  --primary: #FF6719;
+  --primary-foreground: #ffffff;
 
   --secondary: oklch(0.955 0.01 95);
   --secondary-foreground: var(--foreground);
@@ -79,9 +79,9 @@ Design reminder (commitment):
 
   --border: oklch(0.84 0.01 95);
   --input: oklch(0.84 0.01 95);
-  --ring: oklch(0.67 0.22 45);
+  --ring: #FF6719;
 
-  --chart-1: oklch(0.67 0.22 45);
+  --chart-1: #FF6719;
   --chart-2: oklch(0.62 0.12 190);
   --chart-3: oklch(0.45 0.08 250);
   --chart-4: oklch(0.78 0.16 95);
@@ -130,4 +130,50 @@ Design reminder (commitment):
 
 .hairline {
   box-shadow: inset 0 -1px 0 oklch(0.84 0.01 95);
+}
+
+/* Zen Mode Transitions & Animations */
+:root {
+  --zen-duration: 400ms;
+  --zen-ease: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.zen-transition {
+  transition: all var(--zen-duration) var(--zen-ease) !important;
+}
+
+/* 隐藏不相关元素的通用类 */
+.zen-hide {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity var(--zen-duration) var(--zen-ease), 
+              transform var(--zen-duration) var(--zen-ease),
+              max-height var(--zen-duration) var(--zen-ease),
+              margin var(--zen-duration) var(--zen-ease);
+}
+
+.zen-mode-active .zen-hide {
+  opacity: 0 !important;
+  transform: translateY(-20px) !important;
+  pointer-events: none !important;
+}
+
+/* 特殊处理：侧边栏侧向滑出 */
+.zen-mode-active aside {
+  transform: translateX(-100%) !important;
+  opacity: 0 !important;
+  margin-right: -240px !important; /* 抵消 grid gap 后的空间，让内容平滑左滑 */
+}
+
+/* Zen Mode Toast Override */
+.toast-zen {
+  background-color: var(--primary) !important;
+  border-color: var(--primary) !important;
+}
+
+.toast-zen [data-title],
+.toast-zen [data-description] {
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  opacity: 1 !important;
 }

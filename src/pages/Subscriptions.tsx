@@ -236,14 +236,11 @@ export default function SubscriptionsPage() {
               <h2 className="text-2xl md:text-3xl font-semibold">
                 订阅源管理
               </h2>
-              <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-                添加你关注的 Substack
-              </p>
             </div>
             <Button
               variant="outline"
               size="sm"
-              className="gap-1.5"
+              className="gap-1.5 border-primary/50 text-primary hover:bg-primary/10 hover:border-primary hover:text-primary transition-colors"
               onClick={() => setImportOpen(true)}
             >
               <Download className="h-3.5 w-3.5" />
@@ -443,9 +440,9 @@ export default function SubscriptionsPage() {
             </span>
             {!feedsLoading && feeds.length > 0 && !batchMode && (
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                className="gap-1.5"
+                className="gap-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                 onClick={enterBatchMode}
               >
                 <Trash2 className="h-3.5 w-3.5" />
