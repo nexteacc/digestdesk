@@ -50,6 +50,5 @@ app.listen(PORT, () => {
     console.log("Scheduler started.");
   } catch (err) {
     console.error("Fatal: Initialization failed:", err);
-    process.exit(1);
   }
 });
