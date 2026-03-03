@@ -22,44 +22,32 @@
 
 ---
 
-## 平台详细指南
+## Zeabur 部署指南
 
-### 1. Railway (推荐)
+Zeabur 对 Monorepo 和 Docker 项目提供了良好的支持。
 
-Railway 对全栈应用支持极佳，配置 Volume 非常直观。
+*   **创建项目**:
+    1.  在 Zeabur 控制台选择 "Deploy from GitHub repo"。
+    2.  授权并选择你的项目仓库。
+    3.  Zeabur 会自动检测到这是一个 Monorepo 项目，并识别出根目录下的 `Dockerfile`。
 
-*   **创建项目**: 选择 "Deploy from GitHub repo"。
+*   **配置服务**:
+    1.  进入你的服务设置页面。
+    2.  在 "Deploy" 或 "Build Settings" 选项卡中，确保 Zeabur 使用了 `Dockerfile` 进行部署。
+    3.  在 "General" 或 "Port" 设置中，确保暴露的端口是 `8080`。
+
 *   **添加 Volume (关键)**:
-    1.  项目创建后，点击服务卡片。
-    2.  进入 `Volumes` 选项卡。
-    3.  点击 `Add Volume`。
-    4.  **Mount Path** (挂载路径) 填写: `/app/server/data`
+    1.  进入服务的 `Volumes` 选项卡。
+    2.  点击 `Add Volume`。
+    3.  **Mount Path** (挂载路径) 填写: `/app/server/data`
+
 *   **环境变量**:
-    1.  进入 `Variables` 选项卡。
-    2.  添加 `GOOGLE_GENERATIVE_AI_API_KEY`（或 `OPENAI_API_KEY`）、`CF_SEARCH_PROXY_URL`、`CF_SEARCH_PROXY_TOKEN` 等。
+    1.  进入服务的 `Variables` 选项卡。
+    2.  添加 `GOOGLE_GENERATIVE_AI_API_KEY`（或 `OPENAI_API_KEY`）、`CF_SEARCH_PROXY_URL`、`CF_SEARCH_PROXY_TOKEN` 等必要环境变量。
+
 *   **域名**:
-    1.  进入 `Networking` -> `Public`。
-    2.  点击 `Generate Domain` 或绑定自定义域名。
-
-### 3. Docker / VPS (自托管)
-
-如果你有自己的服务器，可以直接使用 Docker 部署。
-
-```bash
-# 1. 构建镜像
-docker build -t digestdesk .
-
-# 2. 准备数据目录
-mkdir -p $(pwd)/digestdesk-data
-
-# 3. 运行容器 (务必挂载数据目录)
-docker run -d \
-  -p 8080:8080 \
-  -v $(pwd)/digestdesk-data:/app/server/data \
-  -e GOOGLE_GENERATIVE_AI_API_KEY="your-key" \
-  --name digestdesk \
-  digestdesk
-```
+    1.  进入服务的 `Networking` 选项卡。
+    2.  点击 `Generate Domain` 或绑定你的自定义域名。
 
 ## 故障排查
 
