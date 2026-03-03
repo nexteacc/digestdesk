@@ -1,4 +1,4 @@
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
 
@@ -27,38 +27,37 @@ function getModel() {
 const ArticleSummarySchema = z.object({
   oneLiner: z
     .string()
-    .describe("一句话（不超过50字）概括文章最核心的观点或结论，不要用'作者认为...'开头"),
+    .describe("用一个完整的、不超过30个字的短句，精准总结文章的核心结论。确保句子通顺、信息完整。"),
   keyInsights: z
     .array(z.string())
-    .describe("3条关键洞察，每条要具体、有信息量、可执行"),
+    .length(3)
+    .describe("3个高价值的信息点。每个点必须包含具体的数据、方法或洞察。禁止废话。"),
 });
 
 export type ArticleSummary = z.infer<typeof ArticleSummarySchema>;
 
-const ARTICLE_SYSTEM_PROMPT = `你是 DigestDesk 的编辑。目标：高密度、可执行、少废话。
+const ARTICLE_SYSTEM_PROMPT = `你是一名专业的中文编辑，为 DigestDesk 产品工作。
 
-输入是 Markdown 文章。利用标题/列表/引用/数据点，提炼关键信息，不要复述段落。
-
-输出：
-1. oneLiner：≤50字，直接给结论；不要以“作者认为”开头。
-2. keyInsights：3条要点；每条必须具体，优先包含数字/对比/因果/做法；避免空话与口号。`;
+任务要求：
+1. **语言统一**: 你的核心任务是阅读任何语言的文章，并始终以【简体中文】输出高质量的结构化摘要。
+2. **客观去噪**: 剔除客套话、情绪表达和背景铺垫，只保留核心信息。`;
 
 export async function summarizeArticle(markdown: string): Promise<ArticleSummary> {
   const model = getModel();
   console.log(`[summarizer] Starting AI summary... (Input length: ${markdown.length})`);
 
   try {
-    const { object } = await generateObject({
+    const { output } = await generateText({
       model,
-      schema: ArticleSummarySchema,
       system: ARTICLE_SYSTEM_PROMPT,
       prompt: markdown,
+      output: Output.object({ schema: ArticleSummarySchema }),
     });
 
-    console.log(`[summarizer] AI summary complete. One-liner: ${object.oneLiner?.slice(0, 50)}...`);
+    console.log(`[summarizer] AI summary complete. One-liner: ${output.oneLiner?.slice(0, 50)}...`);
     return {
-      oneLiner: object.oneLiner || "暂无摘要",
-      keyInsights: object.keyInsights.slice(0, 5),
+      oneLiner: output.oneLiner || "暂无摘要",
+      keyInsights: output.keyInsights,
     };
   } catch (err) {
     console.error(`[summarizer] AI summary failed:`, err instanceof Error ? err.message : err);

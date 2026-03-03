@@ -85,7 +85,7 @@ async function generateWithId(digestId: string, dateLabel: string, startTime: st
   const tasks = uniqueArticles.map((article) =>
     limit(async (): Promise<ItemResult> => {
       const contentText = article.contentText || "";
-      const feedName = feedMap.get(article.feedId) || "Unknown Source";
+      const feedName = feedMap.get(article.feedId) || "未知来源";
       const base = {
         articleId: article.id,
         feedName,
@@ -96,7 +96,7 @@ async function generateWithId(digestId: string, dateLabel: string, startTime: st
       };
 
       if (!contentText || contentText.length < 50) {
-        return { ...base, oneLiner: "Content too short for summary", keyInsights: [] };
+        return { ...base, oneLiner: "内容过短，无法生成摘要", keyInsights: [] };
       }
 
       try {
@@ -109,7 +109,7 @@ async function generateWithId(digestId: string, dateLabel: string, startTime: st
         };
       } catch (err) {
         console.error(`[digest] Failed to summarize article ${article.id}:`, err);
-        return { ...base, oneLiner: "Summary generation failed", keyInsights: [] };
+        return { ...base, oneLiner: "摘要生成失败", keyInsights: [] };
       }
     }),
   );
