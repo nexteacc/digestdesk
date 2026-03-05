@@ -18,15 +18,27 @@ const PORT = process.env.PORT || 8080;
 app.use(cors());
 app.use(express.json());
 
-// initDb() moved to listen callback to prevent startup blocking
+let ready = false;
+let initError: string | null = null;
 
 app.use("/api/feeds", feedsRouter);
 app.use("/api/digests", digestsRouter);
 app.use("/api/substack", substackRouter);
 
 app.get("/api/health", (_req, res) => {
-  // 健康检查端点，尽量简单快速
   res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+app.get("/api/ready", (_req, res) => {
+  if (ready) {
+    res.json({ status: "ready", timestamp: new Date().toISOString() });
+    return;
+  }
+  res.status(503).json({
+    status: "starting",
+    timestamp: new Date().toISOString(),
+    error: initError ?? undefined,
+  });
 });
 
 const frontendDist = path.resolve(__dirname, "../../dist");
@@ -40,15 +52,18 @@ if (fs.existsSync(frontendDist)) {
 app.listen(Number(PORT), "0.0.0.0", () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
 
-  // 在端口监听后再执行初始化任务，避免阻塞启动探针（TCP Connect）
-  try {
-    console.log("Starting initialization...");
-    initDb(); // 虽然是同步操作，但此时端口已由 OS 接管，TCP 连接可建立
-    console.log("Database initialized.");
-    
-    startScheduler();
-    console.log("Scheduler started.");
-  } catch (err) {
-    console.error("Fatal: Initialization failed:", err);
-  }
+  setTimeout(() => {
+    try {
+      console.log("Starting initialization...");
+      initDb();
+      console.log("Database initialized.");
+
+      startScheduler();
+      console.log("Scheduler started.");
+      ready = true;
+    } catch (err) {
+      initError = err instanceof Error ? err.message : String(err);
+      console.error("Fatal: Initialization failed:", err);
+    }
+  }, 0);
 });
