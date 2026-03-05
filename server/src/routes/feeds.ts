@@ -148,18 +148,11 @@ feedsRouter.delete("/:id", (req, res) => {
   res.json({ success: true });
 });
 
-feedsRouter.post("/sync", async (_req, res) => {
-  try {
-    await syncAllFeeds();
-    res.json({ success: true });
-  } catch (err: unknown) {
-    console.error("[feeds/sync] Error:", err);
-    if (err instanceof Error) {
-      res.status(500).json({ error: err.message || "同步失败" });
-    } else {
-      res.status(500).json({ error: "同步失败" });
-    }
-  }
+feedsRouter.post("/sync", (_req, res) => {
+  syncAllFeeds().catch((err) => {
+    console.error("[feeds/sync] Background sync failed:", err);
+  });
+  res.json({ success: true, message: "同步任务已在后台启动" });
 });
 
 feedsRouter.post("/import", async (req, res) => {

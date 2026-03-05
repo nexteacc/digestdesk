@@ -12,6 +12,7 @@
     "@ai-sdk/openai": "^3.0.29",
     "ai": "^6.0.86",
     "better-sqlite3": "^11.9.1",
+    "bottleneck": "^2.19.5",
     "cors": "^2.8.5",
     "dotenv": "^17.3.1",
     "drizzle-orm": "^0.44.2",
