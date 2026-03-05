@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
 
 const ZEN_MODE_STORAGE_KEY = "digestdesk-zen-mode";
@@ -65,6 +66,7 @@ export function ZenModeProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useZenMode() {
   const context = useContext(ZenModeContext);
   if (!context) {

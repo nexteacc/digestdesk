@@ -6,7 +6,6 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -21,8 +20,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import * as api from "@/lib/api";
-import type { Feed, SubstackSearchResult, SubstackInfo } from "@/lib/types";
-import { Check, Search, Trash2, Link as LinkIcon, Download, X } from "lucide-react";
+import type { Feed, SubstackSearchResult } from "@/lib/types";
+import { Check, Trash2, Download, X } from "lucide-react";
 import ImportDialog from "@/components/ImportDialog";
 
 export default function SubscriptionsPage() {
@@ -41,12 +40,6 @@ export default function SubscriptionsPage() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const searchRequestId = useRef(0);
-
-  // URL add state
-  const [url, setUrl] = useState("");
-  const [urlPreview, setUrlPreview] = useState<SubstackInfo | null>(null);
-  const [urlPreviewLoading, setUrlPreviewLoading] = useState(false);
-  const [urlAdding, setUrlAdding] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -139,40 +132,6 @@ export default function SubscriptionsPage() {
     });
   }
 
-  // --- URL Preview + Add ---
-  async function onPreviewUrl() {
-    const trimmed = url.trim();
-    if (!trimmed) {
-      toast.error("请先粘贴链接");
-      return;
-    }
-    setUrlPreviewLoading(true);
-    setUrlPreview(null);
-    try {
-      const info = await api.getSubstackInfo(trimmed);
-      setUrlPreview(info);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "无法获取出版物信息");
-    } finally {
-      setUrlPreviewLoading(false);
-    }
-  }
-
-  async function onConfirmUrlAdd() {
-    setUrlAdding(true);
-    try {
-      await api.createFeed(url.trim());
-      setUrl("");
-      setUrlPreview(null);
-      toast.success("已订阅，正在同步文章…");
-      await refresh();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "添加失败");
-    } finally {
-      setUrlAdding(false);
-    }
-  }
-
   // --- Remove ---
   async function onRemove(id: string) {
     try {
@@ -252,20 +211,7 @@ export default function SubscriptionsPage() {
 
         {/* Add Subscription - Tabs */}
         <Card className="p-4 md:p-5">
-          <Tabs defaultValue="search">
-            <TabsList>
-              <TabsTrigger value="search" className="gap-1.5">
-                <Search className="h-3.5 w-3.5" />
-                搜索添加
-              </TabsTrigger>
-              <TabsTrigger value="url" className="gap-1.5">
-                <LinkIcon className="h-3.5 w-3.5" />
-                URL 添加
-              </TabsTrigger>
-            </TabsList>
-
-            {/* Search Tab */}
-            <TabsContent value="search" className="min-h-[220px]">
+          <div className="min-h-[220px]">
               <div className="flex gap-2 mt-1">
                 <Input
                   value={searchQuery}
@@ -354,82 +300,7 @@ export default function SubscriptionsPage() {
                   </div>
                 )}
               </div>
-            </TabsContent>
-
-            {/* URL Tab */}
-            <TabsContent value="url" className="min-h-[220px]">
-              <div className="flex gap-2 mt-1">
-                <Input
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && onPreviewUrl()}
-                  placeholder="粘贴 Substack 主页链接"
-                  className="flex-1"
-                />
-                <Button onClick={onPreviewUrl} disabled={urlPreviewLoading}>
-                  {urlPreviewLoading ? "获取中…" : "预览"}
-                </Button>
-              </div>
-              {/* URL Preview Loading */}
-              {urlPreviewLoading && (
-                <div className="mt-4 flex items-center gap-3 rounded-md border border-border p-4">
-                  <Skeleton className="h-12 w-12 rounded-full" />
-                  <div className="flex-1 space-y-2">
-                    <Skeleton className="h-4 w-[200px]" />
-                    <Skeleton className="h-3 w-[300px]" />
-                  </div>
-                </div>
-              )}
-
-              {/* URL Preview Card */}
-              {urlPreview && !urlPreviewLoading && (
-                <div className="mt-4 rounded-md border border-border p-4">
-                  <div className="flex items-start gap-3">
-                    <Avatar className="h-12 w-12">
-                      <AvatarImage
-                        src={urlPreview.logoUrl}
-                        alt={urlPreview.name}
-                      />
-                      <AvatarFallback>
-                        {urlPreview.name.slice(0, 2).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium">
-                        {urlPreview.name}
-                      </div>
-                      {urlPreview.authorName && (
-                        <div className="text-xs text-muted-foreground">
-                          by {urlPreview.authorName}
-                        </div>
-                      )}
-                      {urlPreview.description && (
-                        <p className="mt-1 text-xs text-muted-foreground leading-relaxed line-clamp-2">
-                          {urlPreview.description}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="mt-4 flex gap-2">
-                    <Button
-                      onClick={onConfirmUrlAdd}
-                      disabled={urlAdding}
-                      size="sm"
-                    >
-                      {urlAdding ? "添加中…" : "确认订阅"}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setUrlPreview(null)}
-                    >
-                      取消
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </TabsContent>
-          </Tabs>
+            </div>
         </Card>
 
         {/* Subscriptions List */}
@@ -518,7 +389,7 @@ export default function SubscriptionsPage() {
           ) : feeds.length === 0 ? (
             <Card className="p-10 text-center">
               <div className="text-sm text-muted-foreground">
-                还没有订阅源。用上面的搜索或 URL 添加试试。
+                还没有订阅源。用上面的搜索功能添加试试。
               </div>
             </Card>
           ) : (

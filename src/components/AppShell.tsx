@@ -3,7 +3,6 @@ import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { Newspaper, Rss, PanelLeft, Maximize, Minimize } from "lucide-react";
 import { useZenMode } from "@/hooks/useZenMode";
 
