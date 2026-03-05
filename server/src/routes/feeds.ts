@@ -48,9 +48,9 @@ function toFeed(row: typeof feeds.$inferSelect): Feed {
   };
 }
 
-feedsRouter.get("/", (_req, res) => {
+feedsRouter.get("/", async (_req, res) => {
   const db = getDb();
-  const rows = db.select().from(feeds).orderBy(desc(feeds.createdAt)).all();
+  const rows = await db.select().from(feeds).orderBy(desc(feeds.createdAt));
   const result = rows.map(toFeed);
   res.json(result);
 });
@@ -73,7 +73,7 @@ feedsRouter.post("/", async (req, res) => {
     const feedUrl = `${publicationUrl}/feed`;
 
     const db = getDb();
-    const existing = db.select().from(feeds).where(eq(feeds.feedUrl, feedUrl)).get();
+    const [existing] = await db.select().from(feeds).where(eq(feeds.feedUrl, feedUrl));
     if (existing) {
       res.status(409).json({ error: "该订阅源已存在" });
       return;
@@ -107,10 +107,11 @@ feedsRouter.post("/", async (req, res) => {
       lastFetchedAt: null,
     };
 
-    db.insert(feeds).values(feed).run();
+  await db.insert(feeds).values(feed);
 
     res.status(201).json(toFeed(feed));
 
+    // Background sync
     syncFeed(feed.id)
       .then(() => {
         const today = new Date().toISOString().slice(0, 10);
@@ -125,7 +126,7 @@ feedsRouter.post("/", async (req, res) => {
   }
 });
 
-feedsRouter.delete("/batch", (req, res) => {
+feedsRouter.delete("/batch", async (req, res) => {
   const parsed = z
     .object({ ids: z.array(z.string().min(1)).min(1).max(200) })
     .safeParse(req.body);
@@ -134,14 +135,14 @@ feedsRouter.delete("/batch", (req, res) => {
     return;
   }
   const db = getDb();
-  const result = db.delete(feeds).where(inArray(feeds.id, parsed.data.ids)).run();
-  res.json({ deleted: result.changes });
+  const result = await db.delete(feeds).where(inArray(feeds.id, parsed.data.ids));
+  res.json({ deleted: result.count });
 });
 
-feedsRouter.delete("/:id", (req, res) => {
+feedsRouter.delete("/:id", async (req, res) => {
   const db = getDb();
-  const result = db.delete(feeds).where(eq(feeds.id, req.params.id)).run();
-  if (result.changes === 0) {
+  const result = await db.delete(feeds).where(eq(feeds.id, req.params.id));
+  if (result.count === 0) {
     res.status(404).json({ error: "订阅源不存在" });
     return;
   }
@@ -163,85 +164,79 @@ feedsRouter.post("/import", async (req, res) => {
   }
   const { items } = parsed.data;
 
-  try {
-    const db = getDb();
-    const now = new Date().toISOString();
-    let created = 0;
-    let skipped = 0;
-    const newFeedIds: string[] = [];
+  const db = getDb();
+  const now = new Date().toISOString();
+  let created = 0;
+  let skipped = 0;
+  const newFeedIds: string[] = [];
 
-    for (const item of items) {
-      if (!item.url) {
-        skipped++;
-        continue;
-      }
-
-      let normalizedUrl = item.url.trim();
-      if (!/^https?:\/\//i.test(normalizedUrl)) {
-        normalizedUrl = `https://${normalizedUrl}`;
-      }
-
-      let publicationUrl: string;
-      let feedUrl: string;
-      try {
-        const parsed = new URL(normalizedUrl);
-        publicationUrl = parsed.origin;
-        feedUrl = `${publicationUrl}/feed`;
-      } catch {
-        skipped++;
-        continue;
-      }
-
-      const existing = db
-        .select({ id: feeds.id })
-        .from(feeds)
-        .where(eq(feeds.feedUrl, feedUrl))
-        .get();
-      if (existing) {
-        skipped++;
-        continue;
-      }
-
-      const name = (item.name || publicationUrl).slice(0, 80);
-      const feed = {
-        id: nanoid(),
-        name,
-        description: item.description || null,
-        logoUrl: item.logoUrl || null,
-        authorName: item.authorName || null,
-        publicationUrl,
-        feedUrl,
-        createdAt: now,
-        lastFetchedAt: null,
-      };
-
-      db.insert(feeds).values(feed).run();
-      newFeedIds.push(feed.id);
-      created++;
+  for (const item of items) {
+    if (!item.url) {
+      skipped++;
+      continue;
     }
 
-    res.status(201).json({ created, skipped });
+    let normalizedUrl = item.url.trim();
+    if (!/^https?:\/\//i.test(normalizedUrl)) {
+      normalizedUrl = `https://${normalizedUrl}`;
+    }
 
-    if (newFeedIds.length > 0) {
-      (async () => {
-        for (const feedId of newFeedIds) {
-          try {
-            await syncFeed(feedId);
-          } catch (e) {
-            console.error(`[feeds/import] Initial sync failed for feed ${feedId}:`, e);
-          }
-          await new Promise((r) => setTimeout(r, 1000));
-        }
+    let publicationUrl: string;
+    let feedUrl: string;
+    try {
+      const parsedUrl = new URL(normalizedUrl);
+      publicationUrl = parsedUrl.origin;
+      feedUrl = `${publicationUrl}/feed`;
+    } catch {
+      skipped++;
+      continue;
+    }
+
+    const [existing] = await db
+      .select({ id: feeds.id })
+      .from(feeds)
+      .where(eq(feeds.feedUrl, feedUrl));
+    if (existing) {
+      skipped++;
+      continue;
+    }
+
+    const name = (item.name || publicationUrl).slice(0, 80);
+    const feed = {
+      id: nanoid(),
+      name,
+      description: item.description || null,
+      logoUrl: item.logoUrl || null,
+      authorName: item.authorName || null,
+      publicationUrl,
+      feedUrl,
+      createdAt: now,
+      lastFetchedAt: null,
+    };
+
+    await db.insert(feeds).values(feed);
+    newFeedIds.push(feed.id);
+    created++;
+  }
+
+  res.status(201).json({ created, skipped });
+
+  if (newFeedIds.length > 0) {
+    (async () => {
+      for (const feedId of newFeedIds) {
         try {
-          const today = new Date().toISOString().slice(0, 10);
-          await generateDaily(today);
+          await syncFeed(feedId);
         } catch (e) {
-          console.error(`[feeds/import] Initial digest generation failed:`, e);
+          console.error(`[feeds/import] Initial sync failed for feed ${feedId}:`, e);
         }
-      })();
-    }
-  } catch (err) {
-    console.error("[feeds/import] Error:", err);
-    res.status(500).json({ error: "批量导入失败" });
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      try {
+        const today = new Date().toISOString().slice(0, 10);
+        await generateDaily(today);
+      } catch (e) {
+        console.error(`[feeds/import] Initial digest generation failed:`, e);
+      }
+    })();
   }
 });

@@ -32,7 +32,7 @@ export async function syncAllFeeds(): Promise<void> {
 
   _syncPromise = (async () => {
     const db = getDb();
-    const allFeeds = db.select().from(feeds).all();
+    const allFeeds = await db.select().from(feeds);
 
     console.log(`[rss] Starting sync job for ${allFeeds.length} feeds...`);
 
@@ -116,7 +116,7 @@ function htmlToMarkdown(html: string): string {
 
 export async function syncFeed(feedId: string): Promise<number> {
   const db = getDb();
-  const feed = db.select().from(feeds).where(eq(feeds.id, feedId)).get();
+  const [feed] = await db.select().from(feeds).where(eq(feeds.id, feedId));
   if (!feed) {
     console.warn(`[rss] Feed ${feedId} not found`);
     return 0;
@@ -141,11 +141,10 @@ export async function syncFeed(feedId: string): Promise<number> {
 
     if (!articleUrl) continue;
 
-    const existing = db
+    const [existing] = await db
       .select({ id: articles.id })
       .from(articles)
-      .where(eq(articles.url, articleUrl))
-      .get();
+      .where(eq(articles.url, articleUrl));
 
     if (existing) continue;
 
@@ -169,11 +168,11 @@ export async function syncFeed(feedId: string): Promise<number> {
       fetchedAt: now,
     };
 
-    db.insert(articles).values(article).onConflictDoNothing().run();
+    await db.insert(articles).values(article).onConflictDoNothing();
     newCount++;
   }
 
-  db.update(feeds).set({ lastFetchedAt: now }).where(eq(feeds.id, feedId)).run();
+  await db.update(feeds).set({ lastFetchedAt: now }).where(eq(feeds.id, feedId));
 
   console.log(`[rss] ${feed.name}: ${newCount} new articles`);
   return newCount;

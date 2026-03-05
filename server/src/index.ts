@@ -49,21 +49,23 @@ if (fs.existsSync(frontendDist)) {
   });
 }
 
-app.listen(Number(PORT), "0.0.0.0", () => {
-  console.log(`Server running on http://0.0.0.0:${PORT}`);
+const startServer = async () => {
+  try {
+    console.log("Starting initialization...");
+    await initDb();
+    console.log("Database initialized.");
 
-  setTimeout(() => {
-    try {
-      console.log("Starting initialization...");
-      initDb();
-      console.log("Database initialized.");
+    startScheduler();
+    console.log("Scheduler started.");
+    ready = true;
 
-      startScheduler();
-      console.log("Scheduler started.");
-      ready = true;
-    } catch (err) {
-      initError = err instanceof Error ? err.message : String(err);
-      console.error("Fatal: Initialization failed:", err);
-    }
-  }, 0);
-});
+    app.listen(Number(PORT), "0.0.0.0", () => {
+      console.log(`Server running on http://0.0.0.0:${PORT}`);
+    });
+  } catch (err) {
+    initError = err instanceof Error ? err.message : String(err);
+    console.error("Fatal: Initialization failed:", err);
+  }
+};
+
+startServer();

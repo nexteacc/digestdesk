@@ -49,14 +49,13 @@ function toDigestItem(row: typeof digestItems.$inferSelect): DigestItem {
   };
 }
 
-digestsRouter.get("/", (req, res) => {
+digestsRouter.get("/", async (req, res) => {
   const db = getDb();
 
   const query = db.select().from(digests);
-  const rows = query
+  const rows = await query
     .where(eq(digests.type, "daily"))
-    .orderBy(desc(digests.date))
-    .all();
+    .orderBy(desc(digests.date));
 
   const result = rows.map((row) => ({
     id: row.id,
@@ -68,25 +67,23 @@ digestsRouter.get("/", (req, res) => {
   res.json(result);
 });
 
-digestsRouter.get("/:id", (req, res) => {
+digestsRouter.get("/:id", async (req, res) => {
   const db = getDb();
-  const digest = db
+  const [digest] = await db
     .select()
     .from(digests)
-    .where(eq(digests.id, req.params.id))
-    .get();
+    .where(eq(digests.id, req.params.id));
 
   if (!digest) {
     res.status(404).json({ error: "日报不存在" });
     return;
   }
 
-  const items = db
+  const items = (await db
     .select()
     .from(digestItems)
     .where(eq(digestItems.digestId, digest.id))
-    .orderBy(digestItems.sortOrder)
-    .all()
+    .orderBy(digestItems.sortOrder))
     .map(toDigestItem);
 
   res.json(toDigest(digest, items));
@@ -103,25 +100,23 @@ digestsRouter.post("/generate", async (req, res) => {
   try {
     const db = getDb();
     if (date && force) {
-      db
+      await db
         .delete(digests)
-        .where(and(eq(digests.type, "daily"), eq(digests.date, date)))
-        .run();
+        .where(and(eq(digests.type, "daily"), eq(digests.date, date)));
     }
     await syncAllFeeds();
     const digestId = await generateDaily(date);
 
-    const digest = db.select().from(digests).where(eq(digests.id, digestId)).get();
+    const [digest] = await db.select().from(digests).where(eq(digests.id, digestId));
     if (!digest) {
       res.status(500).json({ error: "生成后未找到记录" });
       return;
     }
-    const items = db
+    const items = (await db
       .select()
       .from(digestItems)
       .where(eq(digestItems.digestId, digestId))
-      .orderBy(digestItems.sortOrder)
-      .all()
+      .orderBy(digestItems.sortOrder))
       .map(toDigestItem);
 
     res.status(201).json(toDigest(digest, items));

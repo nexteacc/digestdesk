@@ -1,7 +1,7 @@
 import { nanoid } from "nanoid";
 import { eq, and, gte, lt } from "drizzle-orm";
 import pLimit from "p-limit";
-import { getDb, getSqlite } from "../db/index.js";
+import { getDb } from "../db/index.js";
 import { feeds, articles, digests, digestItems } from "../db/schema.js";
 import { summarizeArticle } from "./summarizer.js";
 
@@ -25,11 +25,10 @@ async function _generateDailyCore(date?: string): Promise<string> {
   const startTime = new Date(baseTime.getTime() - 24 * 60 * 60 * 1000).toISOString();
   const endTime = baseTime.toISOString();
 
-  const existing = db
+  const [existing] = await db
     .select()
     .from(digests)
-    .where(and(eq(digests.type, "daily"), eq(digests.date, dateLabel)))
-    .get();
+    .where(and(eq(digests.type, "daily"), eq(digests.date, dateLabel)));
 
   if (existing) {
     console.log(`[digest] Daily for ${dateLabel} already exists, regenerating...`);
@@ -43,7 +42,7 @@ async function _generateDailyCore(date?: string): Promise<string> {
 async function generateWithId(digestId: string, dateLabel: string, startTime: string, endTime: string): Promise<string> {
   const db = getDb();
   
-  const dayArticles = db
+  const dayArticles = await db
     .select({
       id: articles.id,
       feedId: articles.feedId,
@@ -54,8 +53,7 @@ async function generateWithId(digestId: string, dateLabel: string, startTime: st
       contentText: articles.contentText,
     })
     .from(articles)
-    .where(and(gte(articles.publishedAt, startTime), lt(articles.publishedAt, endTime)))
-    .all();
+    .where(and(gte(articles.publishedAt, startTime), lt(articles.publishedAt, endTime)));
 
   const uniqueArticles = Array.from(new Map(dayArticles.map(a => [a.url, a])).values());
 
@@ -66,7 +64,7 @@ async function generateWithId(digestId: string, dateLabel: string, startTime: st
 
   console.log(`[digest] Processing ${uniqueArticles.length} unique articles`);
 
-  const allFeeds = db.select({ id: feeds.id, name: feeds.name }).from(feeds).all();
+  const allFeeds = await db.select({ id: feeds.id, name: feeds.name }).from(feeds);
   const feedMap = new Map(allFeeds.map((f) => [f.id, f.name]));
 
   const limit = pLimit(CONCURRENCY);
@@ -119,26 +117,24 @@ async function generateWithId(digestId: string, dateLabel: string, startTime: st
 
   const generationTime = new Date().toISOString();
 
-  getSqlite().transaction(() => {
-    const exists = db.select().from(digests).where(eq(digests.id, digestId)).get();
-    if (!exists) {
-      db.insert(digests)
+  await db.transaction(async (tx) => {
+    const exists = await tx.select().from(digests).where(eq(digests.id, digestId));
+    if (exists.length === 0) {
+      await tx.insert(digests)
         .values({
           id: digestId,
           type: "daily",
           date: dateLabel,
           generatedAt: generationTime,
-        })
-        .run();
+        });
     } else {
-      db.update(digests)
+      await tx.update(digests)
         .set({ generatedAt: generationTime })
-        .where(eq(digests.id, digestId))
-        .run();
+        .where(eq(digests.id, digestId));
     }
 
-    db.delete(digestItems).where(eq(digestItems.digestId, digestId)).run();
-    db.insert(digestItems)
+    await tx.delete(digestItems).where(eq(digestItems.digestId, digestId));
+    await tx.insert(digestItems)
       .values(
         items.map((it, i) => ({
           id: nanoid(),
@@ -153,9 +149,8 @@ async function generateWithId(digestId: string, dateLabel: string, startTime: st
           publishedAt: it.publishedAt,
           sortOrder: i,
         }))
-      )
-      .run();
-  })();
+      );
+  });
 
   console.log(`[digest] Daily digest ${digestId} updated with ${items.length} items`);
   return digestId;

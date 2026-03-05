@@ -1,6 +1,6 @@
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { pgTable, text, integer } from "drizzle-orm/pg-core";
 
-export const feeds = sqliteTable("feeds", {
+export const feeds = pgTable("feeds", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description"),
@@ -12,7 +12,7 @@ export const feeds = sqliteTable("feeds", {
   lastFetchedAt: text("last_fetched_at"),
 });
 
-export const articles = sqliteTable("articles", {
+export const articles = pgTable("articles", {
   id: text("id").primaryKey(),
   feedId: text("feed_id").notNull().references(() => feeds.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
@@ -25,14 +25,14 @@ export const articles = sqliteTable("articles", {
   fetchedAt: text("fetched_at").notNull(),
 });
 
-export const digests = sqliteTable("digests", {
+export const digests = pgTable("digests", {
   id: text("id").primaryKey(),
   type: text("type", { enum: ["daily"] }).notNull(),
   date: text("date").notNull(), // YYYY-MM-DD
   generatedAt: text("generated_at").notNull(),
 });
 
-export const digestItems = sqliteTable("digest_items", {
+export const digestItems = pgTable("digest_items", {
   id: text("id").primaryKey(),
   digestId: text("digest_id").notNull().references(() => digests.id, { onDelete: "cascade" }),
   articleId: text("article_id"),

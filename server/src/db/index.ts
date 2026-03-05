@@ -1,32 +1,29 @@
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import path from "path";
-import fs from "fs";
-import { fileURLToPath } from "url";
+import postgres from "postgres";
+import { drizzle } from "drizzle-orm/postgres-js";
 import * as schema from "./schema.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.resolve(__dirname, "../../data/digestdesk.db");
-
-let sqlite: Database.Database;
+let queryClient: postgres.Sql;
 let db: ReturnType<typeof drizzle<typeof schema>>;
 
-export function initDb() {
-  const dataDir = path.dirname(DB_PATH);
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
+export async function initDb() {
+  // Support multiple environment variable names for compatibility
+  // Zeabur often uses POSTGRES_CONNECTION_STRING or POSTGRES_URI
+  const connectionString = 
+    process.env.DATABASE_URL || 
+    process.env.POSTGRES_CONNECTION_STRING || 
+    process.env.POSTGRES_URI;
+
+  if (!connectionString) {
+    throw new Error("Database connection string not found. Please set DATABASE_URL, POSTGRES_CONNECTION_STRING, or POSTGRES_URI.");
   }
 
-  sqlite = new Database(DB_PATH);
-  sqlite.pragma("journal_mode = WAL");
-  sqlite.pragma("foreign_keys = ON");
-  sqlite.pragma("busy_timeout = 5000");
-  sqlite.pragma("cache_size = -20000");
-  sqlite.pragma("synchronous = NORMAL");
+  queryClient = postgres(connectionString);
+  db = drizzle(queryClient, { schema });
 
-  db = drizzle(sqlite, { schema });
-
-  sqlite.exec(`
+  // PostgreSQL schema initialization
+  // Note: In production, use Drizzle Kit for migrations.
+  // This is a simplified setup for quick start.
+  await queryClient`
     CREATE TABLE IF NOT EXISTS feeds (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -38,7 +35,9 @@ export function initDb() {
       created_at TEXT NOT NULL,
       last_fetched_at TEXT
     );
+  `;
 
+  await queryClient`
     CREATE TABLE IF NOT EXISTS articles (
       id TEXT PRIMARY KEY,
       feed_id TEXT NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
@@ -51,14 +50,36 @@ export function initDb() {
       cover_image_url TEXT,
       fetched_at TEXT NOT NULL
     );
+  `;
 
+  // PG requires explicit unique constraint for ON CONFLICT DO NOTHING on 'url'
+  // We create a unique index for it.
+  await queryClient`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_articles_url ON articles(url);
+  `;
+  
+  await queryClient`
+    CREATE INDEX IF NOT EXISTS idx_articles_feed_id ON articles(feed_id);
+  `;
+  
+  await queryClient`
+    CREATE INDEX IF NOT EXISTS idx_articles_published_at ON articles(published_at);
+  `;
+
+  await queryClient`
     CREATE TABLE IF NOT EXISTS digests (
       id TEXT PRIMARY KEY,
       type TEXT NOT NULL CHECK(type IN ('daily')),
       date TEXT NOT NULL,
       generated_at TEXT NOT NULL
     );
+  `;
 
+  await queryClient`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_digests_type_date ON digests(type, date);
+  `;
+
+  await queryClient`
     CREATE TABLE IF NOT EXISTS digest_items (
       id TEXT PRIMARY KEY,
       digest_id TEXT NOT NULL REFERENCES digests(id) ON DELETE CASCADE,
@@ -72,23 +93,16 @@ export function initDb() {
       published_at TEXT NOT NULL,
       sort_order INTEGER NOT NULL DEFAULT 0
     );
+  `;
 
-    CREATE INDEX IF NOT EXISTS idx_articles_feed_id ON articles(feed_id);
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_articles_url ON articles(url);
+  await queryClient`
     CREATE INDEX IF NOT EXISTS idx_digest_items_digest_id ON digest_items(digest_id);
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_digests_type_date ON digests(type, date);
-    CREATE INDEX IF NOT EXISTS idx_articles_published_at ON articles(published_at);
-  `);
+  `;
 
-  console.log("Database initialized at", DB_PATH);
+  console.log("Database initialized (PostgreSQL).");
 }
 
 export function getDb() {
   if (!db) throw new Error("Database not initialized. Call initDb() first.");
   return db;
-}
-
-export function getSqlite() {
-  if (!sqlite) throw new Error("Database not initialized. Call initDb() first.");
-  return sqlite;
 }
