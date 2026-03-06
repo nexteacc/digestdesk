@@ -364,8 +364,11 @@ export default function DailyDigest() {
   }
 
   const todayLabel = useMemo(
-    () => format(new Date(), "yyyy-MM-dd · EEEE", { locale: zhCN }),
-    [],
+    () => {
+      const date = current?.date ? new Date(current.date + 'T00:00:00') : new Date();
+      return format(date, "yyyy-MM-dd · EEEE", { locale: zhCN });
+    },
+    [current],
   );
 
   const stats = useMemo(() => {
@@ -536,7 +539,7 @@ export default function DailyDigest() {
                   {current.items.length} 篇文章
                 </div>
                 <ScrollArea className="mt-4 flex-1 min-h-0 -mx-2 px-2">
-                  <ol className="space-y-3 pb-2">
+                  <ol className="space-y-4 pb-6">
                     {toc.map((t, idx) => (
                       <li key={t.id}>
                         <button
@@ -556,7 +559,7 @@ export default function DailyDigest() {
                             </Avatar>
                             <span className="truncate">{t.feedTitle}</span>
                           </div>
-                          <div className="mt-1 text-sm underline underline-offset-4 decoration-border group-hover:decoration-foreground/30 transition-colors">
+                          <div className="mt-1 text-sm underline underline-offset-4 decoration-border group-hover:decoration-foreground/30 transition-colors line-clamp-2">
                             {t.title}
                           </div>
                         </button>
@@ -579,7 +582,7 @@ export default function DailyDigest() {
                               {it.feedTitle}
                             </span>
                           </div>
-                          <h4 className="mt-2 text-xl md:text-2xl font-semibold leading-snug">
+                          <h4 className="mt-2 text-xl md:text-2xl font-semibold leading-snug break-words">
                             {it.title}
                           </h4>
                         </div>
@@ -614,7 +617,7 @@ export default function DailyDigest() {
                         <div className="text-xs tracking-[0.18em] uppercase text-primary mb-2 font-medium">
                           一句话总结
                         </div>
-                        <div className="text-base italic leading-relaxed text-foreground/90">
+                        <div className="text-base italic leading-relaxed text-foreground/90 break-words">
                           {it.oneLiner}
                         </div>
                       </div>
