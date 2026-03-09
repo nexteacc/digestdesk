@@ -528,7 +528,7 @@ export default function DailyDigest() {
 
             <div className="grid gap-4 md:grid-cols-[320px_1fr] items-start transition-all duration-500">
               {/* TOC */}
-              <Card id="digest-toc" className="p-4 md:p-5 md:sticky md:top-6 flex flex-col md:max-h-[calc(100vh-5rem)]">
+              <Card id="digest-toc" className="p-4 md:p-5 md:sticky md:top-6 flex flex-col md:max-h-[calc(100vh-5rem)] md:overflow-hidden">
                 <div className="text-xs tracking-[0.18em] uppercase text-muted-foreground shrink-0">
                   目录
                 </div>
@@ -538,7 +538,7 @@ export default function DailyDigest() {
                 <div className="mt-2 text-xs text-muted-foreground shrink-0">
                   {current.items.length} 篇文章
                 </div>
-                <ScrollArea className="mt-4 -mx-2 px-2 h-[400px] md:flex-1 md:min-h-0">
+                <ScrollArea className="mt-4 -mx-2 px-2 h-[400px] md:h-auto md:flex-1 md:min-h-0">
                   <ol className="space-y-4 pb-6">
                     {toc.map((t, idx) => (
                       <li key={t.id}>
