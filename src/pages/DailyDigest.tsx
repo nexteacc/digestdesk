@@ -510,12 +510,12 @@ export default function DailyDigest() {
                         return (
                           <Button
                             key={d.id}
-                            variant="outline"
+                            variant={active ? "default" : "outline"}
                             size="sm"
                             className={cn(
                               "transition-colors",
                               active
-                                ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
+                                ? "shadow-sm text-primary-foreground"
                                 : "border-border/80 text-foreground/80 hover:border-primary/30 hover:bg-accent/60",
                             )}
                             onClick={() => selectDigest(d)}
