@@ -510,12 +510,17 @@ export default function DailyDigest() {
                         return (
                           <Button
                             key={d.id}
-                            variant={active ? "secondary" : "outline"}
+                            variant="outline"
                             size="sm"
-                            className={active ? "border border-border" : ""}
+                            className={cn(
+                              "transition-colors",
+                              active
+                                ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
+                                : "border-border/80 text-foreground/80 hover:border-primary/30 hover:bg-accent/60",
+                            )}
                             onClick={() => selectDigest(d)}
                             disabled={selectingId !== null}
-                          >
+                            >
                             {d.date}
                           </Button>
                         );
