@@ -4,6 +4,7 @@ import { Router, Route, Switch } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { I18nProvider } from "@/contexts/I18nContext";
 import { ZenModeProvider } from "@/hooks/useZenMode";
 import DailyDigest from "@/pages/DailyDigest";
 import SubscriptionsPage from "@/pages/Subscriptions";
@@ -25,12 +26,14 @@ function App() {
   return (
     <ErrorBoundary>
       <ZenModeProvider>
-        <ThemeProvider defaultTheme="light">
-          <TooltipProvider>
-            <Toaster />
-            <AppRouter />
-          </TooltipProvider>
-        </ThemeProvider>
+        <I18nProvider>
+          <ThemeProvider defaultTheme="light">
+            <TooltipProvider>
+              <Toaster />
+              <AppRouter />
+            </TooltipProvider>
+          </ThemeProvider>
+        </I18nProvider>
       </ZenModeProvider>
     </ErrorBoundary>
   );

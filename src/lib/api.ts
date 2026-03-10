@@ -15,7 +15,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `请求失败 (${res.status})`);
+    throw new Error(body.error || `Request failed (${res.status})`);
   }
   return res.json();
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { zhCN } from "date-fns/locale";
+import { enUS, zhCN } from "date-fns/locale";
 import { Link } from "wouter";
 import AppShell from "@/components/AppShell";
 import { Card } from "@/components/ui/card";
@@ -22,6 +22,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useZenMode } from "@/hooks/useZenMode";
+import { useI18n } from "@/contexts/I18nContext";
 import { cn } from "@/lib/utils";
 
 function slugify(s: string) {
@@ -34,14 +35,22 @@ function slugify(s: string) {
 
 // --- 生成进度阶段 ---
 const PROGRESS_PHASES = [
-  { delay: 0, text: "正在同步最新文章…" },
-  { delay: 3000, text: "AI 正在阅读文章…" },
-  { delay: 8000, text: "正在生成摘要…" },
-  { delay: 15000, text: "正在整理排版…" },
-];
+  { delay: 0, key: "sync" },
+  { delay: 3000, key: "read" },
+  { delay: 8000, key: "summary" },
+  { delay: 15000, key: "polish" },
+] as const;
 
 function GeneratingProgress() {
   const [phase, setPhase] = useState(0);
+  const { text } = useI18n();
+
+  const phaseText: Record<(typeof PROGRESS_PHASES)[number]["key"], string> = {
+    sync: text("正在同步最新文章…", "Syncing latest articles..."),
+    read: text("AI 正在阅读文章…", "AI is reading articles..."),
+    summary: text("正在生成摘要…", "Generating summaries..."),
+    polish: text("正在整理排版…", "Polishing the layout..."),
+  };
 
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
@@ -55,7 +64,7 @@ function GeneratingProgress() {
     <Card className="p-10 text-center">
       <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
       <div className="mt-4 text-sm text-muted-foreground animate-pulse">
-        {PROGRESS_PHASES[phase].text}
+        {phaseText[PROGRESS_PHASES[phase].key]}
       </div>
       <div className="mt-6 flex justify-center gap-1.5">
         {PROGRESS_PHASES.map((_, i) => (
@@ -77,6 +86,7 @@ function ReadingComplete({ itemCount }: { itemCount: number }) {
   const [readingMinutes, setReadingMinutes] = useState(0);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const mountTime = useRef(0);
+  const { text } = useI18n();
 
   useEffect(() => {
     mountTime.current = Date.now();
@@ -110,9 +120,9 @@ function ReadingComplete({ itemCount }: { itemCount: number }) {
       {visible && (
         <Card className="p-6 text-center border-green-200 bg-green-50/50 animate-in fade-in duration-700">
           <CheckCircle2 className="h-8 w-8 mx-auto text-green-600" />
-          <div className="mt-3 text-lg font-semibold">今日日报已读完</div>
+          <div className="mt-3 text-lg font-semibold">{text("今日日报已读完", "You've finished today's digest")}</div>
           <div className="mt-1 text-sm text-muted-foreground">
-            共 {itemCount} 篇文章 · 阅读用时约 {readingMinutes} 分钟
+            {text(`共 ${itemCount} 篇文章 · 阅读用时约 ${readingMinutes} 分钟`, `${itemCount} articles · about ${readingMinutes} min read`)}
           </div>
           <div className="mt-4">
           </div>
@@ -124,6 +134,7 @@ function ReadingComplete({ itemCount }: { itemCount: number }) {
 
 // --- 首页欢迎 + 内联搜索 ---
 function WelcomeSearch({ onAdded }: { onAdded: () => void }) {
+  const { text } = useI18n();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SubstackSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -148,22 +159,22 @@ function WelcomeSearch({ onAdded }: { onAdded: () => void }) {
         const r = await api.searchSubstack(q);
         if (requestId.current === id) setResults(r);
       } catch {
-        if (requestId.current === id) toast.error("搜索失败");
+        if (requestId.current === id) toast.error(text("搜索失败", "Search failed"));
       } finally {
         if (requestId.current === id) setSearching(false);
       }
     }, 300);
     return () => clearTimeout(handler);
-  }, [query]);
+  }, [query, text]);
 
   async function subscribe(url: string) {
     setSubscribing(url);
     try {
       await api.createFeed(url);
-      toast.success("已订阅，正在准备你的第一份日报…");
+      toast.success(text("已订阅，正在准备你的第一份日报…", "Subscribed. Preparing your first digest..."));
       onAdded();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "添加失败");
+      toast.error(e instanceof Error ? e.message : text("添加失败", "Failed to add"));
       setSubscribing(null);
     }
   }
@@ -172,13 +183,13 @@ function WelcomeSearch({ onAdded }: { onAdded: () => void }) {
     <Card className="p-8 md:p-12">
       <div className="max-w-md mx-auto text-center">
         <div className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground">
-          Welcome to your desk
+          {text("欢迎来到你的阅读台", "Welcome to your desk")}
         </div>
         <h3 className="mt-4 text-2xl md:text-3xl font-semibold leading-tight">
-          集中跟踪，轻松读完
+          {text("集中跟踪，轻松读完", "Stay in sync, read with ease")}
         </h3>
         <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
-          添加你关注的创作者，DigestDesk 每天帮你读完他们的最新文章
+          {text("添加你关注的创作者，DigestDesk 每天帮你读完他们的最新文章", "Follow creators you care about. DigestDesk helps you catch up daily.")}
         </p>
       </div>
 
@@ -188,7 +199,7 @@ function WelcomeSearch({ onAdded }: { onAdded: () => void }) {
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索出版物名称或作者…"
+            placeholder={text("搜索出版物名称或作者…", "Search publication or author...")}
             className="pl-10"
             autoFocus
           />
@@ -225,7 +236,7 @@ function WelcomeSearch({ onAdded }: { onAdded: () => void }) {
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium truncate">{r.name}</span>
                         <span className="text-xs text-muted-foreground truncate hidden sm:inline">
-                          by {r.authorName}
+                          {text("作者：", "by ")}{r.authorName}
                         </span>
                       </div>
                       {r.description && (
@@ -242,9 +253,9 @@ function WelcomeSearch({ onAdded }: { onAdded: () => void }) {
                       className="shrink-0 gap-1.5"
                     >
                       {subscribing === r.url ? (
-                        <><Loader2 className="h-3 w-3 animate-spin" />添加中</>
+                        <><Loader2 className="h-3 w-3 animate-spin" />{text("添加中", "Adding...")}</>
                       ) : (
-                        "订阅"
+                        text("订阅", "Subscribe")
                       )}
                     </Button>
                   </div>
@@ -252,7 +263,7 @@ function WelcomeSearch({ onAdded }: { onAdded: () => void }) {
               </div>
             ) : (
               <div className="py-6 text-center text-sm text-muted-foreground">
-                未找到匹配的出版物，试试其他关键词
+                {text("未找到匹配的出版物，试试其他关键词", "No matching publications found. Try another keyword.")}
               </div>
             )}
           </div>
@@ -260,13 +271,13 @@ function WelcomeSearch({ onAdded }: { onAdded: () => void }) {
 
         {!hasSearched && (
           <p className="mt-6 text-center text-xs text-muted-foreground">
-            也可以前往
+            {text("也可以前往", "Or visit")}
             <Link href="/subscriptions">
               <span className="underline underline-offset-4 hover:text-foreground mx-1">
-                订阅源管理
+                {text("订阅源管理", "Subscriptions")}
               </span>
             </Link>
-            通过 URL 添加
+            {text("通过 URL 添加", "to add feeds by URL")}
           </p>
         )}
       </div>
@@ -276,6 +287,7 @@ function WelcomeSearch({ onAdded }: { onAdded: () => void }) {
 
 // --- 主页面 ---
 export default function DailyDigest() {
+  const { text, isZh, locale } = useI18n();
   const [digestList, setDigestList] = useState<DigestListItem[]>([]);
   const [current, setCurrent] = useState<Digest | null>(null);
   const [loading, setLoading] = useState(true);
@@ -284,6 +296,24 @@ export default function DailyDigest() {
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [selectingId, setSelectingId] = useState<string | null>(null);
   const { isZen } = useZenMode();
+
+  const autoGenerate = useCallback(async () => {
+    setGenerating(true);
+    try {
+      const { id } = await api.generateDigest("daily");
+      const digest = await api.fetchDigest(id);
+      setCurrent(digest);
+      const list = await api.fetchDigests("daily");
+      setDigestList(list);
+      toast.success(text("日报生成成功", "Digest generated successfully"));
+    } catch (e) {
+      // 生成失败（可能没有新文章），展示空状态提示
+      console.log("[DailyDigest] auto-generate failed:", e);
+      toast(text("暂无新文章，稍后再来看看", "No new articles yet. Please check back later."));
+    } finally {
+      setGenerating(false);
+    }
+  }, [text]);
 
   const loadDigest = useCallback(async () => {
     setLoading(true);
@@ -305,33 +335,15 @@ export default function DailyDigest() {
         return;
       }
     } catch {
-      toast.error("加载失败");
+      toast.error(text("加载失败", "Load failed"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [text, autoGenerate]);
 
   useEffect(() => {
     loadDigest();
   }, [loadDigest]);
-
-  async function autoGenerate() {
-    setGenerating(true);
-    try {
-      const { id } = await api.generateDigest("daily");
-      const digest = await api.fetchDigest(id);
-      setCurrent(digest);
-      const list = await api.fetchDigests("daily");
-      setDigestList(list);
-      toast.success("日报生成成功");
-    } catch (e) {
-      // 生成失败（可能没有新文章），展示空状态提示
-      console.log("[DailyDigest] auto-generate failed:", e);
-      toast("暂无新文章，稍后再来看看");
-    } finally {
-      setGenerating(false);
-    }
-  }
 
   // 立即同步并生成今日日报
   async function syncNow() {
@@ -343,9 +355,9 @@ export default function DailyDigest() {
       setCurrent(digest);
       const list = await api.fetchDigests("daily");
       setDigestList(list);
-      toast.success("同步并生成今日日报成功");
+      toast.success(text("同步并生成今日日报成功", "Synced and generated today's digest"));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "同步失败");
+      toast.error(e instanceof Error ? e.message : text("同步失败", "Sync failed"));
     } finally {
       setGenerating(false);
     }
@@ -357,7 +369,7 @@ export default function DailyDigest() {
       const full = await api.fetchDigest(item.id);
       setCurrent(full);
     } catch {
-      toast.error("加载失败");
+      toast.error(text("加载失败", "Load failed"));
     } finally {
       setSelectingId(null);
     }
@@ -366,10 +378,19 @@ export default function DailyDigest() {
   const todayLabel = useMemo(
     () => {
       const date = current?.date ? new Date(current.date + 'T00:00:00') : new Date();
-      return format(date, "yyyy-MM-dd · EEEE", { locale: zhCN });
+      return locale === "zh"
+        ? format(date, "yyyy-MM-dd · EEEE", { locale: zhCN })
+        : format(date, "EEEE, MMM d, yyyy", { locale: enUS });
     },
-    [current],
+    [current, locale],
   );
+
+  const formatDigestDate = useCallback((dateText: string) => {
+    const date = new Date(`${dateText}T00:00:00`);
+    return locale === "zh"
+      ? format(date, "yyyy-MM-dd", { locale: zhCN })
+      : format(date, "MMM d, yyyy", { locale: enUS });
+  }, [locale]);
 
   const stats = useMemo(() => {
     const feedCount = feeds.length;
@@ -415,10 +436,10 @@ export default function DailyDigest() {
           <div className="flex-1 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
             <div>
               <div className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground">
-                Daily Digest
+                {text("日报", "Daily Digest")}
               </div>
               <h2 className="mt-1 text-3xl font-semibold tracking-tight">
-                今日日报
+                {text("今日日报", "Today's Digest")}
               </h2>
             </div>
             <div className="flex items-center gap-3">
@@ -430,7 +451,7 @@ export default function DailyDigest() {
                   disabled={generating || loading}
                 >
                   <RefreshCw className={`h-3.5 w-3.5 ${generating ? "animate-spin" : ""}`} />
-                  {generating ? "正在同步" : "立即同步"}
+                  {generating ? text("正在同步", "Syncing") : text("立即同步", "Sync Now")}
                 </Button>
               )}
               <Badge variant="outline" className="border-border">
@@ -443,23 +464,29 @@ export default function DailyDigest() {
             <div className="mt-3 grid gap-3 text-xs text-muted-foreground md:grid-cols-2 items-center">
               <div>
                 <span className="font-bold text-primary text-sm">{feedCount}</span>
-                <span className="ml-1">个订阅源</span>
+                <span className="ml-1">{text("个订阅源", "feeds")}</span>
                 {digestDays > 0 && (
-                  <>
-                    <span className="mx-1">·</span>
-                    <span className="ml-1">做编辑的第</span>
-                    <span className="mx-1 font-bold text-primary text-sm">
-                      {digestDays}
-                    </span>
-                    <span className="ml-1">天</span>
-                  </>
+                  isZh ? (
+                    <>
+                      <span className="mx-1">·</span>
+                      <span className="ml-1">做编辑的第</span>
+                      <span className="mx-1 font-bold text-primary text-sm">
+                        {digestDays}
+                      </span>
+                      <span className="ml-1">天</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="mx-1">·</span>
+                      <span className="ml-1">Day</span>
+                      <span className="mx-1 font-bold text-primary text-sm">{digestDays}</span>
+                    </>
+                  )
                 )}
               </div>
               <div className="md:text-right">
-                <span className="font-bold text-primary text-sm">
-                  {articleCount}
-                </span>
-                <span className="ml-1">篇文章收录</span>
+                <span className="font-bold text-primary text-sm">{articleCount}</span>
+                <span className="ml-1">{text("篇文章收录", "articles covered")}</span>
               </div>
             </div>
           )}
@@ -485,7 +512,7 @@ export default function DailyDigest() {
         {!loading && !generating && !current && hasFeeds && (
           <Card className="p-10 text-center">
             <div className="text-sm text-muted-foreground">
-              暂无日报内容。文章同步后会自动生成。
+              {text("暂无日报内容。文章同步后会自动生成。", "No digest content yet. It will be generated automatically after syncing.")}
             </div>
           </Card>
         )}
@@ -502,7 +529,7 @@ export default function DailyDigest() {
                 <Card className="p-4">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
-                      归档
+                      {text("归档", "Archive")}
                     </div>
                     <div className="flex flex-wrap gap-2 justify-end">
                       {digestList.slice(0, 7).map((d) => {
@@ -521,7 +548,7 @@ export default function DailyDigest() {
                             onClick={() => selectDigest(d)}
                             disabled={selectingId !== null}
                             >
-                            {d.date}
+                            {formatDigestDate(d.date)}
                           </Button>
                         );
                       })}
@@ -535,13 +562,13 @@ export default function DailyDigest() {
               {/* TOC */}
               <Card id="digest-toc" className="p-4 md:p-5 md:sticky md:top-6 flex flex-col md:h-[calc(100vh-5rem)] md:overflow-hidden">
                 <div className="text-xs tracking-[0.18em] uppercase text-muted-foreground shrink-0">
-                  目录
+                  {text("目录", "Contents")}
                 </div>
                 <h3 className="mt-2 text-xl font-semibold shrink-0">
-                  {current.date} · 日报
+                  {formatDigestDate(current.date)} · {text("日报", "Digest")}
                 </h3>
                 <div className="mt-2 text-xs text-muted-foreground shrink-0">
-                  {current.items.length} 篇文章
+                  {current.items.length} {text("篇文章", "articles")}
                 </div>
                 <ScrollArea className="mt-4 -mx-2 px-2 h-[400px] md:h-auto md:flex-1 md:min-h-0 md:overscroll-contain">
                   <ol className="space-y-4 pb-6">
@@ -595,7 +622,7 @@ export default function DailyDigest() {
                         <div className="flex flex-col gap-3 items-start">
                           {it.author && (
                             <div className="text-xs text-muted-foreground">
-                              作者：{it.author}
+                              {text("作者：", "Author: ")}{it.author}
                             </div>
                           )}
                           <a
@@ -609,7 +636,7 @@ export default function DailyDigest() {
                               size="sm"
                               className="gap-1.5"
                             >
-                              阅读原文
+                              {text("阅读原文", "Read Source")}
                               <ExternalLink className="h-3.5 w-3.5" />
                             </Button>
                           </a>
@@ -620,7 +647,7 @@ export default function DailyDigest() {
 
                       <div className="pl-4 border-l-4 border-primary my-6">
                         <div className="text-xs tracking-[0.18em] uppercase text-primary mb-2 font-medium">
-                          一句话总结
+                          {text("一句话总结", "One-Line Summary")}
                         </div>
                         <div className="text-base italic leading-relaxed text-foreground/90 break-words">
                           {it.oneLiner}
@@ -630,7 +657,7 @@ export default function DailyDigest() {
                       {it.keyInsights.length > 0 && (
                         <div className="mt-4">
                           <div className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
-                            关键洞察
+                            {text("关键洞察", "Key Insights")}
                           </div>
                           <ul className="mt-2 list-disc pl-5 space-y-2 text-sm leading-relaxed">
                             {it.keyInsights.map((k, i) => (
@@ -653,7 +680,7 @@ export default function DailyDigest() {
                             window.scrollTo({ top: 0, behavior: "smooth" });
                           }}
                         >
-                          回到顶部
+                          {text("回到顶部", "Back to top")}
                         </button>
                       </div>
                     </Card>

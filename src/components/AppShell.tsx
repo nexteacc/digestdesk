@@ -3,7 +3,8 @@ import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Newspaper, Rss, PanelLeft, Maximize, Minimize } from "lucide-react";
+import { Newspaper, Rss, PanelLeft, Maximize, Minimize, Languages } from "lucide-react";
+import { useI18n } from "@/contexts/I18nContext";
 import { useZenMode } from "@/hooks/useZenMode";
 
 type NavItem = {
@@ -12,21 +13,22 @@ type NavItem = {
   icon: React.ReactNode;
 };
 
-const contentNav: NavItem[] = [
-  { href: "/", label: "今日日报", icon: <Newspaper className="h-4 w-4" /> },
-];
-
-const manageNav: NavItem[] = [
-  { href: "/subscriptions", label: "关注列表", icon: <Rss className="h-4 w-4" /> },
-];
-
 export default function AppShell({ children }: PropsWithChildren) {
   const [location] = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(() => {
     try { return localStorage.getItem("sidebar-collapsed") === "true"; }
     catch { return false; }
   });
+  const { locale, setLocale, text } = useI18n();
   const { isZen, toggleZenMode } = useZenMode();
+
+  const contentNav: NavItem[] = [
+    { href: "/", label: text("今日日报", "Daily Digest"), icon: <Newspaper className="h-4 w-4" /> },
+  ];
+
+  const manageNav: NavItem[] = [
+    { href: "/subscriptions", label: text("关注列表", "Subscriptions"), icon: <Rss className="h-4 w-4" /> },
+  ];
 
   useEffect(() => {
     try { localStorage.setItem("sidebar-collapsed", String(isCollapsed)); }
@@ -36,8 +38,8 @@ export default function AppShell({ children }: PropsWithChildren) {
   function handleToggleZen() {
     toggleZenMode();
     if (!isZen) {
-      toast("已进入沉浸模式", {
-        description: "按 ESC 键即可退出",
+      toast(text("已进入沉浸模式", "Zen mode enabled"), {
+        description: text("按 ESC 键即可退出", "Press ESC to exit"),
         duration: 3000,
         className: "toast-zen",
       });
@@ -52,27 +54,54 @@ export default function AppShell({ children }: PropsWithChildren) {
         isZen ? "max-h-0 opacity-0 border-none" : "max-h-[100px] opacity-100 hairline"
       )}>
         <div className="mx-auto max-w-6xl px-4 py-4 md:px-6">
-          <h1 className="text-2xl md:text-3xl font-semibold leading-none">
-            <Link href="/">
-              <span className="flex items-center gap-3 hover:opacity-90 transition-opacity">
-                <span>DigestDesk</span>
-                <span className="flex items-center gap-2">
-                  <img
-                    src="/logos/substack.svg"
-                    alt="Substack"
-                    className="h-5 w-5"
-                  />
-                  <img
-                    src="/logos/youtube.svg"
-                    alt="YouTube"
-                    className="h-5 w-5"
-                  />
+          <div className="flex items-center justify-between gap-4">
+            <h1 className="text-2xl md:text-3xl font-semibold leading-none">
+              <Link href="/">
+                <span className="flex items-center gap-3 hover:opacity-90 transition-opacity">
+                  <span>DigestDesk</span>
+                  <span className="flex items-center gap-2">
+                    <img
+                      src="/logos/substack.svg"
+                      alt="Substack"
+                      className="h-5 w-5"
+                    />
+                    <img
+                      src="/logos/youtube.svg"
+                      alt="YouTube"
+                      className="h-5 w-5"
+                    />
+                    <img
+                      src="/logos/rss.svg"
+                      alt="RSS"
+                      className="h-5 w-5"
+                    />
+                  </span>
                 </span>
-              </span>
-            </Link>
-          </h1>
-        </div>
-      </header>
+              </Link>
+            </h1>
+
+            <div className="flex items-center gap-1 rounded-full border border-border bg-card/70 p-1">
+              <Languages className="h-3.5 w-3.5 text-muted-foreground ml-1" />
+              <Button
+                variant={locale === "zh" ? "default" : "ghost"}
+                size="sm"
+                className="h-7 rounded-full px-2.5 text-xs"
+                onClick={() => setLocale("zh")}
+              >
+                中文
+              </Button>
+              <Button
+                variant={locale === "en" ? "default" : "ghost"}
+                size="sm"
+                className="h-7 rounded-full px-2.5 text-xs"
+                onClick={() => setLocale("en")}
+              >
+                EN
+              </Button>
+            </div>
+            </div>
+          </div>
+        </header>
 
       <div className="relative z-50 flex justify-center h-0">
         <div className={cn(
@@ -84,7 +113,7 @@ export default function AppShell({ children }: PropsWithChildren) {
             size="icon"
             className="rounded-full h-9 w-9 shadow-md"
             onClick={handleToggleZen}
-            title={isZen ? "退出禅意模式" : "进入禅意模式"}
+            title={isZen ? text("退出沉浸模式", "Exit zen mode") : text("进入沉浸模式", "Enter zen mode")}
           >
             {isZen ? (
               <Minimize className="h-4 w-4" />
@@ -116,10 +145,10 @@ export default function AppShell({ children }: PropsWithChildren) {
               <div 
                 onClick={() => setIsCollapsed(!isCollapsed)}
                 className="flex items-center justify-between cursor-pointer hover:bg-accent/50 rounded-md transition-colors px-2 py-2"
-                title={isCollapsed ? "展开导航" : "折叠导航"}
+                title={isCollapsed ? text("展开导航", "Expand navigation") : text("折叠导航", "Collapse navigation")}
               >
                 {!isCollapsed && (
-                  <span className="text-xs tracking-[0.18em] uppercase text-muted-foreground">导航</span>
+                  <span className="text-xs tracking-[0.18em] uppercase text-muted-foreground">{text("导航", "Navigation")}</span>
                 )}
                 <PanelLeft className={cn("h-4 w-4 text-muted-foreground transition-transform duration-300", isCollapsed && "mx-auto")} />
               </div>
@@ -150,7 +179,7 @@ export default function AppShell({ children }: PropsWithChildren) {
               
               {!isCollapsed && (
                 <div className="mt-4 text-[10px] tracking-[0.2em] uppercase text-muted-foreground px-2 py-1">
-                  管理
+                  {text("管理", "Manage")}
                 </div>
               )}
               
