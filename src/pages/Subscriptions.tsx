@@ -48,7 +48,7 @@ export default function SubscriptionsPage() {
       const f = await api.fetchFeeds();
       setFeeds(f);
     } catch {
-      toast.error(text("加载订阅列表失败", "Failed to load subscriptions"));
+      toast.error(text("加载订阅列表失败", "Failed to load"));
     } finally {
       setFeedsLoading(false);
     }
@@ -62,7 +62,7 @@ export default function SubscriptionsPage() {
     const q = raw.trim();
     if (!q) {
       if (fromButton) {
-        toast.error(text("请输入搜索关键词", "Please enter a search keyword"));
+        toast.error(text("请输入搜索关键词", "Enter a search keyword"));
       }
       return;
     }
@@ -117,7 +117,7 @@ export default function SubscriptionsPage() {
   async function onSubscribeFromSearch(result: SubstackSearchResult) {
     try {
       await api.createFeed(result.url);
-      toast.success(text("已订阅，正在同步文章…", "Subscribed. Syncing articles..."));
+      toast.success(text("已订阅，正在同步文章…", "Subscribed! Syncing..."));
       await refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : text("添加失败", "Failed to add"));
@@ -141,7 +141,7 @@ export default function SubscriptionsPage() {
       toast.success(text("已取消订阅", "Unsubscribed"));
       await refresh();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : text("删除失败", "Delete failed"));
+      toast.error(e instanceof Error ? e.message : text("删除失败", "Failed to delete"));
     }
   }
 
@@ -177,11 +177,11 @@ export default function SubscriptionsPage() {
     setBatchDeleting(true);
     try {
       const result = await api.batchDeleteFeeds(Array.from(batchSelected));
-      toast.success(text(`已取消订阅 ${result.deleted} 个源`, `Unsubscribed ${result.deleted} sources`));
+      toast.success(text(`已取消订阅 ${result.deleted} 个源`, `Unsubscribed from ${result.deleted} feeds`));
       exitBatchMode();
       await refresh();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : text("批量取消失败", "Batch unsubscribe failed"));
+      toast.error(e instanceof Error ? e.message : text("批量取消失败", "Unsubscribe failed"));
     } finally {
       setBatchDeleting(false);
     }
@@ -219,7 +219,7 @@ export default function SubscriptionsPage() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={onSearchKeyDown}
-                  placeholder={text("搜索你想看的 Substack 出版物", "Search Substack publications")}
+                  placeholder={text("搜索你想看的 Substack 出版物", "Search...")}
                   className="flex-1"
                 />
                 <Button onClick={onSearch} disabled={searchLoading}>
@@ -294,7 +294,7 @@ export default function SubscriptionsPage() {
                   </div>
                 ) : hasSearched ? (
                   <div className="py-8 text-center text-sm text-muted-foreground">
-                    {text("未找到匹配的出版物，试试其他关键词", "No matching publications found. Try another keyword.")}
+                    {text("未找到匹配的出版物，试试其他关键词", "No results. Try a different search.")}
                   </div>
                 ) : (
                   <div className="py-8 text-center text-sm text-muted-foreground">
@@ -330,10 +330,14 @@ export default function SubscriptionsPage() {
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-3">
                   <Button variant="ghost" size="sm" onClick={toggleBatchAll}>
-                    {batchSelected.size === feeds.length ? text("取消全选", "Clear all") : text("全选", "Select all")}
+                    {batchSelected.size === feeds.length ? text("取消全选", "Deselect all") : text("全选", "Select all")}
                   </Button>
                   <span className="text-sm text-muted-foreground">
-                    {text("已选择", "Selected")} <span className="font-medium text-foreground">{batchSelected.size}</span> {isZh ? " 个" : ""}
+                    {isZh ? (
+                      <>{text("已选择", "")} <span className="font-medium text-foreground">{batchSelected.size}</span> 个</>
+                    ) : (
+                      <><span className="font-medium text-foreground">{batchSelected.size}</span> selected</>
+                    )}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -356,23 +360,23 @@ export default function SubscriptionsPage() {
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                         {batchDeleting
-                          ? text("删除中…", "Deleting...")
+                          ? text("删除中…", "Removing...")
                           : text(`取消订阅 (${batchSelected.size})`, `Unsubscribe (${batchSelected.size})`)}
                       </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
                         <AlertDialogTitle>
-                          {text("确定一键取消？", "Confirm batch unsubscribe?")}
+                          {text("确定一键取消？", "Unsubscribe selected?")}
                         </AlertDialogTitle>
                         <AlertDialogDescription>
-                          {text(`将取消订阅 ${batchSelected.size} 个源，后续日报将不再包含这些来源的内容。`, `This will unsubscribe ${batchSelected.size} sources and remove them from future digests.`)}
+                          {text(`将取消订阅 ${batchSelected.size} 个源，后续日报将不再包含这些来源的内容。`, `${batchSelected.size} sources will be removed from future digests.`)}
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel>{text("取消", "Cancel")}</AlertDialogCancel>
                         <AlertDialogAction onClick={onBatchDelete}>
-                          {text("确认取消订阅", "Confirm Unsubscribe")}
+                          {text("确认取消订阅", "Unsubscribe")}
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
@@ -391,7 +395,7 @@ export default function SubscriptionsPage() {
           ) : feeds.length === 0 ? (
             <Card className="p-10 text-center">
               <div className="text-sm text-muted-foreground">
-                {text("还没有订阅源。用上面的搜索功能添加试试。", "No subscriptions yet. Try adding one from search above.")}
+                {text("还没有订阅源。用上面的搜索功能添加试试。", "No subscriptions yet. Search above to add one.")}
               </div>
             </Card>
           ) : (
@@ -461,15 +465,15 @@ export default function SubscriptionsPage() {
                           </AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader>
-                              <AlertDialogTitle>{text("确定取消订阅？", "Confirm unsubscribe?")}</AlertDialogTitle>
+                              <AlertDialogTitle>{text("确定取消订阅？", "Unsubscribe?")}</AlertDialogTitle>
                               <AlertDialogDescription>
-                                {text(`取消订阅「${f.title}」后，后续日报将不再包含该来源的内容。`, `After unsubscribing “${f.title}”, it will be removed from future digests.`)}
+                                {text(`取消订阅「${f.title}」后，后续日报将不再包含该来源的内容。`, `${f.title} will be removed from future digests.`)}
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                             <AlertDialogFooter>
                                 <AlertDialogCancel>{text("取消", "Cancel")}</AlertDialogCancel>
                               <AlertDialogAction onClick={() => onRemove(f.id)}>
-                                  {text("确认取消订阅", "Confirm Unsubscribe")}
+                                  {text("确认取消订阅", "Unsubscribe")}
                                 </AlertDialogAction>
                               </AlertDialogFooter>
                             </AlertDialogContent>

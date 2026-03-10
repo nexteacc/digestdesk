@@ -46,10 +46,10 @@ function GeneratingProgress() {
   const { text } = useI18n();
 
   const phaseText: Record<(typeof PROGRESS_PHASES)[number]["key"], string> = {
-    sync: text("正在同步最新文章…", "Syncing latest articles..."),
-    read: text("AI 正在阅读文章…", "AI is reading articles..."),
-    summary: text("正在生成摘要…", "Generating summaries..."),
-    polish: text("正在整理排版…", "Polishing the layout..."),
+    sync: text("正在同步最新文章…", "Syncing articles..."),
+    read: text("AI 正在阅读文章…", "Reading..."),
+    summary: text("正在生成摘要…", "Generating..."),
+    polish: text("正在整理排版…", "Wrapping up..."),
   };
 
   useEffect(() => {
@@ -120,9 +120,9 @@ function ReadingComplete({ itemCount }: { itemCount: number }) {
       {visible && (
         <Card className="p-6 text-center border-green-200 bg-green-50/50 animate-in fade-in duration-700">
           <CheckCircle2 className="h-8 w-8 mx-auto text-green-600" />
-          <div className="mt-3 text-lg font-semibold">{text("今日日报已读完", "You've finished today's digest")}</div>
+          <div className="mt-3 text-lg font-semibold">{text("今日日报已读完", "All caught up!")}</div>
           <div className="mt-1 text-sm text-muted-foreground">
-            {text(`共 ${itemCount} 篇文章 · 阅读用时约 ${readingMinutes} 分钟`, `${itemCount} articles · about ${readingMinutes} min read`)}
+            {text(`共 ${itemCount} 篇文章 · 阅读用时约 ${readingMinutes} 分钟`, `${itemCount} articles · ${readingMinutes} min read`)}
           </div>
           <div className="mt-4">
           </div>
@@ -171,7 +171,7 @@ function WelcomeSearch({ onAdded }: { onAdded: () => void }) {
     setSubscribing(url);
     try {
       await api.createFeed(url);
-      toast.success(text("已订阅，正在准备你的第一份日报…", "Subscribed. Preparing your first digest..."));
+      toast.success(text("已订阅，正在准备你的第一份日报…", "Subscribed! Preparing your first digest..."));
       onAdded();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : text("添加失败", "Failed to add"));
@@ -183,13 +183,13 @@ function WelcomeSearch({ onAdded }: { onAdded: () => void }) {
     <Card className="p-8 md:p-12">
       <div className="max-w-md mx-auto text-center">
         <div className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground">
-          {text("欢迎来到你的阅读台", "Welcome to your desk")}
+          {text("欢迎来到你的阅读台", "Welcome to DigestDesk")}
         </div>
         <h3 className="mt-4 text-2xl md:text-3xl font-semibold leading-tight">
-          {text("集中跟踪，轻松读完", "Stay in sync, read with ease")}
+          {text("集中跟踪，轻松读完", "Stay on top of your reads")}
         </h3>
         <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
-          {text("添加你关注的创作者，DigestDesk 每天帮你读完他们的最新文章", "Follow creators you care about. DigestDesk helps you catch up daily.")}
+          {text("添加你关注的创作者，DigestDesk 每天帮你读完他们的最新文章", "Follow your favorite creators and get a daily digest.")}
         </p>
       </div>
 
@@ -199,7 +199,7 @@ function WelcomeSearch({ onAdded }: { onAdded: () => void }) {
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={text("搜索出版物名称或作者…", "Search publication or author...")}
+            placeholder={text("搜索出版物名称或作者…", "Search...")}
             className="pl-10"
             autoFocus
           />
@@ -263,7 +263,7 @@ function WelcomeSearch({ onAdded }: { onAdded: () => void }) {
               </div>
             ) : (
               <div className="py-6 text-center text-sm text-muted-foreground">
-                {text("未找到匹配的出版物，试试其他关键词", "No matching publications found. Try another keyword.")}
+                {text("未找到匹配的出版物，试试其他关键词", "No results. Try a different search.")}
               </div>
             )}
           </div>
@@ -305,11 +305,11 @@ export default function DailyDigest() {
       setCurrent(digest);
       const list = await api.fetchDigests("daily");
       setDigestList(list);
-      toast.success(text("日报生成成功", "Digest generated successfully"));
+      toast.success(text("日报生成成功", "Digest ready"));
     } catch (e) {
       // 生成失败（可能没有新文章），展示空状态提示
       console.log("[DailyDigest] auto-generate failed:", e);
-      toast(text("暂无新文章，稍后再来看看", "No new articles yet. Please check back later."));
+      toast(text("暂无新文章，稍后再来看看", "No new articles. Check back later."));
     } finally {
       setGenerating(false);
     }
@@ -335,7 +335,7 @@ export default function DailyDigest() {
         return;
       }
     } catch {
-      toast.error(text("加载失败", "Load failed"));
+      toast.error(text("加载失败", "Failed to load"));
     } finally {
       setLoading(false);
     }
@@ -355,7 +355,7 @@ export default function DailyDigest() {
       setCurrent(digest);
       const list = await api.fetchDigests("daily");
       setDigestList(list);
-      toast.success(text("同步并生成今日日报成功", "Synced and generated today's digest"));
+      toast.success(text("同步并生成今日日报成功", "Today's digest is ready"));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : text("同步失败", "Sync failed"));
     } finally {
@@ -369,7 +369,7 @@ export default function DailyDigest() {
       const full = await api.fetchDigest(item.id);
       setCurrent(full);
     } catch {
-      toast.error(text("加载失败", "Load failed"));
+      toast.error(text("加载失败", "Failed to load"));
     } finally {
       setSelectingId(null);
     }
@@ -436,7 +436,7 @@ export default function DailyDigest() {
           <div className="flex-1 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
             <div>
               <div className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground">
-                {text("日报", "Daily Digest")}
+                {text("日报", "Digest")}
               </div>
               <h2 className="mt-1 text-3xl font-semibold tracking-tight">
                 {text("今日日报", "Today's Digest")}
@@ -480,13 +480,14 @@ export default function DailyDigest() {
                       <span className="mx-1">·</span>
                       <span className="ml-1">Day</span>
                       <span className="mx-1 font-bold text-primary text-sm">{digestDays}</span>
+                      <span>as editor</span>
                     </>
                   )
                 )}
               </div>
               <div className="md:text-right">
                 <span className="font-bold text-primary text-sm">{articleCount}</span>
-                <span className="ml-1">{text("篇文章收录", "articles covered")}</span>
+                <span className="ml-1">{text("篇文章收录", "articles")}</span>
               </div>
             </div>
           )}
@@ -512,7 +513,7 @@ export default function DailyDigest() {
         {!loading && !generating && !current && hasFeeds && (
           <Card className="p-10 text-center">
             <div className="text-sm text-muted-foreground">
-              {text("暂无日报内容。文章同步后会自动生成。", "No digest content yet. It will be generated automatically after syncing.")}
+              {text("暂无日报内容。文章同步后会自动生成。", "No digest yet. Will be generated after syncing.")}
             </div>
           </Card>
         )}
@@ -622,7 +623,7 @@ export default function DailyDigest() {
                         <div className="flex flex-col gap-3 items-start">
                           {it.author && (
                             <div className="text-xs text-muted-foreground">
-                              {text("作者：", "Author: ")}{it.author}
+                              {text("作者：", "by ")}{it.author}
                             </div>
                           )}
                           <a
@@ -636,7 +637,7 @@ export default function DailyDigest() {
                               size="sm"
                               className="gap-1.5"
                             >
-                              {text("阅读原文", "Read Source")}
+                              {text("阅读原文", "View Original")}
                               <ExternalLink className="h-3.5 w-3.5" />
                             </Button>
                           </a>
@@ -647,7 +648,7 @@ export default function DailyDigest() {
 
                       <div className="pl-4 border-l-4 border-primary my-6">
                         <div className="text-xs tracking-[0.18em] uppercase text-primary mb-2 font-medium">
-                          {text("一句话总结", "One-Line Summary")}
+                          {text("一句话总结", "TL;DR")}
                         </div>
                         <div className="text-base italic leading-relaxed text-foreground/90 break-words">
                           {it.oneLiner}
@@ -657,7 +658,7 @@ export default function DailyDigest() {
                       {it.keyInsights.length > 0 && (
                         <div className="mt-4">
                           <div className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
-                            {text("关键洞察", "Key Insights")}
+                            {text("关键洞察", "Takeaways")}
                           </div>
                           <ul className="mt-2 list-disc pl-5 space-y-2 text-sm leading-relaxed">
                             {it.keyInsights.map((k, i) => (

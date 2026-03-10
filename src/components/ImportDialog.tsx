@@ -81,7 +81,7 @@ export default function ImportDialog({ open, onClose, onImported, existingFeeds 
   async function handleFetch() {
     const name = username.trim().replace(/^@/, "");
     if (!name) {
-      toast.error(text("请输入 Substack 用户名", "Please enter a Substack username"));
+      toast.error(text("请输入 Substack 用户名", "Enter username"));
       return;
     }
 
@@ -89,7 +89,7 @@ export default function ImportDialog({ open, onClose, onImported, existingFeeds 
     try {
       const data = await api.fetchSubstackReads(name);
       if (data.length === 0) {
-        toast.error(text("该用户没有公开的订阅列表", "This user has no public subscriptions"));
+        toast.error(text("该用户没有公开的订阅列表", "No public subscriptions found"));
         setPhase("input");
         return;
       }
@@ -99,7 +99,7 @@ export default function ImportDialog({ open, onClose, onImported, existingFeeds 
       setSelected(new Set(newOnly));
       setPhase("select");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : text("获取失败", "Failed to fetch"));
+      toast.error(e instanceof Error ? e.message : text("获取失败", "Couldn't load"));
       setPhase("input");
     }
   }
@@ -133,7 +133,7 @@ export default function ImportDialog({ open, onClose, onImported, existingFeeds 
       }));
 
     if (items.length === 0) {
-      toast.error(text("请至少选择一个订阅源", "Please select at least one source"));
+      toast.error(text("请至少选择一个订阅源", "Select at least one source"));
       return;
     }
 
@@ -173,7 +173,7 @@ export default function ImportDialog({ open, onClose, onImported, existingFeeds 
           <div>
             <h3 className="text-lg font-semibold">{text("从 Substack 导入", "Import from Substack")}</h3>
             <p className="text-xs text-muted-foreground mt-1">
-              {text("输入你的 Substack 用户名，一键导入已有订阅", "Enter your Substack username to import existing subscriptions")}
+              {text("输入你的 Substack 用户名，一键导入已有订阅", "Enter your username to import subscriptions")}
             </p>
           </div>
           <Button
@@ -227,7 +227,7 @@ export default function ImportDialog({ open, onClose, onImported, existingFeeds 
                 </div>
               ))}
               <div className="text-center text-xs text-muted-foreground animate-pulse pt-2">
-                {text("正在获取订阅列表…", "Fetching subscription list...")}
+                {text("正在获取订阅列表…", "Fetching...")}
               </div>
             </div>
           )}
@@ -245,7 +245,7 @@ export default function ImportDialog({ open, onClose, onImported, existingFeeds 
                   )}
                 </span>
                 <Button variant="ghost" size="sm" onClick={toggleAll}>
-                  {selected.size === results.length ? text("取消全选", "Clear all") : text("全选", "Select all")}
+                  {selected.size === results.length ? text("取消全选", "Deselect all") : text("全选", "Select all")}
                 </Button>
               </div>
               <ScrollArea className="h-[340px] pr-2">
