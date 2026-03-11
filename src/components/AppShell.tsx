@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Newspaper, Rss, PanelLeft, Maximize, Minimize, Languages } from "lucide-react";
+import { Newspaper, PanelLeft, Maximize, Minimize } from "lucide-react";
 import { useI18n } from "@/contexts/I18nContext";
 import { useZenMode } from "@/hooks/useZenMode";
 
@@ -27,7 +27,8 @@ export default function AppShell({ children }: PropsWithChildren) {
   ];
 
   const manageNav: NavItem[] = [
-    { href: "/subscriptions", label: text("关注列表", "Subscriptions"), icon: <Rss className="h-4 w-4" /> },
+    { href: "/subscriptions", label: text("关注列表", "Subscriptions"), icon: <img src="/logos/substack.svg" alt="Substack" className="h-4 w-4" /> },
+    { href: "/rss", label: text("RSS 订阅", "RSS Feeds"), icon: <img src="/logos/rss.svg" alt="RSS" className="h-4 w-4" /> },
   ];
 
   useEffect(() => {
@@ -81,7 +82,6 @@ export default function AppShell({ children }: PropsWithChildren) {
             </h1>
 
             <div className="flex items-center gap-1 rounded-full border border-border bg-card/70 p-1">
-              <Languages className="h-3.5 w-3.5 text-muted-foreground ml-1" />
               <Button
                 variant={locale === "zh" ? "default" : "ghost"}
                 size="sm"

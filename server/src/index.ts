@@ -7,6 +7,7 @@ import { fileURLToPath } from "url";
 import { feedsRouter } from "./routes/feeds.js";
 import { digestsRouter } from "./routes/digests.js";
 import { substackRouter } from "./routes/substack.js";
+import { rssFeedsRouter } from "./routes/rss-feeds.js";
 import { initDb } from "./db/index.js";
 import { startScheduler } from "./cron/scheduler.js";
 
@@ -24,6 +25,7 @@ let initError: string | null = null;
 app.use("/api/feeds", feedsRouter);
 app.use("/api/digests", digestsRouter);
 app.use("/api/substack", substackRouter);
+app.use("/api/rss-feeds", rssFeedsRouter);
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });

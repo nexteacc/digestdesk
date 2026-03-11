@@ -43,6 +43,7 @@ function toFeed(row: typeof feeds.$inferSelect): Feed {
     authorName: row.authorName ?? undefined,
     url: row.publicationUrl,
     feedUrl: row.feedUrl,
+    sourceType: row.sourceType,
     lastFetchedAt: row.lastFetchedAt ?? undefined,
     createdAt: row.createdAt,
   };
@@ -103,6 +104,7 @@ feedsRouter.post("/", async (req, res) => {
       authorName: info.authorName || null,
       publicationUrl,
       feedUrl,
+      sourceType: "substack" as const,
       createdAt: now,
       lastFetchedAt: null,
     };
@@ -210,6 +212,7 @@ feedsRouter.post("/import", async (req, res) => {
       authorName: item.authorName || null,
       publicationUrl,
       feedUrl,
+      sourceType: "substack" as const,
       createdAt: now,
       lastFetchedAt: null,
     };

@@ -8,6 +8,7 @@ import { I18nProvider } from "@/contexts/I18nContext";
 import { ZenModeProvider } from "@/hooks/useZenMode";
 import DailyDigest from "@/pages/DailyDigest";
 import SubscriptionsPage from "@/pages/Subscriptions";
+import RssFeedsPage from "@/pages/RssFeeds";
 import NotFound from "@/pages/NotFound";
 
 function AppRouter() {
@@ -16,6 +17,7 @@ function AppRouter() {
       <Switch>
         <Route path="/" component={DailyDigest} />
         <Route path="/subscriptions" component={SubscriptionsPage} />
+        <Route path="/rss" component={RssFeedsPage} />
         <Route component={NotFound} />
       </Switch>
     </Router>

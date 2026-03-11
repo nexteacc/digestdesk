@@ -7,4 +7,5 @@ export type {
   SubstackSearchResult,
   SubstackInfo,
   DigestListItem,
+  DiscoveredFeed,
 } from "../../shared/types";

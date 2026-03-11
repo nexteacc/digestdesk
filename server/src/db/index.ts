@@ -32,9 +32,15 @@ export async function initDb() {
       author_name TEXT,
       publication_url TEXT NOT NULL,
       feed_url TEXT NOT NULL UNIQUE,
+      source_type TEXT NOT NULL DEFAULT 'substack',
       created_at TEXT NOT NULL,
       last_fetched_at TEXT
     );
+  `;
+
+  // Migration: add source_type column for existing databases
+  await queryClient`
+    ALTER TABLE feeds ADD COLUMN IF NOT EXISTS source_type TEXT NOT NULL DEFAULT 'substack';
   `;
 
   await queryClient`

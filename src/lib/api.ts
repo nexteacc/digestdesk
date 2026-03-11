@@ -4,6 +4,7 @@ import type {
   DigestListItem,
   SubstackSearchResult,
   SubstackInfo,
+  DiscoveredFeed,
 } from "./types";
 
 const BASE = "/api";
@@ -84,6 +85,42 @@ export function batchDeleteFeeds(
   ids: string[],
 ): Promise<{ deleted: number }> {
   return request("/feeds/batch", {
+    method: "DELETE",
+    body: JSON.stringify({ ids }),
+  });
+}
+
+// --- RSS Feeds ---
+
+export function discoverRssFeed(url: string): Promise<DiscoveredFeed> {
+  return request("/rss-feeds/discover", {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  });
+}
+
+export function createRssFeed(data: {
+  feedUrl: string;
+  siteUrl: string;
+  title?: string;
+  description?: string;
+  logoUrl?: string;
+  authorName?: string;
+}): Promise<Feed> {
+  return request("/rss-feeds", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteRssFeed(id: string): Promise<void> {
+  return request(`/rss-feeds/${id}`, { method: "DELETE" });
+}
+
+export function batchDeleteRssFeeds(
+  ids: string[],
+): Promise<{ deleted: number }> {
+  return request("/rss-feeds/batch", {
     method: "DELETE",
     body: JSON.stringify({ ids }),
   });

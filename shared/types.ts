@@ -8,6 +8,7 @@ export type Feed = {
   authorName?: string;
   url: string;
   feedUrl: string;
+  sourceType: "substack" | "rss" | "youtube";
   lastFetchedAt?: string; // ISO
   createdAt: string; // ISO
 };
@@ -73,4 +74,13 @@ export type Article = {
   contentText?: string;
   coverImageUrl?: string;
   fetchedAt: string; // ISO
+};
+
+export type DiscoveredFeed = {
+  feedUrl: string;
+  title: string;
+  description: string;
+  logoUrl: string;
+  authorName: string;
+  siteUrl: string;
 };
