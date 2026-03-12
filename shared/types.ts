@@ -84,3 +84,8 @@ export type DiscoveredFeed = {
   authorName: string;
   siteUrl: string;
 };
+
+export type Settings = {
+  digestTime: string;
+  timezone: string;
+};

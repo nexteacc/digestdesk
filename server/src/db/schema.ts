@@ -46,3 +46,8 @@ export const digestItems = pgTable("digest_items", {
   publishedAt: text("published_at").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
 });
+
+export const settings = pgTable("settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+});

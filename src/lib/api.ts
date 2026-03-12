@@ -5,6 +5,7 @@ import type {
   SubstackSearchResult,
   SubstackInfo,
   DiscoveredFeed,
+  Settings,
 } from "./types";
 
 const BASE = "/api";
@@ -113,16 +114,28 @@ export function createRssFeed(data: {
   });
 }
 
-export function deleteRssFeed(id: string): Promise<void> {
-  return request(`/rss-feeds/${id}`, { method: "DELETE" });
+export function fetchRssFeeds(): Promise<Feed[]> {
+  return request("/rss-feeds");
 }
 
-export function batchDeleteRssFeeds(
-  ids: string[],
-): Promise<{ deleted: number }> {
-  return request("/rss-feeds/batch", {
-    method: "DELETE",
-    body: JSON.stringify({ ids }),
+export function deleteRssFeed(id: string): Promise<void> {
+  return deleteFeed(id);
+}
+
+export function batchDeleteRssFeeds(ids: string[]): Promise<{ deleted: number }> {
+  return batchDeleteFeeds(ids);
+}
+
+// --- Settings ---
+
+export function fetchSettings(): Promise<Settings> {
+  return request("/settings");
+}
+
+export function updateSettings(data: Settings): Promise<{ success: true }> {
+  return request("/settings", {
+    method: "POST",
+    body: JSON.stringify(data),
   });
 }
 
@@ -138,7 +151,7 @@ export function fetchDigests(
 export function generateDigest(
   type: "daily" = "daily",
   options?: { date?: string; force?: boolean },
-): Promise<{ id: string }> {
+): Promise<{ id: string } | { status: "empty" }> {
   return request("/digests/generate", {
     method: "POST",
     body: JSON.stringify({ type, ...options }),

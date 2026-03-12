@@ -46,7 +46,7 @@ export default function SubscriptionsPage() {
   const refresh = useCallback(async () => {
     try {
       const f = await api.fetchFeeds();
-      setFeeds(f);
+      setFeeds(f.filter((item) => item.sourceType === "substack"));
     } catch {
       toast.error(text("加载订阅列表失败", "Failed to load"));
     } finally {

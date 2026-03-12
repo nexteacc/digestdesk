@@ -43,15 +43,24 @@ function toFeed(row: typeof feeds.$inferSelect): Feed {
     authorName: row.authorName ?? undefined,
     url: row.publicationUrl,
     feedUrl: row.feedUrl,
-    sourceType: row.sourceType,
+    sourceType: row.sourceType as "substack" | "rss" | "youtube",
     lastFetchedAt: row.lastFetchedAt ?? undefined,
     createdAt: row.createdAt,
   };
 }
 
-feedsRouter.get("/", async (_req, res) => {
+feedsRouter.get("/", async (req, res) => {
   const db = getDb();
-  const rows = await db.select().from(feeds).orderBy(desc(feeds.createdAt));
+  const sourceType = req.query.sourceType as string | undefined;
+  
+  let query = db.select().from(feeds);
+  
+  if (sourceType) {
+    // @ts-ignore
+    query = query.where(eq(feeds.sourceType, sourceType));
+  }
+  
+  const rows = await query.orderBy(desc(feeds.createdAt));
   const result = rows.map(toFeed);
   res.json(result);
 });

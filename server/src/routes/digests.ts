@@ -107,6 +107,11 @@ digestsRouter.post("/generate", async (req, res) => {
     await syncAllFeeds();
     const digestId = await generateDaily(date);
 
+    if (!digestId) {
+      res.json({ status: "empty" });
+      return;
+    }
+
     const [digest] = await db.select().from(digests).where(eq(digests.id, digestId));
     if (!digest) {
       res.status(500).json({ error: "生成后未找到记录" });

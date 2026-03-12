@@ -105,6 +105,13 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_digest_items_digest_id ON digest_items(digest_id);
   `;
 
+  await queryClient`
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+  `;
+
   console.log("Database initialized (PostgreSQL).");
 }
 

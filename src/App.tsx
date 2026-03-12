@@ -9,6 +9,7 @@ import { ZenModeProvider } from "@/hooks/useZenMode";
 import DailyDigest from "@/pages/DailyDigest";
 import SubscriptionsPage from "@/pages/Subscriptions";
 import RssFeedsPage from "@/pages/RssFeeds";
+import SettingsPage from "@/pages/Settings";
 import NotFound from "@/pages/NotFound";
 
 function AppRouter() {
@@ -18,6 +19,7 @@ function AppRouter() {
         <Route path="/" component={DailyDigest} />
         <Route path="/subscriptions" component={SubscriptionsPage} />
         <Route path="/rss" component={RssFeedsPage} />
+        <Route path="/settings" component={SettingsPage} />
         <Route component={NotFound} />
       </Switch>
     </Router>

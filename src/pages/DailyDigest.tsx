@@ -300,8 +300,12 @@ export default function DailyDigest() {
   const autoGenerate = useCallback(async () => {
     setGenerating(true);
     try {
-      const { id } = await api.generateDigest("daily");
-      const digest = await api.fetchDigest(id);
+      const result = await api.generateDigest("daily");
+      if ("status" in result && result.status === "empty") {
+        toast(text("暂无新文章，稍后再来看看", "No new articles. Check back later."));
+        return;
+      }
+      const digest = await api.fetchDigest(result.id);
       setCurrent(digest);
       const list = await api.fetchDigests("daily");
       setDigestList(list);
@@ -350,8 +354,12 @@ export default function DailyDigest() {
     setGenerating(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
-      const { id } = await api.generateDigest("daily", { date: today, force: true });
-      const digest = await api.fetchDigest(id);
+      const result = await api.generateDigest("daily", { date: today, force: true });
+      if ("status" in result && result.status === "empty") {
+        toast(text("暂无新文章，稍后再来看看", "No new articles. Check back later."));
+        return;
+      }
+      const digest = await api.fetchDigest(result.id);
       setCurrent(digest);
       const list = await api.fetchDigests("daily");
       setDigestList(list);

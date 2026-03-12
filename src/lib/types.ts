@@ -8,4 +8,5 @@ export type {
   SubstackInfo,
   DigestListItem,
   DiscoveredFeed,
+  Settings,
 } from "../../shared/types";
