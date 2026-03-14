@@ -5,6 +5,7 @@ import type {
   SubstackSearchResult,
   SubstackInfo,
   DiscoveredFeed,
+  DiscoveredYouTubeChannel,
   Settings,
 } from "./types";
 
@@ -123,6 +124,38 @@ export function deleteRssFeed(id: string): Promise<void> {
 }
 
 export function batchDeleteRssFeeds(ids: string[]): Promise<{ deleted: number }> {
+  return batchDeleteFeeds(ids);
+}
+
+// --- YouTube Feeds ---
+
+export function discoverYouTubeChannel(url: string): Promise<DiscoveredYouTubeChannel> {
+  return request("/youtube-feeds/discover", {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  });
+}
+
+export function createYouTubeFeed(data: {
+  channelId: string;
+  title: string;
+  logoUrl?: string;
+}): Promise<{ id: string; success: true }> {
+  return request("/youtube-feeds", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function fetchYouTubeFeeds(): Promise<Feed[]> {
+  return request("/youtube-feeds");
+}
+
+export function deleteYouTubeFeed(id: string): Promise<void> {
+  return deleteFeed(id);
+}
+
+export function batchDeleteYouTubeFeeds(ids: string[]): Promise<{ deleted: number }> {
   return batchDeleteFeeds(ids);
 }
 

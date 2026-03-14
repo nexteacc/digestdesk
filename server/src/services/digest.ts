@@ -4,6 +4,7 @@ import pLimit from "p-limit";
 import { getDb } from "../db/index.js";
 import { feeds, articles, digests, digestItems } from "../db/schema.js";
 import { summarizeArticle } from "./summarizer.js";
+import { YouTubeAdapter } from "../sources/adapters/youtube-adapter.js";
 
 const CONCURRENCY = 5;
 
@@ -64,8 +65,9 @@ async function generateWithId(digestId: string, dateLabel: string, startTime: st
 
   console.log(`[digest] Processing ${uniqueArticles.length} unique articles`);
 
-  const allFeeds = await db.select({ id: feeds.id, name: feeds.name }).from(feeds);
+  const allFeeds = await db.select({ id: feeds.id, name: feeds.name, sourceType: feeds.sourceType }).from(feeds);
   const feedMap = new Map(allFeeds.map((f) => [f.id, f.name]));
+  const feedSourceMap = new Map(allFeeds.map((f) => [f.id, f.sourceType]));
 
   const limit = pLimit(CONCURRENCY);
 
@@ -94,7 +96,14 @@ async function generateWithId(digestId: string, dateLabel: string, startTime: st
       };
 
       if (!contentText || contentText.length < 50) {
-        return { ...base, oneLiner: "内容过短，无法生成摘要", keyInsights: [] };
+        const isYouTube = feedSourceMap.get(article.feedId) === "youtube";
+        return {
+          ...base,
+          oneLiner: isYouTube
+            ? YouTubeAdapter.extractOneLiner(contentText || "", article.title)
+            : "内容过短，无法生成摘要",
+          keyInsights: [],
+        };
       }
 
       try {

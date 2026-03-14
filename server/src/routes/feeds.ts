@@ -4,10 +4,11 @@ import { eq, inArray, desc } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "../db/index.js";
 import { feeds } from "../db/schema.js";
-import { getSubstackInfo } from "../services/substack.js";
 import { syncAllFeeds, syncFeed } from "../services/rss.js";
 import { generateDaily } from "../services/digest.js";
 import type { Feed } from "../../../shared/types.js";
+import { getSubstackAdapter } from "../sources/factory.js";
+import { toAppError } from "../sources/app-error.js";
 
 const createFeedSchema = z.object({
   url: z.string().min(1, "请提供 url"),
@@ -33,6 +34,7 @@ const importFeedsSchema = z.object({
 });
 
 export const feedsRouter = Router();
+const substackAdapter = getSubstackAdapter();
 
 function toFeed(row: typeof feeds.$inferSelect): Feed {
   return {
@@ -51,16 +53,14 @@ function toFeed(row: typeof feeds.$inferSelect): Feed {
 
 feedsRouter.get("/", async (req, res) => {
   const db = getDb();
-  const sourceType = req.query.sourceType as string | undefined;
-  
-  let query = db.select().from(feeds);
-  
-  if (sourceType) {
-    // @ts-ignore
-    query = query.where(eq(feeds.sourceType, sourceType));
-  }
-  
-  const rows = await query.orderBy(desc(feeds.createdAt));
+  const sourceType = req.query.sourceType as "substack" | "rss" | "youtube" | undefined;
+
+  const baseQuery = db.select().from(feeds);
+  const filtered = sourceType
+    ? baseQuery.where(eq(feeds.sourceType, sourceType))
+    : baseQuery;
+
+  const rows = await filtered.orderBy(desc(feeds.createdAt));
   const result = rows.map(toFeed);
   res.json(result);
 });
@@ -74,45 +74,30 @@ feedsRouter.post("/", async (req, res) => {
   const { url: rawUrl, title, description, logoUrl, authorName } = parsed.data;
 
   try {
-    let normalizedUrl = rawUrl.trim();
-    if (!/^https?:\/\//i.test(normalizedUrl)) {
-      normalizedUrl = `https://${normalizedUrl}`;
-    }
-    const parsed = new URL(normalizedUrl);
-    const publicationUrl = parsed.origin;
-    const feedUrl = `${publicationUrl}/feed`;
+    const draft = await substackAdapter.createFeedDraft({
+      url: rawUrl,
+      title,
+      description,
+      logoUrl,
+      authorName,
+    });
 
     const db = getDb();
-    const [existing] = await db.select().from(feeds).where(eq(feeds.feedUrl, feedUrl));
+    const [existing] = await db.select().from(feeds).where(eq(feeds.feedUrl, draft.feedUrl));
     if (existing) {
       res.status(409).json({ error: "该订阅源已存在" });
       return;
     }
 
-    let info = { name: title || "", description: description || "", logoUrl: logoUrl || "", authorName: authorName || "" };
-    try {
-      const substackInfo = await getSubstackInfo(publicationUrl);
-      info = {
-        name: title || substackInfo.name || parsed.hostname,
-        description: description || substackInfo.description,
-        logoUrl: logoUrl || substackInfo.logoUrl,
-        authorName: authorName || substackInfo.authorName,
-      };
-    } catch {
-      if (!info.name) {
-        info.name = parsed.hostname.replace(/^www\./, "");
-      }
-    }
-
     const now = new Date().toISOString();
     const feed = {
       id: nanoid(),
-      name: info.name.slice(0, 80),
-      description: info.description || null,
-      logoUrl: info.logoUrl || null,
-      authorName: info.authorName || null,
-      publicationUrl,
-      feedUrl,
+      name: draft.name,
+      description: draft.description ?? null,
+      logoUrl: draft.logoUrl ?? null,
+      authorName: draft.authorName ?? null,
+      publicationUrl: draft.publicationUrl,
+      feedUrl: draft.feedUrl,
       sourceType: "substack" as const,
       createdAt: now,
       lastFetchedAt: null,
@@ -132,8 +117,9 @@ feedsRouter.post("/", async (req, res) => {
         console.error(`[feeds/create] Initial sync/digest failed for ${feed.name}:`, err);
       });
   } catch (err) {
-    console.error("[feeds/create] Error:", err);
-    res.status(500).json({ error: "添加订阅失败" });
+    const appError = toAppError(err);
+    console.error("[feeds/create] Error:", appError.message);
+    res.status(appError.status).json({ error: appError.message, code: appError.code });
   }
 });
 

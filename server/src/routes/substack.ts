@@ -1,11 +1,14 @@
 import { Router } from "express";
 import { like } from "drizzle-orm";
 import { z } from "zod";
-import { getSubstackInfo, searchSubstack, fetchSubstackReads } from "../services/substack.js";
+import { searchSubstack, fetchSubstackReads } from "../services/substack.js";
 import { getDb } from "../db/index.js";
 import { feeds } from "../db/schema.js";
+import { toAppError } from "../sources/app-error.js";
+import { getSubstackAdapter } from "../sources/factory.js";
 
 export const substackRouter = Router();
+const substackAdapter = getSubstackAdapter();
 
 substackRouter.get("/info", async (req, res) => {
   const url = z.string().min(1, "参数 url 不能为空").safeParse(req.query.url);
@@ -15,18 +18,12 @@ substackRouter.get("/info", async (req, res) => {
   }
 
   try {
-    let normalizedUrl = url.data.trim();
-    if (!/^https?:\/\//i.test(normalizedUrl)) {
-      normalizedUrl = `https://${normalizedUrl}`;
-    }
-    const parsed = new URL(normalizedUrl);
-    const publicationUrl = parsed.origin;
-
-    const info = await getSubstackInfo(publicationUrl);
+    const info = await substackAdapter.discover(url.data);
     res.json(info);
   } catch (err) {
-    console.error("[substack/info] Error:", err);
-    res.status(500).json({ error: "无法获取出版物信息，请检查链接是否正确" });
+    const appError = toAppError(err);
+    console.error("[substack/info] Error:", appError.message);
+    res.status(appError.status).json({ error: appError.message, code: appError.code });
   }
 });
 

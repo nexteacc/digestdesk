@@ -1,26 +1,29 @@
-import { generateText, Output } from "ai";
-import { createOpenAI } from "@ai-sdk/openai";
+import { generateText, Output, type LanguageModel } from "ai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { z } from "zod";
 
-let _cachedModel: ReturnType<ReturnType<typeof createOpenAI>> | null = null;
+let _cachedModel: LanguageModel | null = null;
 
 function getModel() {
   if (_cachedModel) return _cachedModel;
 
   const modelId = process.env.AI_MODEL || "gpt-4o-mini";
-  const baseURL = process.env.AI_BASE_URL;
+  const baseURL = process.env.AI_BASE_URL || "https://api.openai.com/v1";
   const apiKey = process.env.AI_API_KEY;
 
   if (!apiKey) {
     throw new Error("请设置 AI_API_KEY 环境变量");
   }
 
-  const provider = createOpenAI({
-    apiKey,
-    baseURL: baseURL || undefined,
+  const provider = createOpenAICompatible({
+    name: "ai-provider",
+    baseURL,
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
   });
 
-  _cachedModel = provider(modelId);
+  _cachedModel = provider.chatModel(modelId);
   return _cachedModel;
 }
 

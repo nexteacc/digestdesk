@@ -1,15 +1,15 @@
-# YouTube 频道支持 — 实现方案
+# YouTube 频道支持 — 架构与实现总结
 
 ## Context
 
-DigestDesk 已支持 Substack 和 RSS 两个平台。本次实现第三个平台 — YouTube 频道订阅。
+DigestDesk 已支持 Substack 和 RSS 两个平台。本项目通过引入工厂模式（Factory Pattern）和适配器架构（Adapter Architecture），优雅地实现了第三个平台 — YouTube 频道订阅。
 
 核心策略：**更新通知优先，内容总结后置**。
 
-- 第一阶段（本次）：用户订阅 YouTube 频道，日报中展示新视频的标题、缩略图和链接，作为"更新通知"
+- 第一阶段（当前）：用户订阅 YouTube 频道，日报中展示新视频的标题、缩略图和链接，作为"更新通知"
 - 第二阶段（未来）：引入 Gemini 等多模态模型，对视频内容进行摘要
 
-核心发现：YouTube 频道官方提供 Atom feed（`https://www.youtube.com/feeds/videos.xml?channel_id=CHANNEL_ID`），可被 rss-parser 直接解析。但与 RSS/Substack 不同的是，视频内容无法通过 Jina Reader 提取文本，需要跳过内容抓取和 AI 总结环节。
+核心发现：YouTube 频道官方提供 Atom feed（`https://www.youtube.com/feeds/videos.xml?channel_id=CHANNEL_ID`），可被 rss-parser 直接解析。但与 RSS/Substack 不同的是，视频内容无法通过 Jina Reader 提取文本，需要跳过内容抓取和 AI 总结环节，直接提取 feed 中的描述和缩略图。
 
 ---
 
@@ -35,24 +35,73 @@ DigestDesk 已支持 Substack 和 RSS 两个平台。本次实现第三个平台
 
 **排序应使用 `published`**，不用 `updated`。rss-parser 解析后对应 `item.isoDate`（取自 `published`），与现有代码 `publishedAt: item.isoDate` 一致，无需额外处理。
 
-### 验证数据（2026-03-11 实测）
+---
 
+## 一、架构升级：工厂适配器模式
+
+在实现 YouTube 支持时，为了避免在共用的同步服务（`rss.ts`）中出现破坏开闭原则（OCP）的 `if (isYouTube)` 分支，系统升级了 `SourceAdapter` 抽象层。
+
+### 1.1 SourceAdapter 契约
+
+定义了严格的多态契约，每种数据源（Substack, RSS, YouTube）负责自己的探测、写入和内容提取：
+
+```typescript
+export interface SourceAdapter {
+  readonly sourceType: SourceType;
+  discover(rawUrl: string): Promise<unknown>;
+  createFeedDraft(input: Record<string, unknown>): FeedDraft | Promise<FeedDraft>;
+  // 核心解耦点：提取同步条目内容（多态）
+  extractSyncItemContent(
+    item: Record<string, unknown>,
+    articleUrl: string,
+  ): Promise<SyncItemContent>;
+}
 ```
-频道: Android Developers (UCVHFbqXqoYvEWM1Ddxl0QDg) → 返回 15 条
-频道: Google for Developers (UC_x5XG1OV2P6uZZ5FSM9Ttw) → 返回 15 条
-Feed URL 格式: https://www.youtube.com/feeds/videos.xml?channel_id=CHANNEL_ID
-包含字段: yt:videoId, title, link, published, updated, media:group(media:title, media:description, media:thumbnail)
+
+### 1.2 YouTube 适配器 (`youtube-adapter.ts`)
+
+封装了所有 YouTube 特有的脏数据处理逻辑：
+- `extractThumbnail`：处理嵌套的 `mediaGroup?.['media:thumbnail']` 或通过 URL 回退。
+- `getDescription`：处理视频短描述。
+- `extractOneLiner`：剔除广告和空段落，获取纯文本视频通知摘要。
+
+### 1.3 核心服务解耦 (`rss.ts` & `content-extractor.ts`)
+
+`rss.ts` 中的 `syncFeed` 去除了对于 Jina Reader 的依赖，变成了纯粹的调度器。
+相关的 Markdown 拉取和 HTML 转换逻辑剥离到了专用的 `content-extractor.ts` 中，供 Substack 和 RSS 适配器复用。
+
+```typescript
+// rss.ts: 策略模式应用
+const adapter = getSourceAdapter(feed.sourceType as SourceType);
+const { contentMarkdown, coverImageUrl } =
+  await adapter.extractSyncItemContent(item as unknown as Record<string, unknown>, articleUrl);
 ```
+
+### 1.4 路由工厂 (`source-feed-router.ts`)
+
+RSS 和 YouTube 的路由端点（discover / create / list）结构完全相同，仅 Zod schema、适配器实例和错误文案不同。通过 `createSourceFeedRouter(opts)` 工厂函数消除了这一重复：
+
+```typescript
+// rss-feeds.ts — 仅 24 行配置
+export const rssFeedsRouter = createSourceFeedRouter({
+  adapter: getRssAdapter(),
+  discoverSchema,
+  createSchema: createRssFeedSchema,
+  sourceType: "rss",
+  logPrefix: "[rss]",
+});
+```
+
+YouTube 路由同理。工厂内部统一处理 Zod 校验、查重、入库、后台同步和 `toAppError` 错误映射。
 
 ---
 
-## 一、数据模型变更
+## 二、数据模型与存储
 
-### 1.1 feeds 表 — 无需修改
+### 2.1 feeds 表
+`sourceType` 字段支持了 `"youtube"` 枚举值。
 
-`sourceType` 字段已支持 `"youtube"` 枚举值，无需改动 schema。
-
-### 1.2 articles 表 — 利用现有字段
+### 2.2 articles 表 — 利用现有字段
 
 | 现有字段 | YouTube 用途 |
 |----------|-------------|
@@ -63,330 +112,107 @@ Feed URL 格式: https://www.youtube.com/feeds/videos.xml?channel_id=CHANNEL_ID
 | `coverImageUrl` | 视频缩略图（`media:thumbnail`） |
 | `contentText` | 视频描述（`media:description`），通常很短 |
 
-不需要新增字段。
-
-### 1.3 shared/types.ts — 无需修改
-
-`Feed`、`DigestItem` 等类型已覆盖所有需要的字段。
+通过 `YouTubeAdapter.extractSyncItemContent()` 无缝将 YouTube 数据清洗为符合此表结构的数据。
 
 ---
 
-## 二、后端变更
+## 三、接口设计与后端实现
 
-### 2.1 新增服务：YouTube 频道探测
+### 3.1 探测服务 (`youtube-discovery.ts`)
 
-**新文件**: `server/src/services/youtube-discovery.ts`
-
-**核心函数**: `discoverYouTubeChannel(url: string): Promise<DiscoveredYouTubeChannel>`
-
-YouTube URL 格式多样，需要统一处理：
-
+针对各种 YouTube 用户输入格式进行探测：
 | 用户输入格式 | 提取方式 |
 |-------------|---------|
-| `youtube.com/channel/UCxxxxxx` | 直接从路径提取 channel_id |
-| `youtube.com/@handle` | 抓取页面 HTML，从 `<link rel="canonical">` 或 `<meta>` 提取 channel_id |
-| `youtube.com/c/ChannelName` | 同上，抓取页面提取 |
-| `youtube.com/watch?v=VIDEO_ID` | 抓取视频页面，提取频道的 channel_id |
+| `youtube.com/channel/UCxxxxxx` | 直接从路径提取 channelId |
+| `youtube.com/@handle` | 抓取页面 HTML，从 `<meta itemprop="channelId">` 等标签提取 |
+| `youtube.com/c/ChannelName` | 同上 |
+| `youtube.com/watch?v=VIDEO_ID` | 同上 |
 
-提取到 channel_id 后：
-1. 拼接 feed URL: `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`
-2. 用 rss-parser 解析，获取频道名称、最近视频等元数据
-3. 缩略图/logo 使用 YouTube 默认头像: `https://www.youtube.com/channel/${channelId}`（从 feed 无法直接获取频道头像）
+- 自定义了 `YouTubeDiscoveryError`（继承 `AppError`）以提供友好的探测失败信息。
 
-返回值：
-```typescript
-interface DiscoveredYouTubeChannel {
-  channelId: string;
-  feedUrl: string;       // https://www.youtube.com/feeds/videos.xml?channel_id=xxx
-  title: string;         // 频道名称
-  channelUrl: string;    // https://www.youtube.com/channel/UCxxx
-  recentVideos: Array<{
-    title: string;
-    url: string;
-    thumbnailUrl: string;
-    publishedAt: string;
-  }>;
-}
-```
+### 3.2 路由端点
 
-### 2.2 新增路由：YouTube 频道管理
+通过路由工厂 `createSourceFeedRouter` 生成，`youtube-feeds.ts` 仅声明 Zod schema 和配置：
+- `POST /api/youtube-feeds/discover` — 探测频道
+- `POST /api/youtube-feeds` — 添加订阅
+- `GET /api/youtube-feeds` — 列出 YouTube 订阅
 
-**新文件**: `server/src/routes/youtube-feeds.ts`
+路由工厂统一处理查重（409）、入库、后台 `syncFeed` 触发以及 `toAppError` 错误映射。
 
-| 端点 | 说明 |
-|------|------|
-| `POST /api/youtube-feeds/discover` | 接收 YouTube URL，调用探测服务，返回频道预览 |
-| `POST /api/youtube-feeds` | 确认添加，写入 feeds 表（sourceType="youtube"），触发后台 syncFeed |
-| `DELETE /api/youtube-feeds/:id` | 删除 |
-| `DELETE /api/youtube-feeds/batch` | 批量删除 |
+### 3.3 日报生成调整 (`digest.ts`)
 
-路由结构与 `rss-feeds.ts` 一致。
-
-### 2.3 修改数据抓取服务 ⚠️
-
-**文件**: `server/src/services/rss.ts` — **需要修改**
-
-这是与 RSS 方案的关键区别。现有 `syncFeed()` 会对每篇文章调用 Jina Reader 提取全文，但对 YouTube 视频：
-- Jina Reader 无法提取有意义的视频内容
-- 视频描述已在 Atom feed 的 `media:description` 中
-- 缩略图在 `media:thumbnail` 中
-
-修改点：
+YouTube 的内容往往非常短，不满 50 字会跳过 AI 摘要。通过直接调用 `YouTubeAdapter.extractOneLiner` 生成"新视频通知"样式的一句话摘要。
 
 ```typescript
-// syncFeed() 中，根据 sourceType 决定是否跳过 Jina Reader
-const isYouTube = feed.sourceType === "youtube";
-
-for (const item of parsed.items || []) {
-  // ...existing dedup logic...
-
-  let contentMarkdown: string | null = null;
-
-  if (isYouTube) {
-    // YouTube: 直接使用 feed 中的描述，不调用 Jina
-    contentMarkdown = item["media:description"] || item.contentSnippet || "";
-  } else {
-    // Substack / RSS: 走现有 Jina + fallback 流程
-    contentMarkdown = await fetchMarkdown(articleUrl);
-    if (!contentMarkdown) {
-      const contentHtml = item["content:encoded"] || item.content || "";
-      contentMarkdown = contentHtml ? htmlToMarkdown(contentHtml) : "";
-    }
-  }
-
-  const article = {
-    // ...existing fields...
-    contentText: contentMarkdown || null,
-    // YouTube 缩略图从 media:group 提取
-    coverImageUrl: isYouTube
-      ? extractYouTubeThumbnail(item)
-      : (item.enclosure?.url || null),
-  };
-}
-```
-
-rss-parser 需要配置 `customFields` 以解析 YouTube Atom 的 `media:group` 子字段：
-
-```typescript
-const rssParser = new RssParser({
-  timeout: 15000,
-  headers: { "User-Agent": "DigestDesk/1.0 (RSS Reader)" },
-  customFields: {
-    item: [
-      ["media:group", "mediaGroup"],
-    ],
-  },
-});
-```
-
-辅助函数从 mediaGroup 中提取缩略图 URL：
-
-```typescript
-function extractYouTubeThumbnail(item: Record<string, unknown>): string | null {
-  // rss-parser 将 media:group 解析为嵌套对象
-  // media:thumbnail 的 url 在 $.url 属性中
-  try {
-    const group = item.mediaGroup as Record<string, unknown>;
-    const thumb = group?.["media:thumbnail"] as Record<string, unknown>;
-    return (thumb?.$ as Record<string, string>)?.url || null;
-  } catch {
-    return null;
-  }
-}
-```
-
-### 2.4 日报生成 — 需要小幅调整
-
-**文件**: `server/src/services/digest.ts` — **小幅修改**
-
-现有逻辑中，contentText 长度 < 50 的文章会跳过 AI 总结，显示"内容过短，无法生成摘要"。YouTube 视频描述通常很短，会自动命中这个分支。
-
-但"内容过短，无法生成摘要"这个提示不适合 YouTube 条目。建议改为区分来源：
-
-```typescript
-if (!contentText || contentText.length < 50) {
-  // 判断是否为 YouTube 源
-  const isYouTube = feedSourceTypes.get(article.feedId) === "youtube";
-  return {
-    ...base,
-    oneLiner: isYouTube
-      ? (contentText || "新视频更新")  // YouTube: 用描述或默认文案
-      : "内容过短，无法生成摘要",
-    keyInsights: [],
-  };
-}
-```
-
-需要在查询文章时关联 feeds 表获取 sourceType。
-
-### 2.5 注册路由
-
-**文件**: `server/src/index.ts`
-
-```typescript
-import { youtubeFeedsRouter } from "./routes/youtube-feeds.js";
-app.use("/api/youtube-feeds", youtubeFeedsRouter);
-```
-
----
-
-## 三、前端变更
-
-### 3.1 侧边栏新增入口
-
-**文件**: `src/components/AppShell.tsx`
-
-在 `manageNav` 数组中新增：
-```typescript
-{
-  href: "/youtube",
-  label: text("YouTube 频道", "YouTube Channels"),
-  icon: <img src="/logos/youtube.svg" alt="YouTube" className="h-4 w-4" />
-}
-```
-
-图标 `youtube.svg` 已存在于 `public/logos/` 目录。
-
-### 3.2 新增路由
-
-**文件**: `src/App.tsx`
-
-```typescript
-<Route path="/youtube" component={YouTubeFeeds} />
-```
-
-### 3.3 新增页面：YouTube 频道管理
-
-**新文件**: `src/pages/YouTubeFeeds.tsx`
-
-参照 `RssFeeds.tsx` 的结构，核心差异：
-
-**添加流程：**
-1. 输入框：用户粘贴 YouTube 频道 URL（支持 `@handle`、`/channel/`、`/c/` 等格式）
-2. 点击"探测" → 调用 `POST /api/youtube-feeds/discover`
-3. 显示预览：频道名称 + 最近视频列表（带缩略图）
-4. 用户确认 → 调用 `POST /api/youtube-feeds` 完成添加
-
-**与 RssFeeds.tsx 相同部分：**
-- Feed 列表展示、单个删除、批量删除、空状态、i18n
-
-### 3.4 API 客户端
-
-**文件**: `src/lib/api.ts`
-
-新增：
-```typescript
-discoverYouTubeChannel(url: string): Promise<DiscoveredYouTubeChannel>
-createYouTubeFeed(data): Promise<Feed>
-deleteYouTubeFeed(id: string): Promise<void>
-batchDeleteYouTubeFeeds(ids: string[]): Promise<{ deleted: number }>
-```
-
-### 3.5 类型定义
-
-**文件**: `shared/types.ts`
-
-新增：
-```typescript
-export type DiscoveredYouTubeChannel = {
-  channelId: string;
-  feedUrl: string;
-  title: string;
-  channelUrl: string;
-  recentVideos: Array<{
-    title: string;
-    url: string;
-    thumbnailUrl: string;
-    publishedAt: string;
-  }>;
+const isYouTube = feedSourceMap.get(article.feedId) === "youtube";
+return {
+  ...base,
+  oneLiner: isYouTube
+    ? YouTubeAdapter.extractOneLiner(contentText || "", article.title)
+    : "内容过短，无法生成摘要",
+  keyInsights: [],
 };
 ```
 
 ---
 
-## 四、与 RSS 方案的关键差异
+## 四、前端实现
 
-| 维度 | RSS | YouTube |
-|------|-----|---------|
-| Feed 来源 | 用户粘贴任意 URL，后端探测 | 用户粘贴频道 URL，后端提取 channel_id |
-| 内容抓取 | Jina Reader 全文提取 | **跳过 Jina**，直接用 feed 中的描述 |
-| AI 总结 | 全文摘要（oneLiner + keyInsights） | **跳过 AI**，用视频描述或"新视频更新" |
-| 日报展示 | 完整摘要卡片 | 更新通知（标题 + 缩略图 + 链接） |
-| rss.ts 改动 | 不改 | **需要改**（按 sourceType 分支） |
-| digest.ts 改动 | 不改 | **小幅改**（YouTube 条目的 oneLiner 文案） |
+### 4.1 共享组件层
 
----
+三个订阅管理页面（Substack / RSS / YouTube）的批量操作和列表渲染逻辑高度相似，通过两个共享模块消除重复：
 
-## 五、关键文件清单
+- **`useBatchMode` hook** (`src/hooks/useBatchMode.ts`)：封装批量选择/全选/删除的状态管理和 API 调用，各页面只需传入 `deleteFn` 和 `onDeleted` 回调。
+- **`FeedListSection` 组件** (`src/components/FeedListSection.tsx`)：封装"已订阅 · N"标题行、批量操作栏、加载骨架、空状态卡片和订阅项卡片（含单项删除确认对话框）。三页间的差异通过 props 注入：`renderAvatarFallback`（头像回退）、`showAuthor`（YouTube 不显示作者）、`emptyText`。
 
-| 文件 | 操作 |
-|------|------|
-| `server/src/services/youtube-discovery.ts` | **新建** — 频道探测服务 |
-| `server/src/routes/youtube-feeds.ts` | **新建** — YouTube 频道 CRUD 路由 |
-| `server/src/services/rss.ts` | 修改 — syncFeed 按 sourceType 分支，YouTube 跳过 Jina |
-| `server/src/services/digest.ts` | 修改 — YouTube 条目 oneLiner 文案调整 |
-| `server/src/index.ts` | 修改 — 注册新路由 |
-| `shared/types.ts` | 修改 — 新增 DiscoveredYouTubeChannel |
-| `src/pages/YouTubeFeeds.tsx` | **新建** — YouTube 频道管理页面 |
-| `src/components/AppShell.tsx` | 修改 — manageNav 加 YouTube 入口 |
-| `src/App.tsx` | 修改 — 加路由 |
-| `src/lib/api.ts` | 修改 — 新增 YouTube API 函数 |
-| `src/lib/types.ts` | 修改 — re-export DiscoveredYouTubeChannel |
-| `server/src/db/schema.ts` | **不改** — sourceType 已支持 youtube |
-| `server/src/db/index.ts` | **不改** — 无需数据库迁移 |
-| `server/src/services/summarizer.ts` | **不改** |
+### 4.2 管理入口与路由
+在 `src/components/AppShell.tsx` 中新增了 YouTube 管理入口，引入新页面 `YouTubeFeeds.tsx` 专门处理 YouTube 频道的发现和订阅管理。
+
+### 4.3 统一的 API 客户端 (`api.ts`)
+新增针对 YouTube 端点的方法封装：`discoverYouTubeChannel`, `createYouTubeFeed`, `fetchYouTubeFeeds`, 并复用 `deleteFeed` 进行管理。
+
+### 4.4 共享类型定义 (`shared/types.ts`)
+引入 `DiscoveredYouTubeChannel` 以支持从探测到确认订阅全链路的强类型验证。
 
 ---
 
-## 六、验证方案
+## 五、关键文件分布总览
 
-1. **频道探测**: 测试多种 URL 格式
-   - `https://www.youtube.com/@GoogleDevelopers`
-   - `https://www.youtube.com/channel/UC_x5XG1OV2P6uZZ5FSM9Ttw`
-   - `https://www.youtube.com/watch?v=dQw4w9WgXcQ`（从视频页提取频道）
-
-2. **添加 & 同步**: 确认添加后视频条目正确存入 articles 表，coverImageUrl 有缩略图
-
-3. **日报整合**: 生成日报，确认 YouTube 视频和 Substack/RSS 文章一起出现，YouTube 条目显示"更新通知"样式
-
-4. **不触发 Jina**: 确认同步 YouTube 频道时没有调用 Jina Reader，不浪费额度
-
-5. **页面功能**: 列表展示、删除、批量删除正常工作
+| 模块 | 文件 | 核心作用 |
+|------|------|----------|
+| **共享类型** | `shared/types.ts` | 前后端共用的领域类型 (Feed, Digest, DigestItem...) |
+| **适配器层** | `server/src/sources/types.ts` | `SourceAdapter` 接口契约 + `SyncItemContent` |
+| | `server/src/sources/factory.ts` | 工厂：按 sourceType 分发适配器单例 |
+| | `server/src/sources/adapters/youtube-adapter.ts` | YouTube 探测、建稿、内容提取、oneLiner |
+| | `server/src/sources/adapters/substack-adapter.ts` | Substack 探测、建稿、内容提取 |
+| | `server/src/sources/adapters/rss-adapter.ts` | RSS 探测、建稿、内容提取 |
+| **服务层** | `server/src/services/youtube-discovery.ts` | 多策略 HTML 抓取，解析 channelId |
+| | `server/src/services/content-extractor.ts` | Jina Reader 限流 + Turndown HTML→Markdown |
+| | `server/src/services/rss.ts` | 同步调度器：调 adapter.extractSyncItemContent |
+| | `server/src/services/digest.ts` | 日报生成 + AI 摘要编排 |
+| **路由层** | `server/src/routes/source-feed-router.ts` | 路由工厂：discover / create / list 模板 |
+| | `server/src/routes/youtube-feeds.ts` | YouTube 路由配置（Zod schema → 调工厂） |
+| | `server/src/routes/rss-feeds.ts` | RSS 路由配置（同上） |
+| **定时任务** | `server/src/cron/scheduler.ts` | 每 4h 同步 + 每日定时生成日报 |
+| **前端共享** | `src/hooks/useBatchMode.ts` | 批量选择/删除状态管理 hook |
+| | `src/components/FeedListSection.tsx` | 订阅列表 + 批量操作 + 删除确认 |
+| **前端页面** | `src/pages/YouTubeFeeds.tsx` | YouTube 频道发现与管理 |
+| | `src/components/AppShell.tsx` | 侧边导航（含 YouTube 入口） |
 
 ---
 
-## 七、后续演进（不在本次范围）
+## 六、后续演进机会
 
-- **Gemini 视频总结**: 引入 `GEMINI_API_KEY`，对 YouTube 视频调用 Gemini 1.5 Flash 生成内容摘要
-- **多用户系统**: 新增 users、user_feeds 表，内容层（feeds/articles）共享，订阅和日报按用户隔离
-- **YouTube 字幕提取**: 如果未来有可靠的字幕获取方案，可复用现有 AI 管线做总结
+### 已评估，当前方案可行
 
-————————————————————————————————
-## 额外的调查发现
-「取第一段」规则大约覆盖 60-70% 的频道，但有三类明显失败：
+以下事项经过代码审计和讨论，结论是当前实现合理，暂不修改：
 
-全是链接（老高、Academy of Ideas）— 第一段就是推广链接
-空描述（小Lin说部分视频、BBC 部分视频）
-第一段是广告（Kurzgesagt）
+1. **parseURL 无 retry**：`rss.ts` 的 `rssParser.parseURL` 是单次调用，失败返回 0。但 `syncAllFeeds` 有 try/catch 容错且每 4 小时轮询，天然形成 retry。除非遇到持续性网络问题，否则不影响数据完整性。
+2. **digest.ts 仍有 isYouTube 特判**：这是"摘要降级策略"（内容太短时给用户看什么），不是"内容提取策略"。前者属于日报编排逻辑，不属于源适配器职责。如果未来第 3 个源类型也需要特殊降级，再抽象到 adapter 契约中。
+3. **feeds.ts import 写死 substack**：`/api/feeds/import` 是 Substack 阅读列表专用的导入端点，URL 规范化逻辑也是 Substack 特有的。如果未来需要通用导入（如 OPML），应新建端点而非改造此端点。
+4. **SourceAdapter 接口用 unknown**：`discover` 返回 `Promise<unknown>`，`createFeedDraft` 接受 `Record<string, unknown>`——这是刻意的取舍。三种适配器的输入输出类型完全不同，加泛型会传染到 factory 和 route 的每一处使用。当前方案：接口层宽松保多态，Zod 保运行时安全，具体适配器类各自收窄。
 
-所以需要更健壮的提取逻辑：
+### 未来可做
 
-function extractOneLiner(description: string, videoTitle: string): string {
-  if (!description?.trim()) return videoTitle;  // 空描述 → 用标题
-
-  // 按段落拆分，找第一个「有意义」的段落
-  const paragraphs = description.split(/\n\s*\n/);
-  for (const p of paragraphs) {
-    const cleaned = p
-      .replace(/https?:\/\/\S+/g, "")     // 去链接
-      .replace(/#\S+/g, "")               // 去 hashtag
-      .replace(/【[^】]*】/g, "")           // 去【订阅】【加入】
-      .trim();
-    // 剩余内容超过 15 字才算有效段落
-    if (cleaned.length > 15) {
-      return cleaned.slice(0, 100);
-    }
-  }
-
-  return videoTitle;  // 所有段落都是噪音 → 用标题兜底
-}
+5. **多模态视频摘要**：引入 Gemini 等多模态模型，对 YouTube 视频内容生成结构化摘要，替代当前的"更新通知"模式。
+6. **DB 迁移系统**：将 `db/index.ts` 中的 raw SQL 建表逻辑迁移到 Drizzle Kit 迁移系统，随着 schema 演进降低维护成本。

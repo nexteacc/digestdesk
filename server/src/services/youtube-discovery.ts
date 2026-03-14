@@ -1,0 +1,227 @@
+import RssParser from "rss-parser";
+import type { DiscoveredYouTubeChannel } from "../../../shared/types.js";
+import { AppError } from "../sources/app-error.js";
+
+const rssParser = new RssParser({
+  timeout: 10000,
+  headers: {
+    "User-Agent": "DigestDesk/1.0 (YouTube Discovery)",
+  },
+});
+
+const YOUTUBE_HOSTS = new Set([
+  "youtube.com",
+  "www.youtube.com",
+  "m.youtube.com",
+  "music.youtube.com",
+  "youtu.be",
+  "www.youtu.be",
+]);
+
+const YOUTUBE_CHANNEL_ID_REGEX = /^UC[a-zA-Z0-9_-]{22}$/;
+
+export class YouTubeDiscoveryError extends AppError {
+  constructor(message: string, status: number, code: string) {
+    super(message, status, code);
+    this.name = "YouTubeDiscoveryError";
+  }
+}
+
+function isYouTubeHostname(hostname: string): boolean {
+  return YOUTUBE_HOSTS.has(hostname.toLowerCase());
+}
+
+export function buildYouTubeFeedUrl(channelId: string): string {
+  return `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
+}
+
+export function buildYouTubeChannelUrl(channelId: string): string {
+  return `https://www.youtube.com/channel/${channelId}`;
+}
+
+function normalizeInputUrl(raw: string): URL {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    throw new YouTubeDiscoveryError("请输入 YouTube 频道链接", 400, "INVALID_INPUT");
+  }
+
+  const candidate = /^https?:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate);
+  } catch {
+    throw new YouTubeDiscoveryError("请输入有效的 YouTube URL", 400, "INVALID_URL");
+  }
+
+  if (!isYouTubeHostname(parsed.hostname)) {
+    throw new YouTubeDiscoveryError("请输入有效的 YouTube URL", 400, "INVALID_YOUTUBE_HOST");
+  }
+
+  return parsed;
+}
+
+/**
+ * 从 YouTube URL 探测频道信息，返回频道预览数据
+ */
+export async function discoverYouTubeChannel(url: string): Promise<DiscoveredYouTubeChannel> {
+  const parsed = normalizeInputUrl(url);
+  const targetUrl = parsed.href;
+
+  // 提取 channelId
+  const channelId = await extractChannelId(targetUrl);
+  if (!channelId) {
+    throw new YouTubeDiscoveryError("无法从该 URL 提取 YouTube 频道信息", 422, "CHANNEL_ID_NOT_FOUND");
+  }
+
+  const channelUrl = buildYouTubeChannelUrl(channelId);
+  const feedUrl = buildYouTubeFeedUrl(channelId);
+
+  // 获取频道 logo
+  const logoUrl = await fetchChannelLogo(channelUrl);
+
+  // 解析 RSS feed 获取频道名称和最近视频
+  let feed;
+  try {
+    feed = await rssParser.parseURL(feedUrl);
+  } catch {
+    throw new YouTubeDiscoveryError(
+      "无法读取该频道订阅源，请稍后重试",
+      502,
+      "YOUTUBE_FEED_UNAVAILABLE",
+    );
+  }
+
+  const title = feed.title || "未知频道";
+  const recentVideos = (feed.items || []).slice(0, 5).map((item) => {
+    const videoId = extractVideoId(item.link || "");
+    return {
+      title: item.title || "无标题",
+      url: item.link || "",
+      thumbnailUrl: videoId
+        ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+        : "",
+      publishedAt: item.isoDate || item.pubDate || "",
+    };
+  });
+
+  return {
+    channelId,
+    feedUrl,
+    title,
+    channelUrl,
+    logoUrl,
+    recentVideos,
+  };
+}
+
+/**
+ * 从各种 YouTube URL 格式中提取 channelId
+ */
+async function extractChannelId(url: string): Promise<string | null> {
+  const parsed = new URL(url);
+  const pathname = parsed.pathname;
+
+  // youtube.com/channel/UCxxxxxx → 直接提取
+  const channelMatch = pathname.match(/\/channel\/(UC[\w-]{22})/);
+  if (channelMatch) {
+    return channelMatch[1];
+  }
+
+  // youtube.com/@handle, /c/ChannelName, /watch?v=VIDEO_ID → 抓取页面 HTML
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      },
+      redirect: "follow",
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!response.ok) {
+      if (response.status >= 500) {
+        throw new YouTubeDiscoveryError(
+          "YouTube 服务暂时不可用，请稍后重试",
+          502,
+          "YOUTUBE_UPSTREAM_ERROR",
+        );
+      }
+      return null;
+    }
+
+    const html = await response.text();
+
+    // 策略 1: <meta itemprop="channelId" content="UCxxx">
+    const metaMatch = html.match(
+      /<meta\s+itemprop=["']channelId["']\s+content=["'](UC[\w-]+)["']/
+    );
+    if (metaMatch && YOUTUBE_CHANNEL_ID_REGEX.test(metaMatch[1])) return metaMatch[1];
+
+    // 策略 2: <meta property="og:url"> 中的 /channel/UC
+    const ogUrlMatch = html.match(
+      /<meta\s+property=["']og:url["']\s+content=["'][^"']*\/channel\/(UC[\w-]+)["']/
+    );
+    if (ogUrlMatch && YOUTUBE_CHANNEL_ID_REGEX.test(ogUrlMatch[1])) return ogUrlMatch[1];
+
+    // 策略 3: browseId":"UCxxx" 正则兜底
+    const browseIdMatch = html.match(/browseId":"(UC[\w-]+)"/);
+    if (browseIdMatch && YOUTUBE_CHANNEL_ID_REGEX.test(browseIdMatch[1])) return browseIdMatch[1];
+  } catch (err) {
+    if (err instanceof YouTubeDiscoveryError) {
+      throw err;
+    }
+    console.warn(`[youtube] 抓取页面失败:`, err);
+    throw new YouTubeDiscoveryError(
+      "无法访问 YouTube 页面，请稍后重试",
+      502,
+      "YOUTUBE_PAGE_FETCH_FAILED",
+    );
+  }
+
+  return null;
+}
+
+/**
+ * 从频道页面获取高清头像
+ */
+async function fetchChannelLogo(channelUrl: string): Promise<string> {
+  try {
+    const response = await fetch(channelUrl, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      },
+      redirect: "follow",
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!response.ok) return "";
+
+    const html = await response.text();
+    const ogImageMatch = html.match(
+      /<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/
+    );
+    if (ogImageMatch) return ogImageMatch[1];
+  } catch (err) {
+    console.warn(`[youtube] 获取频道头像失败:`, err);
+  }
+  return "";
+}
+
+/**
+ * 从视频 URL 中提取 videoId
+ */
+function extractVideoId(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes("youtu.be")) {
+      return parsed.pathname.slice(1);
+    }
+    return parsed.searchParams.get("v");
+  } catch {
+    return null;
+  }
+}

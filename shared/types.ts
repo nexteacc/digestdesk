@@ -85,6 +85,20 @@ export type DiscoveredFeed = {
   siteUrl: string;
 };
 
+export type DiscoveredYouTubeChannel = {
+  channelId: string;
+  feedUrl: string;
+  title: string;
+  logoUrl?: string;
+  channelUrl: string;
+  recentVideos: Array<{
+    title: string;
+    url: string;
+    thumbnailUrl: string;
+    publishedAt: string;
+  }>;
+};
+
 export type Settings = {
   digestTime: string;
   timezone: string;
