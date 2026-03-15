@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Newspaper, PanelLeft, Maximize, Minimize, Settings as SettingsIcon } from "lucide-react";
+import { Newspaper, PanelLeft, Maximize, Minimize, Settings as SettingsIcon, Github } from "lucide-react";
 import { useI18n } from "@/contexts/I18nContext";
 import { useZenMode } from "@/hooks/useZenMode";
 
@@ -84,6 +84,16 @@ export default function AppShell({ children }: PropsWithChildren) {
             </h1>
 
             <div className="flex items-center gap-1 rounded-full border border-border bg-card/70 p-1">
+              <a
+                href="https://github.com/nexteacc/digestdesk"
+                target="_blank"
+                rel="noreferrer"
+                className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                title={text("开源代码", "Open Source")}
+              >
+                <Github className="h-4 w-4" />
+              </a>
+              <div className="h-4 w-[1px] bg-border mx-0.5" />
               <Button
                 variant={locale === "zh" ? "default" : "ghost"}
                 size="sm"
