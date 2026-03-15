@@ -2,6 +2,8 @@
   "name": "substack-digest-server",
   "private": true,
   "version": "0.0.0",
+  "license": "MIT",
+  "author": "nexteacc",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
