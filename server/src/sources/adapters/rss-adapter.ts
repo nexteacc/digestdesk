@@ -6,6 +6,11 @@ import type { FeedDraft, SourceAdapter, SyncItemContent } from "../types.js";
 export class RssAdapter implements SourceAdapter {
   readonly sourceType = "rss" as const;
 
+  private asRecord(value: unknown): Record<string, unknown> {
+    if (value && typeof value === "object") return value as Record<string, unknown>;
+    return {};
+  }
+
   async discover(rawUrl: string) {
     const trimmed = rawUrl.trim();
     if (!trimmed) {
@@ -48,13 +53,17 @@ export class RssAdapter implements SourceAdapter {
   ): Promise<SyncItemContent> {
     let contentMarkdown = await fetchMarkdown(articleUrl);
     if (!contentMarkdown) {
+      const itemRecord = this.asRecord(item);
       const contentHtml =
-        (item as any)["content:encoded"] || (item as any).content || "";
+        (typeof itemRecord["content:encoded"] === "string" ? itemRecord["content:encoded"] : "") ||
+        (typeof itemRecord.content === "string" ? itemRecord.content : "");
       contentMarkdown = contentHtml ? htmlToMarkdown(contentHtml) : "";
     }
+    const enclosure = this.asRecord(this.asRecord(item).enclosure);
+    const coverImageUrl = typeof enclosure.url === "string" ? enclosure.url : null;
     return {
       contentMarkdown,
-      coverImageUrl: (item as any).enclosure?.url || null,
+      coverImageUrl,
     };
   }
 }

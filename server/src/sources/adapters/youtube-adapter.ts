@@ -34,6 +34,11 @@ function pickTextValue(value: unknown): string | null {
 export class YouTubeAdapter implements SourceAdapter {
   readonly sourceType = "youtube" as const;
 
+  private asRecord(value: unknown): Record<string, unknown> {
+    if (value && typeof value === "object") return value as Record<string, unknown>;
+    return {};
+  }
+
   async discover(rawUrl: string) {
     try {
       return await discoverYouTubeChannel(rawUrl);
@@ -93,35 +98,48 @@ export class YouTubeAdapter implements SourceAdapter {
   }
 
   private getDescription(item: Record<string, unknown>): string {
-    const mediaGroup = (item as any).mediaGroup;
+    const itemRecord = this.asRecord(item);
+    const mediaGroup = this.asRecord(itemRecord.mediaGroup);
     const fromMediaGroup = pickTextValue(mediaGroup?.["media:description"]);
     if (fromMediaGroup) return fromMediaGroup;
 
-    const fromRootMedia = pickTextValue((item as any)["media:description"]);
+    const fromRootMedia = pickTextValue(itemRecord["media:description"]);
     if (fromRootMedia) return fromRootMedia;
 
-    return (item as any).contentSnippet || (item as any).content || "";
+    if (typeof itemRecord.contentSnippet === "string") return itemRecord.contentSnippet;
+    if (typeof itemRecord.content === "string") return itemRecord.content;
+    return "";
   }
 
   private extractThumbnail(
     item: Record<string, unknown>,
     videoUrl: string,
   ): string | null {
-    try {
-      const mediaGroup = (item as any).mediaGroup;
-      const thumb = mediaGroup?.["media:thumbnail"];
-      if (thumb?.$?.url) return thumb.$.url;
-      if (Array.isArray(thumb) && thumb[0]?.$?.url) return thumb[0].$.url;
+    const itemRecord = this.asRecord(item);
+    const mediaGroup = this.asRecord(itemRecord.mediaGroup);
+    const thumbUrl =
+      this.extractThumbUrl(mediaGroup["media:thumbnail"]) ||
+      this.extractThumbUrl(itemRecord["media:thumbnail"]);
+    if (thumbUrl) return thumbUrl;
 
-      const rootThumb = (item as any)["media:thumbnail"];
-      if (rootThumb?.$?.url) return rootThumb.$.url;
-      if (Array.isArray(rootThumb) && rootThumb[0]?.$?.url) return rootThumb[0].$.url;
-    } catch {}
     try {
       const url = new URL(videoUrl);
       const videoId = url.searchParams.get("v");
       if (videoId) return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
-    } catch {}
+    } catch {
+      return null;
+    }
+    return null;
+  }
+
+  private extractThumbUrl(value: unknown): string | null {
+    const direct = this.asRecord(this.asRecord(value).$).url;
+    if (typeof direct === "string" && direct) return direct;
+    if (Array.isArray(value) && value.length > 0) {
+      const first = this.asRecord(value[0]);
+      const nested = this.asRecord(first.$).url;
+      if (typeof nested === "string" && nested) return nested;
+    }
     return null;
   }
 }

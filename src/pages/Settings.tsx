@@ -49,7 +49,7 @@ export default function SettingsPage() {
         setHour(h);
         setMinute(m);
         setTimezone(settings.timezone);
-      } catch (err) {
+      } catch {
         toast.error(text("加载设置失败", "Failed to load settings"));
       } finally {
         setLoading(false);

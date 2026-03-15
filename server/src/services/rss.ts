@@ -18,6 +18,21 @@ const rssParser = new RssParser({
 
 let _syncPromise: Promise<void> | null = null;
 
+function normalizeFeedUrl(url: string): string {
+  return url
+    .trim()
+    .replace(/^`+|`+$/g, "")
+    .replace(/[)\]:;.,]+$/g, "");
+}
+
+function pickString(value: unknown): string | null {
+  if (typeof value === "string") {
+    const v = value.trim();
+    return v || null;
+  }
+  return null;
+}
+
 export async function syncAllFeeds(): Promise<void> {
   if (_syncPromise) {
     console.log("[rss] A sync job is already in progress, sharing existing promise...");
@@ -56,13 +71,14 @@ export async function syncFeed(feedId: string): Promise<number> {
     return 0;
   }
 
-  console.log(`[rss] Syncing: ${feed.name} (${feed.feedUrl})`);
+  const effectiveFeedUrl = normalizeFeedUrl(feed.feedUrl);
+  console.log(`[rss] Syncing: ${feed.name} (${effectiveFeedUrl})`);
 
   let parsed;
   try {
-    parsed = await rssParser.parseURL(feed.feedUrl);
+    parsed = await rssParser.parseURL(effectiveFeedUrl);
   } catch (err) {
-    console.error(`[rss] Failed to fetch ${feed.feedUrl}:`, err);
+    console.error(`[rss] Failed to fetch ${effectiveFeedUrl}:`, err);
     return 0;
   }
 
@@ -70,6 +86,7 @@ export async function syncFeed(feedId: string): Promise<number> {
   let newCount = 0;
 
   for (const item of parsed.items || []) {
+    const itemRecord = item as unknown as Record<string, unknown>;
     const articleUrl = item.link || "";
     const guid = item.guid || articleUrl;
 
@@ -90,7 +107,7 @@ export async function syncFeed(feedId: string): Promise<number> {
       id: nanoid(),
       feedId: feed.id,
       title: item.title || "无标题",
-      author: item.creator || (item as any)["dc:creator"] || feed.authorName || null,
+      author: pickString(item.creator) || pickString(itemRecord["dc:creator"]) || feed.authorName || null,
       url: articleUrl,
       guid,
       publishedAt: item.isoDate || item.pubDate || now,

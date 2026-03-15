@@ -8,6 +8,13 @@ const rssParser = new RssParser({
   },
 });
 
+type ParsedFeed = {
+  title?: string;
+  description?: string;
+  image?: { url?: string };
+  items?: Array<{ creator?: string; author?: string }>;
+};
+
 export async function discoverFeed(url: string): Promise<DiscoveredFeed> {
   let targetUrl = url.trim();
   if (!/^https?:\/\//i.test(targetUrl)) {
@@ -18,7 +25,7 @@ export async function discoverFeed(url: string): Promise<DiscoveredFeed> {
   try {
     const feed = await rssParser.parseURL(targetUrl);
     return mapFeedToDiscovered(feed, targetUrl, targetUrl);
-  } catch (err) {
+  } catch {
     // console.log(`[discovery] Direct parse failed for ${targetUrl}, trying HTML discovery...`);
   }
 
@@ -35,7 +42,7 @@ export async function discoverFeed(url: string): Promise<DiscoveredFeed> {
         return mapFeedToDiscovered(feed, feedUrl, targetUrl);
       }
     }
-  } catch (err) {
+  } catch {
     // console.log(`[discovery] HTML discovery failed for ${targetUrl}`);
   }
 
@@ -48,7 +55,7 @@ export async function discoverFeed(url: string): Promise<DiscoveredFeed> {
     try {
       const feed = await rssParser.parseURL(testUrl);
       return mapFeedToDiscovered(feed, testUrl, baseUrl);
-    } catch (err) {
+    } catch {
       // ignore
     }
   }
@@ -62,7 +69,7 @@ function extractFeedUrlFromHtml(html: string, baseUrl: string): string | null {
   const match = html.match(regex);
   
   if (match && match[2]) {
-    let href = match[2];
+    const href = match[2];
     if (href.startsWith("/")) {
       const url = new URL(baseUrl);
       return `${url.origin}${href}`;
@@ -75,7 +82,7 @@ function extractFeedUrlFromHtml(html: string, baseUrl: string): string | null {
   return null;
 }
 
-function mapFeedToDiscovered(feed: any, feedUrl: string, siteUrl: string): DiscoveredFeed {
+function mapFeedToDiscovered(feed: ParsedFeed, feedUrl: string, siteUrl: string): DiscoveredFeed {
   return {
     feedUrl,
     siteUrl,

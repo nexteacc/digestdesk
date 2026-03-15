@@ -17,6 +17,13 @@ interface SourceFeedRouterOptions {
   duplicateError?: string;
 }
 
+function sanitizeUrl(url: string): string {
+  return url
+    .trim()
+    .replace(/^`+|`+$/g, "")
+    .replace(/[)\]:;.,]+$/g, "");
+}
+
 export function createSourceFeedRouter(opts: SourceFeedRouterOptions): Router {
   const router = Router();
   const {
@@ -54,9 +61,14 @@ export function createSourceFeedRouter(opts: SourceFeedRouterOptions): Router {
     const db = getDb();
 
     try {
-      const draft = await Promise.resolve(
+      const rawDraft = await Promise.resolve(
         adapter.createFeedDraft(parsed.data as Record<string, unknown>),
       );
+      const draft = {
+        ...rawDraft,
+        publicationUrl: sanitizeUrl(rawDraft.publicationUrl),
+        feedUrl: sanitizeUrl(rawDraft.feedUrl),
+      };
 
       const [existing] = await db
         .select()

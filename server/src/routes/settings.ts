@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "../db/index.js";
 import { settings } from "../db/schema.js";
