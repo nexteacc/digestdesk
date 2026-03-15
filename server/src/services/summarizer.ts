@@ -17,6 +17,7 @@ function getModel() {
   const provider = createOpenAICompatible({
     name: "ai-provider",
     baseURL,
+    supportsStructuredOutputs: true,
     headers: {
       Authorization: `Bearer ${apiKey}`,
     },
