@@ -156,13 +156,18 @@ export default function AppShell({ children }: PropsWithChildren) {
             <div className="rounded-lg border border-border bg-card/70 backdrop-blur p-2 shadow-sm">
               <div 
                 onClick={() => setIsCollapsed(!isCollapsed)}
-                className="flex items-center justify-between cursor-pointer hover:bg-accent/50 rounded-md transition-colors px-2 py-2"
+                className={cn(
+                  "flex items-center cursor-pointer hover:bg-accent/50 rounded-md transition-colors px-3 py-2",
+                  isCollapsed ? "justify-center" : "justify-between"
+                )}
                 title={isCollapsed ? text("展开导航", "Expand navigation") : text("折叠导航", "Collapse navigation")}
               >
                 {!isCollapsed && (
                   <span className="text-xs tracking-[0.18em] uppercase text-muted-foreground">{text("导航", "Navigation")}</span>
                 )}
-                <PanelLeft className={cn("h-4 w-4 text-muted-foreground transition-transform duration-300", isCollapsed && "mx-auto")} />
+                <div className="flex h-4 w-4 shrink-0 items-center justify-center">
+                  <PanelLeft className={cn("h-4 w-4 text-muted-foreground transition-transform duration-300")} />
+                </div>
               </div>
               
               <nav className="mt-2 grid gap-1">
@@ -175,13 +180,15 @@ export default function AppShell({ children }: PropsWithChildren) {
                       <Button
                         variant={active ? "secondary" : "ghost"}
                         className={cn(
-                          "w-full gap-2 transition-all duration-300",
+                          "w-full transition-all duration-300",
                           active && "border border-border",
-                          isCollapsed ? "justify-center px-0" : "justify-start"
+                          isCollapsed ? "justify-center px-0" : "justify-start px-3 gap-3"
                         )}
                         title={isCollapsed ? item.label : ""}
                       >
-                        {item.icon}
+                        <div className="flex h-4 w-4 shrink-0 items-center justify-center">
+                          {item.icon}
+                        </div>
                         {!isCollapsed && <span>{item.label}</span>}
                       </Button>
                     </Link>
@@ -190,7 +197,7 @@ export default function AppShell({ children }: PropsWithChildren) {
               </nav>
               
               {!isCollapsed && (
-                <div className="mt-4 text-[10px] tracking-[0.2em] uppercase text-muted-foreground px-2 py-1">
+                <div className="mt-4 text-[10px] tracking-[0.2em] uppercase text-muted-foreground px-3 py-1">
                   {text("管理", "Manage")}
                 </div>
               )}
@@ -205,13 +212,15 @@ export default function AppShell({ children }: PropsWithChildren) {
                       <Button
                         variant={active ? "secondary" : "ghost"}
                         className={cn(
-                          "w-full gap-2 transition-all duration-300",
+                          "w-full transition-all duration-300",
                           active && "border border-border",
-                          isCollapsed ? "justify-center px-0" : "justify-start"
+                          isCollapsed ? "justify-center px-0" : "justify-start px-3 gap-3"
                         )}
                         title={isCollapsed ? item.label : ""}
                       >
-                        {item.icon}
+                        <div className="flex h-4 w-4 shrink-0 items-center justify-center">
+                          {item.icon}
+                        </div>
                         {!isCollapsed && <span>{item.label}</span>}
                       </Button>
                     </Link>

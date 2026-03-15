@@ -102,4 +102,5 @@ export type DiscoveredYouTubeChannel = {
 export type Settings = {
   digestTime: string;
   timezone: string;
+  digestLanguage: "zh" | "en";
 };

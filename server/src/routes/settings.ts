@@ -7,6 +7,7 @@ import { restartDigestJob } from "../cron/scheduler.js";
 const updateSettingsSchema = z.object({
   digestTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "时间格式应为 HH:mm"),
   timezone: z.string().min(1, "时区不能为空"),
+  digestLanguage: z.enum(["zh", "en"]).default("zh"),
 });
 
 export const settingsRouter = Router();
@@ -24,6 +25,7 @@ settingsRouter.get("/", async (_req, res) => {
   res.json({
     digestTime: config.digest_time || "08:00",
     timezone: config.timezone || "Asia/Shanghai",
+    digestLanguage: config.digest_language || "zh",
   });
 });
 
@@ -34,7 +36,7 @@ settingsRouter.post("/", async (req, res) => {
     return;
   }
 
-  const { digestTime, timezone } = parsed.data;
+  const { digestTime, timezone, digestLanguage } = parsed.data;
   const db = getDb();
 
   try {
@@ -43,6 +45,9 @@ settingsRouter.post("/", async (req, res) => {
     
     await db.insert(settings).values({ key: "timezone", value: timezone })
       .onConflictDoUpdate({ target: settings.key, set: { value: timezone } });
+
+    await db.insert(settings).values({ key: "digest_language", value: digestLanguage })
+      .onConflictDoUpdate({ target: settings.key, set: { value: digestLanguage } });
 
     // 关键点：重启定时任务以应用新时间
     restartDigestJob(digestTime, timezone);

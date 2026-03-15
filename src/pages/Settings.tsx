@@ -40,6 +40,7 @@ export default function SettingsPage() {
   const [hour, setHour] = useState("08");
   const [minute, setMinute] = useState("00");
   const [timezone, setTimezone] = useState("Asia/Shanghai");
+  const [digestLanguage, setDigestLanguage] = useState<"zh" | "en">("zh");
 
   useEffect(() => {
     async function loadSettings() {
@@ -49,6 +50,7 @@ export default function SettingsPage() {
         setHour(h);
         setMinute(m);
         setTimezone(settings.timezone);
+        setDigestLanguage(settings.digestLanguage || "zh");
       } catch {
         toast.error(text("加载设置失败", "Failed to load settings"));
       } finally {
@@ -62,7 +64,7 @@ export default function SettingsPage() {
     setSaving(true);
     const digestTime = `${hour}:${minute}`;
     try {
-      await api.updateSettings({ digestTime, timezone });
+      await api.updateSettings({ digestTime, timezone, digestLanguage });
       toast.success(text("设置已保存", "Settings saved"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : text("保存失败", "Failed to save"));
@@ -95,11 +97,37 @@ export default function SettingsPage() {
 
         <Card className="border shadow-sm overflow-hidden bg-card/50">
           <div className="p-8 space-y-10">
-            {/* Delivery Time */}
+            {/* Digest Language */}
             <div className="flex items-center justify-between gap-8">
-              <label className="text-sm font-medium text-foreground shrink-0">
-                {text("日报生成时间", "Digest Time")}
-              </label>
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-foreground">
+                  {text("日报语言", "Digest Language")}
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  {text("AI 总结生成的语言", "AI generation language")}
+                </p>
+              </div>
+              <Select value={digestLanguage} onValueChange={(v) => setDigestLanguage(v as "zh" | "en")}>
+                <SelectTrigger className="w-[200px] h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="zh">{text("简体中文", "Simplified Chinese")}</SelectItem>
+                  <SelectItem value="en">{text("English", "English")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Delivery Time */}
+            <div className="flex items-center justify-between gap-8 pt-6 border-t border-border/50">
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-foreground shrink-0">
+                  {text("日报生成时间", "Digest Time")}
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  {text("每日自动生成日报的时间", "Auto-generation time")}
+                </p>
+              </div>
               <div className="flex items-center gap-2 bg-secondary/30 p-1 rounded-lg border border-border/50">
                 <Select value={hour} onValueChange={setHour}>
                   <SelectTrigger className="w-[64px] h-8 border-none bg-transparent hover:bg-background/80 font-bold text-base transition-colors focus:ring-0">
@@ -126,24 +154,27 @@ export default function SettingsPage() {
             </div>
 
             {/* Timezone */}
-            <div className="flex items-center justify-between gap-8">
-              <label className="text-sm font-medium text-foreground shrink-0">
-                {text("所在时区", "Timezone")}
-              </label>
-              <div className="w-[220px]">
-                <Select value={timezone} onValueChange={setTimezone}>
-                  <SelectTrigger className="w-full h-9 border border-border bg-background hover:bg-secondary/20 transition-colors rounded-md px-3 text-sm focus:ring-1 focus:ring-primary/20">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TIMEZONES.map((tz) => (
-                      <SelectItem key={tz.value} value={tz.value} className="text-sm">
-                        {tz.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <div className="flex items-center justify-between gap-8 pt-6 border-t border-border/50">
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-foreground">
+                  {text("所在时区", "Timezone")}
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  {text("日报生成的基准时区", "Base timezone for daily digest")}
+                </p>
               </div>
+              <Select value={timezone} onValueChange={setTimezone}>
+                <SelectTrigger className="w-[200px] h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIMEZONES.map((tz) => (
+                    <SelectItem key={tz.value} value={tz.value}>
+                      {tz.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Action */}

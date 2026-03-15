@@ -2,7 +2,7 @@ import { nanoid } from "nanoid";
 import { eq, and, gte, lt } from "drizzle-orm";
 import pLimit from "p-limit";
 import { getDb } from "../db/index.js";
-import { feeds, articles, digests, digestItems } from "../db/schema.js";
+import { feeds, articles, digests, digestItems, settings } from "../db/schema.js";
 import { summarizeArticle } from "./summarizer.js";
 import { YouTubeAdapter } from "../sources/adapters/youtube-adapter.js";
 
@@ -19,6 +19,10 @@ export function generateDaily(date?: string): Promise<string> {
 async function _generateDailyCore(date?: string): Promise<string> {
   const db = getDb();
   
+  // 获取语言设置
+  const rows = await db.select().from(settings).where(eq(settings.key, "digest_language"));
+  const language = (rows[0]?.value as "zh" | "en") || "zh";
+
   const baseTime = date ? new Date(date) : new Date();
   
   const dateLabel = baseTime.toISOString().slice(0, 10);
@@ -33,14 +37,14 @@ async function _generateDailyCore(date?: string): Promise<string> {
 
   if (existing) {
     console.log(`[digest] Daily for ${dateLabel} already exists, regenerating...`);
-    return generateWithId(existing.id, dateLabel, startTime, endTime);
+    return generateWithId(existing.id, dateLabel, startTime, endTime, language);
   }
 
   const digestId = nanoid();
-  return generateWithId(digestId, dateLabel, startTime, endTime);
+  return generateWithId(digestId, dateLabel, startTime, endTime, language);
 }
 
-async function generateWithId(digestId: string, dateLabel: string, startTime: string, endTime: string): Promise<string> {
+async function generateWithId(digestId: string, dateLabel: string, startTime: string, endTime: string, language: "zh" | "en" = "zh"): Promise<string> {
   const db = getDb();
   
   const dayArticles = await db
@@ -63,7 +67,7 @@ async function generateWithId(digestId: string, dateLabel: string, startTime: st
     return "";
   }
 
-  console.log(`[digest] Processing ${uniqueArticles.length} unique articles`);
+  console.log(`[digest] Processing ${uniqueArticles.length} unique articles in ${language}`);
 
   const allFeeds = await db.select({ id: feeds.id, name: feeds.name, sourceType: feeds.sourceType }).from(feeds);
   const feedMap = new Map(allFeeds.map((f) => [f.id, f.name]));
@@ -99,24 +103,24 @@ async function generateWithId(digestId: string, dateLabel: string, startTime: st
         const isYouTube = feedSourceMap.get(article.feedId) === "youtube";
         return {
           ...base,
-          oneLiner: isYouTube
-            ? YouTubeAdapter.extractOneLiner(contentText || "", article.title)
-            : "内容过短，无法生成摘要",
+          oneLiner: isYouTube ? "YouTube 视频，暂无文本总结。" : "文章内容太短，无法生成总结。",
           keyInsights: [],
         };
       }
 
       try {
-        const summary = await summarizeArticle(contentText);
-        console.log(`[digest] ✓ ${article.title.slice(0, 40)}`);
+        const summary = await summarizeArticle(contentText, language);
         return {
           ...base,
           oneLiner: summary.oneLiner,
           keyInsights: summary.keyInsights,
         };
       } catch (err) {
-        console.error(`[digest] Failed to summarize article ${article.id}:`, err);
-        return { ...base, oneLiner: "摘要生成失败", keyInsights: [] };
+        return {
+          ...base,
+          oneLiner: "AI 总结生成失败。",
+          keyInsights: [],
+        };
       }
     }),
   );

@@ -305,6 +305,7 @@ export default function DailyDigest() {
         toast(text("暂无新文章，稍后再来看看", "No new articles. Check back later."));
         return;
       }
+      // @ts-ignore
       const digest = await api.fetchDigest(result.id);
       setCurrent(digest);
       const list = await api.fetchDigests("daily");
@@ -359,6 +360,7 @@ export default function DailyDigest() {
         toast(text("暂无新文章，稍后再来看看", "No new articles. Check back later."));
         return;
       }
+      // @ts-ignore
       const digest = await api.fetchDigest(result.id);
       setCurrent(digest);
       const list = await api.fetchDigests("daily");
@@ -521,7 +523,7 @@ export default function DailyDigest() {
         {!loading && !generating && !current && hasFeeds && (
           <Card className="p-10 text-center">
             <div className="text-sm text-muted-foreground">
-              {text("暂无日报内容。文章同步后会自动生成。", "No digest yet. Will be generated after syncing.")}
+              {text("暂无日报内容。文章同步后会自动生成。", "No digest yet.")}
             </div>
           </Card>
         )}

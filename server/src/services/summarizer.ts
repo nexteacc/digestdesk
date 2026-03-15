@@ -30,20 +30,37 @@ function getModel() {
 const ArticleSummarySchema = z.object({
   oneLiner: z
     .string()
-    .describe("用一个完整的、不超过30个字的短句，精准总结文章的核心结论。确保句子通顺、信息完整。"),
+    .describe("用一个完整的、不超过30个字的短句，精准总结文章的核心结论。"),
   keyInsights: z
     .array(z.string())
     .length(3)
-    .describe("3个高价值的信息点。每个点必须包含具体的数据、方法或洞察。禁止废话。"),
+    .describe("3个高价值的信息点。每个点必须包含具体的数据、方法或洞察。"),
 });
 
 export type ArticleSummary = z.infer<typeof ArticleSummarySchema>;
 
-const ARTICLE_SYSTEM_PROMPT = `你是一名专业的中文编辑，为 DigestDesk 产品工作。
-
+const PROMPTS = {
+  zh: {
+    system: `你是一名专业的中文编辑，为 DigestDesk 产品工作。
 任务要求：
 1. **语言统一**: 你的核心任务是阅读任何语言的文章，并始终以【简体中文】输出高质量的结构化摘要。
-2. **客观去噪**: 剔除客套话、情绪表达和背景铺垫，只保留核心信息。`;
+2. **客观去噪**: 剔除客套话、情绪表达和背景铺垫，只保留核心信息。`,
+    schema: {
+      oneLiner: "用一个完整的、不超过30个字的短句，精准总结文章的核心结论。确保句子通顺、信息完整。",
+      keyInsights: "3个高价值的信息点。每个点必须包含具体的数据、方法或洞察。禁止废话。",
+    }
+  },
+  en: {
+    system: `You are a professional editor working for DigestDesk.
+Task Requirements:
+1. **Language Consistency**: Your core task is to read articles in any language and always output high-quality structured summaries in 【English】.
+2. **Objective De-noising**: Remove pleasantries, emotional expressions, and background padding, keeping only the core information.`,
+    schema: {
+      oneLiner: "A complete sentence (max 20 words) that accurately summarizes the core conclusion of the article.",
+      keyInsights: "3 high-value insight points. Each point must contain specific data, methods, or insights. No fluff.",
+    }
+  }
+};
 
 function normalizeSummary(input: unknown): ArticleSummary {
   const parsed = ArticleSummarySchema.parse(input);
@@ -53,19 +70,24 @@ function normalizeSummary(input: unknown): ArticleSummary {
   };
 }
 
-export async function summarizeArticle(markdown: string): Promise<ArticleSummary> {
+export async function summarizeArticle(markdown: string, language: "zh" | "en" = "zh"): Promise<ArticleSummary> {
   const model = getModel();
-  console.log(`[summarizer] Starting AI summary... (Input length: ${markdown.length})`);
+  const promptConfig = PROMPTS[language] || PROMPTS.zh;
+  
+  console.log(`[summarizer] Starting AI summary in ${language}... (Input length: ${markdown.length})`);
 
   try {
     const { object } = await generateObject({
       model,
-      system: ARTICLE_SYSTEM_PROMPT,
+      system: promptConfig.system,
       prompt: markdown,
-      schema: ArticleSummarySchema,
+      schema: z.object({
+        oneLiner: z.string().describe(promptConfig.schema.oneLiner),
+        keyInsights: z.array(z.string()).length(3).describe(promptConfig.schema.keyInsights),
+      }),
     });
     const result = normalizeSummary(object);
-    console.log(`[summarizer] AI summary complete (generateObject). One-liner: ${result.oneLiner.slice(0, 50)}...`);
+    console.log(`[summarizer] AI summary complete. One-liner: ${result.oneLiner.slice(0, 50)}...`);
     return result;
   } catch (err) {
     console.error(`[summarizer] AI summary failed:`, err instanceof Error ? err.message : err);
