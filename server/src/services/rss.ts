@@ -1,8 +1,8 @@
 import RssParser from "rss-parser";
 import { nanoid } from "nanoid";
-import { eq } from "drizzle-orm";
+import { eq, isNull, and } from "drizzle-orm";
 import { getDb } from "../db/index.js";
-import { feeds, articles } from "../db/schema.js";
+import { feeds, articles, subscriptions } from "../db/schema.js";
 import { getSourceAdapter } from "../sources/factory.js";
 import type { SourceType } from "../sources/types.js";
 
@@ -41,7 +41,11 @@ export async function syncAllFeeds(): Promise<void> {
 
   _syncPromise = (async () => {
     const db = getDb();
-    const allFeeds = await db.select().from(feeds);
+    const allFeeds = await db
+      .selectDistinct({ id: feeds.id, name: feeds.name })
+      .from(subscriptions)
+      .innerJoin(feeds, eq(subscriptions.feedId, feeds.id))
+      .where(isNull(subscriptions.endedAt));
 
     console.log(`[rss] Starting sync job for ${allFeeds.length} feeds...`);
 
@@ -61,6 +65,26 @@ export async function syncAllFeeds(): Promise<void> {
   })();
 
   return _syncPromise;
+}
+
+export async function syncUserFeeds(userId: string): Promise<void> {
+  const db = getDb();
+  const rows = await db
+    .select({ feedId: subscriptions.feedId, feedName: feeds.name })
+    .from(subscriptions)
+    .innerJoin(feeds, eq(subscriptions.feedId, feeds.id))
+    .where(and(eq(subscriptions.userId, userId), isNull(subscriptions.endedAt)));
+
+  console.log(`[rss] Starting sync job for user ${userId} with ${rows.length} feeds...`);
+
+  for (const row of rows) {
+    try {
+      await syncFeed(row.feedId);
+    } catch (err) {
+      console.error(`[rss] Error syncing ${row.feedName} for user ${userId}:`, err);
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
 }
 
 export async function syncFeed(feedId: string): Promise<number> {

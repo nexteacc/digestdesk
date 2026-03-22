@@ -1,11 +1,10 @@
 import cron from "node-cron";
-import type { ScheduledTask } from "node-cron";
+import { and, eq } from "drizzle-orm";
 import { syncAllFeeds } from "../services/rss.js";
 import { generateDaily } from "../services/digest.js";
 import { getDb } from "../db/index.js";
-import { settings } from "../db/schema.js";
-
-let digestTask: ScheduledTask | null = null;
+import { digests, userSettings, users } from "../db/schema.js";
+import { getPreviousDateLabel, getTimeZoneClock } from "../utils/timezone.js";
 
 async function runSyncJob(reason: string) {
   console.log(`[cron] ${reason}: Starting RSS sync and AI pre-processing...`);
@@ -19,55 +18,58 @@ async function runSyncJob(reason: string) {
 
 async function runDigestJob(reason: string) {
   try {
-    const today = new Date().toISOString().slice(0, 10);
-    console.log(`[cron] ${reason}: Generating daily digest for ${today}...`);
-    const digestId = await generateDaily(today);
-    console.log(`[cron] Daily digest generated successfully: ${digestId}`);
+    const db = getDb();
+    const allUsers = await db.select({ id: users.id }).from(users);
+
+    for (const user of allUsers) {
+      const rows = await db
+        .select({ key: userSettings.key, value: userSettings.value })
+        .from(userSettings)
+        .where(eq(userSettings.userId, user.id));
+      const config = Object.fromEntries(rows.map((row) => [row.key, row.value]));
+      const timezone = config.timezone || "Asia/Shanghai";
+      const digestTime = config.digest_time || "08:00";
+      const now = new Date();
+      const { dateLabel, timeLabel } = getTimeZoneClock(now, timezone);
+      const digestDate = getPreviousDateLabel(dateLabel);
+
+      if (timeLabel !== digestTime) {
+        continue;
+      }
+
+      const [existing] = await db
+        .select({ id: digests.id })
+        .from(digests)
+        .where(and(eq(digests.userId, user.id), eq(digests.type, "daily"), eq(digests.date, digestDate)));
+      if (existing) {
+        continue;
+      }
+
+      console.log(`[cron] ${reason}: Generating daily digest for user ${user.id} on ${digestDate}...`);
+      const digestId = await generateDaily(user.id, digestDate);
+      console.log(`[cron] Daily digest generated successfully for user ${user.id}: ${digestId}`);
+    }
   } catch (err) {
     console.error(`[cron] ${reason}: Daily digest generation failed or no new articles:`, err instanceof Error ? err.message : err);
   }
 }
 
-function scheduleDigestJob(timeStr: string, timezone: string) {
-  if (digestTask) {
-    digestTask.stop();
-  }
-
-  const [hour, minute] = timeStr.split(":").map(Number);
-  const cronExpr = `${minute} ${hour} * * *`;
-
-  digestTask = cron.schedule(cronExpr, () => {
-    runDigestJob(`Scheduled (${timeStr} Delivery)`).catch(err => {
-      console.error("[cron] Delivery job failed:", err);
-    });
-  }, {
-    timezone: timezone
-  });
-
-  console.log(`[cron] Digest job scheduled for ${timeStr} (${timezone})`);
-}
-
 export async function startScheduler() {
-  const db = getDb();
-  const rows = await db.select().from(settings);
-  const config: Record<string, string> = {};
-  rows.forEach(row => { config[row.key] = row.value; });
-
-  const initialTime = config.digest_time || "08:00";
-  const initialTimezone = config.timezone || "Asia/Shanghai";
-
   cron.schedule("0 */4 * * *", () => {
     runSyncJob("Scheduled (Every 4h)").catch(err => {
       console.error("[cron] Sync job failed:", err);
     });
   });
 
-  scheduleDigestJob(initialTime, initialTimezone);
+  cron.schedule("* * * * *", () => {
+    runDigestJob("Scheduled (Per-user Delivery)").catch(err => {
+      console.error("[cron] Delivery job failed:", err);
+    });
+  });
 
-  console.log(`Scheduler initialized: Sync every 4h, Delivery daily at ${initialTime} (${initialTimezone})`);
+  console.log("Scheduler initialized: Sync every 4h, user digests checked every minute");
 }
 
-export function restartDigestJob(timeStr: string, timezone: string) {
-  console.log(`[cron] Rescheduling digest job to ${timeStr} (${timezone})...`);
-  scheduleDigestJob(timeStr, timezone);
+export function restartDigestJob() {
+  console.log("[cron] Scheduler uses live user settings; no restart required.");
 }

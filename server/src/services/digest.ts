@@ -1,52 +1,73 @@
 import { nanoid } from "nanoid";
-import { eq, and, gte, lt } from "drizzle-orm";
+import { eq, and, gte, lt, inArray, isNull } from "drizzle-orm";
 import pLimit from "p-limit";
 import { getDb } from "../db/index.js";
-import { feeds, articles, digests, digestItems, settings } from "../db/schema.js";
+import { feeds, articles, digests, digestItems, subscriptions, userSettings } from "../db/schema.js";
 import { summarizeArticle } from "./summarizer.js";
-import { YouTubeAdapter } from "../sources/adapters/youtube-adapter.js";
+import { getDayRangeForTimeZone, getPreviousDateLabel, getTimeZoneDateLabel } from "../utils/timezone.js";
 
 const CONCURRENCY = 5;
 
 let _dailyQueue: Promise<string | void> = Promise.resolve();
 
-export function generateDaily(date?: string): Promise<string> {
-  const task = _dailyQueue.catch(() => {}).then(() => _generateDailyCore(date));
+export function generateDaily(userId: string, date?: string): Promise<string> {
+  const task = _dailyQueue.catch(() => {}).then(() => _generateDailyCore(userId, date));
   _dailyQueue = task;
   return task;
 }
 
-async function _generateDailyCore(date?: string): Promise<string> {
+async function _generateDailyCore(userId: string, date?: string): Promise<string> {
   const db = getDb();
-  
-  // 获取语言设置
-  const rows = await db.select().from(settings).where(eq(settings.key, "digest_language"));
-  const language = (rows[0]?.value as "zh" | "en") || "zh";
 
-  const baseTime = date ? new Date(date) : new Date();
-  
-  const dateLabel = baseTime.toISOString().slice(0, 10);
-
-  const startTime = new Date(baseTime.getTime() - 24 * 60 * 60 * 1000).toISOString();
-  const endTime = baseTime.toISOString();
+  const settingRows = await db
+    .select({ key: userSettings.key, value: userSettings.value })
+    .from(userSettings)
+    .where(eq(userSettings.userId, userId));
+  const settings = Object.fromEntries(settingRows.map((row) => [row.key, row.value]));
+  const language = (settings.digest_language as "zh" | "en") || "zh";
+  const timezone = settings.timezone || "Asia/Shanghai";
+  const todayLabel = getTimeZoneDateLabel(new Date(), timezone);
+  const dateLabel = date || getPreviousDateLabel(todayLabel);
+  const { startIso: startTime, endIso: endTime } = getDayRangeForTimeZone(dateLabel, timezone);
 
   const [existing] = await db
     .select()
     .from(digests)
-    .where(and(eq(digests.type, "daily"), eq(digests.date, dateLabel)));
+    .where(and(eq(digests.userId, userId), eq(digests.type, "daily"), eq(digests.date, dateLabel)));
 
   if (existing) {
-    console.log(`[digest] Daily for ${dateLabel} already exists, regenerating...`);
-    return generateWithId(existing.id, dateLabel, startTime, endTime, language);
+    console.log(`[digest] Daily for ${userId} on ${dateLabel} already exists, regenerating...`);
+    return generateWithId(userId, existing.id, dateLabel, startTime, endTime, language);
   }
 
   const digestId = nanoid();
-  return generateWithId(digestId, dateLabel, startTime, endTime, language);
+  return generateWithId(userId, digestId, dateLabel, startTime, endTime, language);
 }
 
-async function generateWithId(digestId: string, dateLabel: string, startTime: string, endTime: string, language: "zh" | "en" = "zh"): Promise<string> {
+async function generateWithId(
+  userId: string,
+  digestId: string,
+  dateLabel: string,
+  startTime: string,
+  endTime: string,
+  language: "zh" | "en" = "zh",
+): Promise<string> {
   const db = getDb();
-  
+
+  const subscribedFeedRows = await db
+    .select({ feedId: subscriptions.feedId, startedAt: subscriptions.startedAt })
+    .from(subscriptions)
+    .where(and(eq(subscriptions.userId, userId), isNull(subscriptions.endedAt)));
+  const subscribedFeedIds = subscribedFeedRows.map((row) => row.feedId);
+  const subscriptionStartMap = new Map(
+    subscribedFeedRows.map((row) => [row.feedId, row.startedAt]),
+  );
+
+  if (subscribedFeedIds.length === 0) {
+    console.log(`[digest] User ${userId} has no subscriptions, skipping ${dateLabel}.`);
+    return "";
+  }
+
   const dayArticles = await db
     .select({
       id: articles.id,
@@ -58,18 +79,31 @@ async function generateWithId(digestId: string, dateLabel: string, startTime: st
       contentText: articles.contentText,
     })
     .from(articles)
-    .where(and(gte(articles.publishedAt, startTime), lt(articles.publishedAt, endTime)));
+    .where(
+      and(
+        inArray(articles.feedId, subscribedFeedIds),
+        gte(articles.publishedAt, startTime),
+        lt(articles.publishedAt, endTime),
+      ),
+    );
 
   const uniqueArticles = Array.from(new Map(dayArticles.map(a => [a.url, a])).values());
+  const eligibleArticles = uniqueArticles.filter((article) => {
+    const startedAt = subscriptionStartMap.get(article.feedId);
+    return !startedAt || article.publishedAt >= startedAt;
+  });
 
-  if (uniqueArticles.length === 0) {
+  if (eligibleArticles.length === 0) {
     console.log(`[digest] No articles found for ${dateLabel}, skipping.`);
     return "";
   }
 
-  console.log(`[digest] Processing ${uniqueArticles.length} unique articles in ${language}`);
+  console.log(`[digest] Processing ${eligibleArticles.length} unique articles for user ${userId} in ${language}`);
 
-  const allFeeds = await db.select({ id: feeds.id, name: feeds.name, sourceType: feeds.sourceType }).from(feeds);
+  const allFeeds = await db
+    .select({ id: feeds.id, name: feeds.name, sourceType: feeds.sourceType })
+    .from(feeds)
+    .where(inArray(feeds.id, subscribedFeedIds));
   const feedMap = new Map(allFeeds.map((f) => [f.id, f.name]));
   const feedSourceMap = new Map(allFeeds.map((f) => [f.id, f.sourceType]));
 
@@ -86,7 +120,7 @@ async function generateWithId(digestId: string, dateLabel: string, startTime: st
     keyInsights: string[];
   };
 
-  const tasks = uniqueArticles.map((article) =>
+  const tasks = eligibleArticles.map((article) =>
     limit(async (): Promise<ItemResult> => {
       const contentText = article.contentText || "";
       const feedName = feedMap.get(article.feedId) || "未知来源";
@@ -136,6 +170,7 @@ async function generateWithId(digestId: string, dateLabel: string, startTime: st
       await tx.insert(digests)
         .values({
           id: digestId,
+          userId,
           type: "daily",
           date: dateLabel,
           generatedAt: generationTime,
@@ -165,6 +200,6 @@ async function generateWithId(digestId: string, dateLabel: string, startTime: st
       );
   });
 
-  console.log(`[digest] Daily digest ${digestId} updated with ${items.length} items`);
+  console.log(`[digest] Daily digest ${digestId} for user ${userId} updated with ${items.length} items`);
   return digestId;
 }

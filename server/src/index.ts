@@ -4,12 +4,15 @@ import cors from "cors";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
+import { clerkMiddleware, requireAuth } from "@clerk/express";
 import { feedsRouter } from "./routes/feeds.js";
 import { digestsRouter } from "./routes/digests.js";
 import { substackRouter } from "./routes/substack.js";
 import { rssFeedsRouter } from "./routes/rss-feeds.js";
 import { youtubeFeedsRouter } from "./routes/youtube-feeds.js";
 import { settingsRouter } from "./routes/settings.js";
+import { authRouter } from "./routes/auth.js";
+import { resolveUser } from "./middleware/resolve-user.js";
 import { initDb } from "./db/index.js";
 import { startScheduler } from "./cron/scheduler.js";
 
@@ -20,16 +23,18 @@ const PORT = process.env.PORT || 8080;
 
 app.use(cors());
 app.use(express.json());
+app.use(clerkMiddleware());
 
 let ready = false;
 let initError: string | null = null;
 
-app.use("/api/feeds", feedsRouter);
-app.use("/api/digests", digestsRouter);
-app.use("/api/substack", substackRouter);
-app.use("/api/rss-feeds", rssFeedsRouter);
-app.use("/api/youtube-feeds", youtubeFeedsRouter);
-app.use("/api/settings", settingsRouter);
+app.use("/api/auth", requireAuth(), authRouter);
+app.use("/api/feeds", requireAuth(), resolveUser, feedsRouter);
+app.use("/api/digests", requireAuth(), resolveUser, digestsRouter);
+app.use("/api/substack", requireAuth(), resolveUser, substackRouter);
+app.use("/api/rss-feeds", requireAuth(), resolveUser, rssFeedsRouter);
+app.use("/api/youtube-feeds", requireAuth(), resolveUser, youtubeFeedsRouter);
+app.use("/api/settings", requireAuth(), resolveUser, settingsRouter);
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });

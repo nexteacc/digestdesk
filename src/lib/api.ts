@@ -23,6 +23,18 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+export function ensureCurrentUser(): Promise<{
+  id: string;
+  clerkId: string;
+  email: string;
+  name: string | null;
+  avatarUrl: string | null;
+  createdAt: string;
+  lastLoginAt: string;
+}> {
+  return request("/auth/me");
+}
+
 // --- Feeds ---
 
 export function fetchFeeds(): Promise<Feed[]> {

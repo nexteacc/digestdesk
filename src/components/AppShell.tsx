@@ -1,6 +1,7 @@
 import { useEffect, useState, type PropsWithChildren } from "react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
+import { UserButton } from "@clerk/react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Newspaper, PanelLeft, Maximize, Minimize, Settings as SettingsIcon, Github } from "lucide-react";
@@ -111,6 +112,7 @@ export default function AppShell({ children }: PropsWithChildren) {
                 EN
               </Button>
             </div>
+            <UserButton afterSignOutUrl="/" />
             </div>
           </div>
         </header>

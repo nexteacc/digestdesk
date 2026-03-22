@@ -1,12 +1,16 @@
 import { Router } from "express";
 import { nanoid } from "nanoid";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, isNull } from "drizzle-orm";
 import type { z } from "zod";
 import { getDb } from "../db/index.js";
-import { feeds } from "../db/schema.js";
+import { feeds, subscriptions } from "../db/schema.js";
 import { syncFeed } from "../services/rss.js";
 import { toAppError } from "../sources/app-error.js";
 import type { SourceAdapter, SourceType } from "../sources/types.js";
+import { getRequestUserId } from "../auth/user-context.js";
+import { getUserTimezone } from "../services/user-settings.js";
+import { getPreviousDateLabel, getTimeZoneDateLabel } from "../utils/timezone.js";
+import { generateDaily } from "../services/digest.js";
 
 interface SourceFeedRouterOptions {
   adapter: SourceAdapter;
@@ -59,6 +63,7 @@ export function createSourceFeedRouter(opts: SourceFeedRouterOptions): Router {
     }
 
     const db = getDb();
+    const userId = getRequestUserId(req);
 
     try {
       const rawDraft = await Promise.resolve(
@@ -75,28 +80,74 @@ export function createSourceFeedRouter(opts: SourceFeedRouterOptions): Router {
         .from(feeds)
         .where(eq(feeds.feedUrl, draft.feedUrl));
       if (existing) {
-        res.status(409).json({ error: duplicateError });
+        const [existingSubscription] = await db
+          .select({ id: subscriptions.id, endedAt: subscriptions.endedAt })
+          .from(subscriptions)
+          .where(and(eq(subscriptions.userId, userId), eq(subscriptions.feedId, existing.id)))
+          .orderBy(desc(subscriptions.createdAt));
+        if (existingSubscription) {
+          if (!existingSubscription.endedAt) {
+            res.status(409).json({ error: duplicateError });
+            return;
+          }
+
+          await db
+            .update(subscriptions)
+            .set({
+              startedAt: new Date().toISOString(),
+              endedAt: null,
+            })
+            .where(eq(subscriptions.id, existingSubscription.id));
+
+          res.status(201).json({ id: existing.id, success: true });
+          return;
+        }
+
+        await db.insert(subscriptions).values({
+          id: nanoid(),
+          userId,
+          feedId: existing.id,
+          startedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+        });
+
+        res.status(201).json({ id: existing.id, success: true });
         return;
       }
 
       const now = new Date().toISOString();
       const id = nanoid();
 
-      await db.insert(feeds).values({
-        id,
-        name: draft.name,
-        description: draft.description,
-        logoUrl: draft.logoUrl,
-        authorName: draft.authorName,
-        publicationUrl: draft.publicationUrl,
-        feedUrl: draft.feedUrl,
-        sourceType,
-        createdAt: now,
+      await db.transaction(async (tx) => {
+        await tx.insert(feeds).values({
+          id,
+          name: draft.name,
+          description: draft.description,
+          logoUrl: draft.logoUrl,
+          authorName: draft.authorName,
+          publicationUrl: draft.publicationUrl,
+          feedUrl: draft.feedUrl,
+          sourceType,
+          createdAt: now,
+        });
+        await tx.insert(subscriptions).values({
+          id: nanoid(),
+          userId,
+          feedId: id,
+          startedAt: now,
+          createdAt: now,
+        });
       });
 
-      syncFeed(id).catch((err) =>
-        console.error(`${logPrefix} Initial sync failed for ${id}:`, err),
-      );
+      syncFeed(id)
+        .then(async () => {
+          const timezone = await getUserTimezone(userId);
+          const today = getTimeZoneDateLabel(new Date(), timezone);
+          await generateDaily(userId, getPreviousDateLabel(today));
+        })
+        .catch((err) =>
+          console.error(`${logPrefix} Initial sync/digest failed for ${id}:`, err),
+        );
 
       res.json({ id, success: true });
     } catch (err) {
@@ -106,26 +157,28 @@ export function createSourceFeedRouter(opts: SourceFeedRouterOptions): Router {
     }
   });
 
-  router.get("/", async (_req, res) => {
+  router.get("/", async (req, res) => {
     const db = getDb();
+    const userId = getRequestUserId(req);
     const rows = await db
-      .select()
-      .from(feeds)
-      .where(eq(feeds.sourceType, sourceType))
+      .select({ feed: feeds })
+      .from(subscriptions)
+      .innerJoin(feeds, eq(subscriptions.feedId, feeds.id))
+      .where(and(eq(subscriptions.userId, userId), isNull(subscriptions.endedAt), eq(feeds.sourceType, sourceType)))
       .orderBy(desc(feeds.createdAt));
 
     res.json(
-      rows.map((row) => ({
-        id: row.id,
-        title: row.name,
-        description: row.description,
-        logoUrl: row.logoUrl,
-        authorName: row.authorName,
-        url: row.publicationUrl,
-        feedUrl: row.feedUrl,
-        sourceType: row.sourceType,
-        lastFetchedAt: row.lastFetchedAt,
-        createdAt: row.createdAt,
+      rows.map(({ feed }) => ({
+        id: feed.id,
+        title: feed.name,
+        description: feed.description,
+        logoUrl: feed.logoUrl,
+        authorName: feed.authorName,
+        url: feed.publicationUrl,
+        feedUrl: feed.feedUrl,
+        sourceType: feed.sourceType,
+        lastFetchedAt: feed.lastFetchedAt,
+        createdAt: feed.createdAt,
       })),
     );
   });

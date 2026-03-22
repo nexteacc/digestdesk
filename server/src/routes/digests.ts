@@ -4,8 +4,9 @@ import { z } from "zod";
 import { getDb } from "../db/index.js";
 import { digests, digestItems } from "../db/schema.js";
 import { generateDaily } from "../services/digest.js";
-import { syncAllFeeds } from "../services/rss.js";
+import { syncUserFeeds } from "../services/rss.js";
 import type { Digest, DigestItem } from "../../../shared/types.js";
+import { getRequestUserId } from "../auth/user-context.js";
 
 export const digestsRouter = Router();
 
@@ -51,10 +52,12 @@ function toDigestItem(row: typeof digestItems.$inferSelect): DigestItem {
 
 digestsRouter.get("/", async (req, res) => {
   const db = getDb();
+  const userId = getRequestUserId(req);
 
-  const query = db.select().from(digests);
-  const rows = await query
-    .where(eq(digests.type, "daily"))
+  const rows = await db
+    .select()
+    .from(digests)
+    .where(and(eq(digests.userId, userId), eq(digests.type, "daily")))
     .orderBy(desc(digests.date));
 
   const result = rows.map((row) => ({
@@ -69,10 +72,11 @@ digestsRouter.get("/", async (req, res) => {
 
 digestsRouter.get("/:id", async (req, res) => {
   const db = getDb();
+  const userId = getRequestUserId(req);
   const [digest] = await db
     .select()
     .from(digests)
-    .where(eq(digests.id, req.params.id));
+    .where(and(eq(digests.id, req.params.id), eq(digests.userId, userId)));
 
   if (!digest) {
     res.status(404).json({ error: "日报不存在" });
@@ -96,23 +100,27 @@ digestsRouter.post("/generate", async (req, res) => {
     return;
   }
   const { date, force } = parsed.data;
+  const userId = getRequestUserId(req);
 
   try {
     const db = getDb();
     if (date && force) {
       await db
         .delete(digests)
-        .where(and(eq(digests.type, "daily"), eq(digests.date, date)));
+        .where(and(eq(digests.userId, userId), eq(digests.type, "daily"), eq(digests.date, date)));
     }
-    await syncAllFeeds();
-    const digestId = await generateDaily(date);
+    await syncUserFeeds(userId);
+    const digestId = await generateDaily(userId, date);
 
     if (!digestId) {
       res.json({ status: "empty" });
       return;
     }
 
-    const [digest] = await db.select().from(digests).where(eq(digests.id, digestId));
+    const [digest] = await db
+      .select()
+      .from(digests)
+      .where(and(eq(digests.id, digestId), eq(digests.userId, userId)));
     if (!digest) {
       res.status(500).json({ error: "生成后未找到记录" });
       return;

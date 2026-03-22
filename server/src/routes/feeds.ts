@@ -1,14 +1,17 @@
 import { Router } from "express";
 import { nanoid } from "nanoid";
-import { eq, inArray, desc } from "drizzle-orm";
+import { eq, inArray, desc, and, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "../db/index.js";
-import { feeds } from "../db/schema.js";
-import { syncAllFeeds, syncFeed } from "../services/rss.js";
+import { feeds, subscriptions } from "../db/schema.js";
+import { syncFeed, syncUserFeeds } from "../services/rss.js";
 import { generateDaily } from "../services/digest.js";
 import type { Feed } from "../../../shared/types.js";
 import { getSubstackAdapter } from "../sources/factory.js";
 import { toAppError } from "../sources/app-error.js";
+import { getRequestUserId } from "../auth/user-context.js";
+import { getUserTimezone } from "../services/user-settings.js";
+import { getPreviousDateLabel, getTimeZoneDateLabel } from "../utils/timezone.js";
 
 const createFeedSchema = z.object({
   url: z.string().min(1, "请提供 url"),
@@ -53,15 +56,20 @@ function toFeed(row: typeof feeds.$inferSelect): Feed {
 
 feedsRouter.get("/", async (req, res) => {
   const db = getDb();
+  const userId = getRequestUserId(req);
   const sourceType = req.query.sourceType as "substack" | "rss" | "youtube" | undefined;
 
-  const baseQuery = db.select().from(feeds);
-  const filtered = sourceType
-    ? baseQuery.where(eq(feeds.sourceType, sourceType))
-    : baseQuery;
+  const filter = sourceType
+    ? and(eq(subscriptions.userId, userId), isNull(subscriptions.endedAt), eq(feeds.sourceType, sourceType))
+    : and(eq(subscriptions.userId, userId), isNull(subscriptions.endedAt));
 
-  const rows = await filtered.orderBy(desc(feeds.createdAt));
-  const result = rows.map(toFeed);
+  const rows = await db
+    .select({ feed: feeds })
+    .from(subscriptions)
+    .innerJoin(feeds, eq(subscriptions.feedId, feeds.id))
+    .where(filter)
+    .orderBy(desc(feeds.createdAt));
+  const result = rows.map(({ feed }) => toFeed(feed));
   res.json(result);
 });
 
@@ -72,6 +80,7 @@ feedsRouter.post("/", async (req, res) => {
     return;
   }
   const { url: rawUrl, title, description, logoUrl, authorName } = parsed.data;
+  const userId = getRequestUserId(req);
 
   try {
     const draft = await substackAdapter.createFeedDraft({
@@ -85,7 +94,38 @@ feedsRouter.post("/", async (req, res) => {
     const db = getDb();
     const [existing] = await db.select().from(feeds).where(eq(feeds.feedUrl, draft.feedUrl));
     if (existing) {
-      res.status(409).json({ error: "该订阅源已存在" });
+      const [existingSubscription] = await db
+        .select({ id: subscriptions.id, endedAt: subscriptions.endedAt })
+        .from(subscriptions)
+        .where(and(eq(subscriptions.userId, userId), eq(subscriptions.feedId, existing.id)))
+        .orderBy(desc(subscriptions.createdAt));
+      if (existingSubscription) {
+        if (!existingSubscription.endedAt) {
+          res.status(409).json({ error: "该订阅源已存在" });
+          return;
+        }
+
+        await db
+          .update(subscriptions)
+          .set({
+            startedAt: new Date().toISOString(),
+            endedAt: null,
+          })
+          .where(eq(subscriptions.id, existingSubscription.id));
+
+        res.status(201).json(toFeed(existing));
+        return;
+      }
+
+      await db.insert(subscriptions).values({
+        id: nanoid(),
+        userId,
+        feedId: existing.id,
+        startedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      });
+
+      res.status(201).json(toFeed(existing));
       return;
     }
 
@@ -103,15 +143,26 @@ feedsRouter.post("/", async (req, res) => {
       lastFetchedAt: null,
     };
 
-  await db.insert(feeds).values(feed);
+    await db.transaction(async (tx) => {
+      await tx.insert(feeds).values(feed);
+      await tx.insert(subscriptions).values({
+        id: nanoid(),
+        userId,
+        feedId: feed.id,
+        startedAt: now,
+        createdAt: now,
+      });
+    });
 
     res.status(201).json(toFeed(feed));
 
     // Background sync
     syncFeed(feed.id)
       .then(() => {
-        const today = new Date().toISOString().slice(0, 10);
-        return generateDaily(today);
+        return getUserTimezone(userId).then((timezone) => {
+          const today = getTimeZoneDateLabel(new Date(), timezone);
+          return generateDaily(userId, getPreviousDateLabel(today));
+        });
       })
       .catch((err) => {
         console.error(`[feeds/create] Initial sync/digest failed for ${feed.name}:`, err);
@@ -132,13 +183,21 @@ feedsRouter.delete("/batch", async (req, res) => {
     return;
   }
   const db = getDb();
-  const result = await db.delete(feeds).where(inArray(feeds.id, parsed.data.ids));
+  const userId = getRequestUserId(req);
+  const result = await db
+    .update(subscriptions)
+    .set({ endedAt: new Date().toISOString() })
+    .where(and(eq(subscriptions.userId, userId), isNull(subscriptions.endedAt), inArray(subscriptions.feedId, parsed.data.ids)));
   res.json({ deleted: result.count });
 });
 
 feedsRouter.delete("/:id", async (req, res) => {
   const db = getDb();
-  const result = await db.delete(feeds).where(eq(feeds.id, req.params.id));
+  const userId = getRequestUserId(req);
+  const result = await db
+    .update(subscriptions)
+    .set({ endedAt: new Date().toISOString() })
+    .where(and(eq(subscriptions.userId, userId), eq(subscriptions.feedId, req.params.id), isNull(subscriptions.endedAt)));
   if (result.count === 0) {
     res.status(404).json({ error: "订阅源不存在" });
     return;
@@ -146,8 +205,9 @@ feedsRouter.delete("/:id", async (req, res) => {
   res.json({ success: true });
 });
 
-feedsRouter.post("/sync", (_req, res) => {
-  syncAllFeeds().catch((err) => {
+feedsRouter.post("/sync", (req, res) => {
+  const userId = getRequestUserId(req);
+  syncUserFeeds(userId).catch((err) => {
     console.error("[feeds/sync] Background sync failed:", err);
   });
   res.json({ success: true, message: "同步任务已在后台启动" });
@@ -162,6 +222,7 @@ feedsRouter.post("/import", async (req, res) => {
   const { items } = parsed.data;
 
   const db = getDb();
+  const userId = getRequestUserId(req);
   const now = new Date().toISOString();
   let created = 0;
   let skipped = 0;
@@ -189,31 +250,59 @@ feedsRouter.post("/import", async (req, res) => {
       continue;
     }
 
-    const [existing] = await db
-      .select({ id: feeds.id })
+    let [feed] = await db
+      .select()
       .from(feeds)
       .where(eq(feeds.feedUrl, feedUrl));
-    if (existing) {
-      skipped++;
+
+    if (!feed) {
+      const name = (item.name || publicationUrl).slice(0, 80);
+      feed = {
+        id: nanoid(),
+        name,
+        description: item.description || null,
+        logoUrl: item.logoUrl || null,
+        authorName: item.authorName || null,
+        publicationUrl,
+        feedUrl,
+        sourceType: "substack" as const,
+        createdAt: now,
+        lastFetchedAt: null,
+      };
+
+      await db.insert(feeds).values(feed);
+      newFeedIds.push(feed.id);
+    }
+
+    const [existingSubscription] = await db
+      .select({ id: subscriptions.id, endedAt: subscriptions.endedAt })
+      .from(subscriptions)
+      .where(and(eq(subscriptions.userId, userId), eq(subscriptions.feedId, feed.id)))
+      .orderBy(desc(subscriptions.createdAt));
+    if (existingSubscription) {
+      if (!existingSubscription.endedAt) {
+        skipped++;
+        continue;
+      }
+
+      await db
+        .update(subscriptions)
+        .set({
+          startedAt: now,
+          endedAt: null,
+        })
+        .where(eq(subscriptions.id, existingSubscription.id));
+      created++;
       continue;
     }
 
-    const name = (item.name || publicationUrl).slice(0, 80);
-    const feed = {
+    await db.insert(subscriptions).values({
       id: nanoid(),
-      name,
-      description: item.description || null,
-      logoUrl: item.logoUrl || null,
-      authorName: item.authorName || null,
-      publicationUrl,
-      feedUrl,
-      sourceType: "substack" as const,
+      userId,
+      feedId: feed.id,
+      startedAt: now,
       createdAt: now,
-      lastFetchedAt: null,
-    };
-
-    await db.insert(feeds).values(feed);
-    newFeedIds.push(feed.id);
+    });
     created++;
   }
 
@@ -230,8 +319,9 @@ feedsRouter.post("/import", async (req, res) => {
         await new Promise((r) => setTimeout(r, 1000));
       }
       try {
-        const today = new Date().toISOString().slice(0, 10);
-        await generateDaily(today);
+        const timezone = await getUserTimezone(userId);
+        const today = getTimeZoneDateLabel(new Date(), timezone);
+        await generateDaily(userId, getPreviousDateLabel(today));
       } catch (e) {
         console.error(`[feeds/import] Initial digest generation failed:`, e);
       }

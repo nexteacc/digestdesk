@@ -177,3 +177,22 @@ Design reminder (commitment):
   font-weight: 700 !important;
   opacity: 1 !important;
 }
+
+/* Login page animations */
+@keyframes wordReveal {
+  0% {
+    opacity: 0;
+    transform: translateY(16px);
+    filter: blur(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

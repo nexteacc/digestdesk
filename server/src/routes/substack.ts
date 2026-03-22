@@ -1,11 +1,12 @@
 import { Router } from "express";
-import { like } from "drizzle-orm";
+import { and, eq, like, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { searchSubstack, fetchSubstackReads } from "../services/substack.js";
 import { getDb } from "../db/index.js";
-import { feeds } from "../db/schema.js";
+import { feeds, subscriptions } from "../db/schema.js";
 import { toAppError } from "../sources/app-error.js";
 import { getSubstackAdapter } from "../sources/factory.js";
+import { getRequestUserId } from "../auth/user-context.js";
 
 export const substackRouter = Router();
 const substackAdapter = getSubstackAdapter();
@@ -37,20 +38,22 @@ substackRouter.get("/search", async (req, res) => {
   try {
     const page = Math.max(0, parseInt(req.query.page as string) || 0);
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 10));
+    const userId = getRequestUserId(req);
 
     const db = getDb();
     const escaped = query.data.replace(/%/g, "\\%").replace(/_/g, "\\_");
     const localFeeds = await db
-      .select()
-      .from(feeds)
-      .where(like(feeds.name, `%${escaped}%`));
+      .select({ feed: feeds })
+      .from(subscriptions)
+      .innerJoin(feeds, eq(subscriptions.feedId, feeds.id))
+      .where(and(eq(subscriptions.userId, userId), isNull(subscriptions.endedAt), like(feeds.name, `%${escaped}%`)));
 
-    const localResults = localFeeds.map((f) => ({
-      name: f.name,
-      logoUrl: f.logoUrl || "",
-      description: f.description || "",
-      url: f.publicationUrl,
-      authorName: f.authorName || "",
+    const localResults = localFeeds.map(({ feed }) => ({
+      name: feed.name,
+      logoUrl: feed.logoUrl || "",
+      description: feed.description || "",
+      url: feed.publicationUrl,
+      authorName: feed.authorName || "",
       isLocal: true,
     }));
 

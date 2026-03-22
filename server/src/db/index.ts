@@ -1,5 +1,6 @@
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
+import { sql } from "drizzle-orm";
 import * as schema from "./schema.js";
 
 let queryClient: postgres.Sql;
@@ -106,13 +107,117 @@ export async function initDb() {
   `;
 
   await queryClient`
-    CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY,
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      clerk_id TEXT NOT NULL UNIQUE,
+      email TEXT NOT NULL,
+      name TEXT,
+      avatar_url TEXT,
+      created_at TEXT NOT NULL,
+      last_login_at TEXT NOT NULL
+    );
+  `;
+
+  await queryClient`
+    CREATE TABLE IF NOT EXISTS subscriptions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      feed_id TEXT NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+      started_at TEXT NOT NULL,
+      ended_at TEXT,
+      created_at TEXT NOT NULL
+    );
+  `;
+
+  await queryClient`
+    ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS started_at TEXT;
+  `;
+
+  await queryClient`
+    ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS ended_at TEXT;
+  `;
+
+  await queryClient`
+    UPDATE subscriptions
+    SET started_at = created_at
+    WHERE started_at IS NULL;
+  `;
+
+  await queryClient`
+    DROP INDEX IF EXISTS idx_subscriptions_user_feed_unique;
+  `;
+
+  await queryClient`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriptions_user_feed_active_unique
+    ON subscriptions(user_id, feed_id)
+    WHERE ended_at IS NULL;
+  `;
+
+  await queryClient`
+    CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON subscriptions(user_id);
+  `;
+
+  await queryClient`
+    CREATE INDEX IF NOT EXISTS idx_subscriptions_feed_id ON subscriptions(feed_id);
+  `;
+
+  await queryClient`
+    CREATE TABLE IF NOT EXISTS user_settings (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      key TEXT NOT NULL,
       value TEXT NOT NULL
     );
   `;
 
+  await queryClient`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_user_settings_user_key_unique
+    ON user_settings(user_id, key);
+  `;
+
+  await queryClient`
+    CREATE INDEX IF NOT EXISTS idx_user_settings_user_id ON user_settings(user_id);
+  `;
+
+  await queryClient`
+    ALTER TABLE digests ADD COLUMN IF NOT EXISTS user_id TEXT;
+  `;
+
+  await queryClient`
+    CREATE INDEX IF NOT EXISTS idx_digests_user_id ON digests(user_id);
+  `;
+
+  await queryClient`
+    DROP INDEX IF EXISTS idx_digests_type_date;
+  `;
+
+  await queryClient`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_digests_user_type_date_unique
+    ON digests(user_id, type, date);
+  `;
+
   console.log("Database initialized (PostgreSQL).");
+}
+
+export async function readLegacySettings() {
+  if (!db) throw new Error("Database not initialized. Call initDb() first.");
+
+  const tableCheck = await db.execute(sql`
+    SELECT to_regclass('public.settings')::text AS table_name
+  `);
+  const tableName = tableCheck[0]?.table_name;
+  if (!tableName) {
+    return [] as Array<{ key: string; value: string }>;
+  }
+
+  const rows = await db.execute(sql`
+    SELECT key, value
+    FROM settings
+  `);
+  return (rows as unknown as Array<Record<string, unknown>>).map((row) => ({
+    key: String(row.key ?? ""),
+    value: String(row.value ?? ""),
+  }));
 }
 
 export function getDb() {
