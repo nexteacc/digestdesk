@@ -131,19 +131,34 @@ export async function fetchSubstackReads(
   username: string,
 ): Promise<SubstackSearchResult[]> {
   const pageUrl = `https://substack.com/@${encodeURIComponent(username)}/reads`;
+  console.log(`[substack/reads] Fetching public reads for @${username} from ${pageUrl}`);
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
+  let response: Response;
+  try {
+    response = await fetch(pageUrl, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        Accept: "text/html",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+    });
+  } catch (err) {
+    console.error(
+      `[substack/reads] Network request failed for @${username}:`,
+      err instanceof Error ? err.message : err,
+    );
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 
-  const response = await fetch(pageUrl, {
-    signal: controller.signal,
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-      Accept: "text/html",
-      "Accept-Language": "en-US,en;q=0.9",
-    },
-  }).finally(() => clearTimeout(timeout));
+  console.log(
+    `[substack/reads] Response for @${username}: status=${response.status} ok=${response.ok}`,
+  );
 
   if (!response.ok) {
     throw new Error(
@@ -154,21 +169,7 @@ export async function fetchSubstackReads(
   }
 
   const html = await response.text();
-
-  const match = html.match(
-    /window\._preloads\s*=\s*JSON\.parse\(("(?:[^"\\]|\\.)*")\)/,
-  );
-  if (!match) {
-    throw new Error("无法解析订阅数据，该用户可能没有公开订阅列表");
-  }
-
-  let preloads: Record<string, unknown>;
-  try {
-    const jsonString = JSON.parse(match[1]) as string;
-    preloads = JSON.parse(jsonString) as Record<string, unknown>;
-  } catch {
-    throw new Error("订阅数据格式异常");
-  }
+  console.log(`[substack/reads] HTML size for @${username}: ${html.length} chars`);
 
   const getString = (value: unknown): string =>
     typeof value === "string" ? value : "";
@@ -178,43 +179,153 @@ export async function fetchSubstackReads(
       ? (value as Record<string, unknown>)
       : {};
 
-  let publications: unknown[] = [];
+  const decodeHtml = (value: string): string =>
+    value
+      .replace(/&amp;/g, "&")
+      .replace(/&quot;/g, "\"")
+      .replace(/&#39;/g, "'")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">");
 
-  const profile = getObj(preloads.profile);
+  const normalizePublicationUrl = (rawUrl: string): string => {
+    const url = rawUrl.trim();
+    if (!url) return "";
+    if (/^https?:\/\//i.test(url)) return url;
+    if (url.startsWith("//")) return `https:${url}`;
+    if (url.startsWith("/")) return `https://substack.com${url}`;
+    return `https://${url}`;
+  };
 
-  if (Array.isArray(profile.subscriptions)) {
-    publications = profile.subscriptions
-      .map((sub) => getObj(sub).publication)
-      .filter(Boolean);
+  function parseFromPreloads(): SubstackSearchResult[] {
+    const match = html.match(
+      /window\._preloads\s*=\s*JSON\.parse\(("(?:[^"\\]|\\.)*")\)/,
+    );
+    if (!match) {
+      console.warn(`[substack/reads] @${username}: window._preloads not found`);
+      return [];
+    }
+
+    let preloads: Record<string, unknown>;
+    try {
+      const jsonString = JSON.parse(match[1]) as string;
+      preloads = JSON.parse(jsonString) as Record<string, unknown>;
+    } catch {
+      console.warn(`[substack/reads] @${username}: window._preloads JSON parse failed`);
+      return [];
+    }
+
+    let publications: unknown[] = [];
+    const profile = getObj(preloads.profile);
+
+    if (Array.isArray(profile.subscriptions)) {
+      publications = profile.subscriptions
+        .map((sub) => getObj(sub).publication)
+        .filter(Boolean);
+    }
+
+    if (publications.length === 0 && Array.isArray(preloads.subscriptions)) {
+      publications = preloads.subscriptions
+        .map((sub) => getObj(sub).publication)
+        .filter(Boolean);
+    }
+
+    console.log(
+      `[substack/reads] @${username}: preloads parser found ${publications.length} raw publications`,
+    );
+
+    return publications.map((raw) => {
+      const pub = getObj(raw);
+      const name = getString(pub.name);
+      const logoUrl = getString(pub.logo_url);
+      const description = getString(pub.hero_text) || getString(pub.description);
+      const subdomain = getString(pub.subdomain);
+      const customDomain = getString(pub.custom_domain);
+
+      const author = getObj(pub.author);
+      const authorName = getString(author.name) || getString(pub.author_name);
+
+      const url = customDomain
+        ? `https://${customDomain}`
+        : subdomain
+          ? `https://${subdomain}.substack.com`
+          : "";
+
+      return { name, logoUrl, description, url, authorName };
+    }).filter((item) => item.url && item.name);
   }
 
-  if (publications.length === 0 && Array.isArray(preloads.subscriptions)) {
-    publications = preloads.subscriptions
-      .map((sub) => getObj(sub).publication)
-      .filter(Boolean);
+  function parseFromHtml(): SubstackSearchResult[] {
+    const publications = new Map<string, SubstackSearchResult>();
+    const blockRegex = /<a\b[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/gsi;
+
+    for (const match of html.matchAll(blockRegex)) {
+      const href = decodeHtml(match[1] || "");
+      const innerHtml = match[2] || "";
+      const url = normalizePublicationUrl(href);
+
+      if (
+        !url ||
+        /\/@(?![^/]+$)/i.test(href) ||
+        /\/(p|post|podcast|archive|about|comments|subscribe|account|api)\b/i.test(href) ||
+        /substack\.com\/@(nexteacc|[^/]+)(?:\/reads)?$/i.test(url)
+      ) {
+        continue;
+      }
+
+      const titleMatch = innerHtml.match(/<h3\b[^>]*>(.*?)<\/h3>/i)
+        || innerHtml.match(/<span\b[^>]*>(.*?)<\/span>/i);
+      const descMatch = innerHtml.match(/<p\b[^>]*>(.*?)<\/p>/i);
+      const imgMatch = innerHtml.match(/<img\b[^>]*src="([^"]+)"/i);
+
+      const stripTags = (value: string): string =>
+        decodeHtml(value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
+
+      const name = titleMatch ? stripTags(titleMatch[1]) : "";
+      const description = descMatch ? stripTags(descMatch[1]) : "";
+      const logoUrl = imgMatch ? decodeHtml(imgMatch[1]) : "";
+
+      if (!name) {
+        continue;
+      }
+      if (!/substack\.com|https?:\/\/[^/\s]+\.[^/\s]+/i.test(url)) {
+        continue;
+      }
+
+      if (!publications.has(url)) {
+        publications.set(url, {
+          name,
+          logoUrl,
+          description,
+          url,
+          authorName: "",
+        });
+      }
+    }
+
+    console.log(
+      `[substack/reads] @${username}: html parser found ${publications.size} publications`,
+    );
+    return Array.from(publications.values());
   }
 
-  if (publications.length === 0) {
-    throw new Error("该用户没有公开的订阅列表");
+  const fromPreloads = parseFromPreloads();
+  if (fromPreloads.length > 0) {
+    console.log(
+      `[substack/reads] @${username}: using preloads parser with ${fromPreloads.length} results`,
+    );
+    return fromPreloads;
   }
 
-  return publications.map((raw) => {
-    const pub = getObj(raw);
-    const name = getString(pub.name);
-    const logoUrl = getString(pub.logo_url);
-    const description = getString(pub.hero_text) || getString(pub.description);
-    const subdomain = getString(pub.subdomain);
-    const customDomain = getString(pub.custom_domain);
+  const fromHtml = parseFromHtml();
+  if (fromHtml.length > 0) {
+    console.warn(
+      `[substack/reads] @${username}: falling back to HTML parser with ${fromHtml.length} results`,
+    );
+    return fromHtml;
+  }
 
-    const author = getObj(pub.author);
-    const authorName = getString(author.name) || getString(pub.author_name);
-
-    const url = customDomain
-      ? `https://${customDomain}`
-      : subdomain
-        ? `https://${subdomain}.substack.com`
-        : "";
-
-    return { name, logoUrl, description, url, authorName };
-  }).filter((item) => item.url && item.name);
+  console.error(
+    `[substack/reads] @${username}: no publications found after all parsing strategies`,
+  );
+  throw new Error("无法解析订阅数据，该用户可能没有公开订阅列表");
 }

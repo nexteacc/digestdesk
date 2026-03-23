@@ -1,11 +1,46 @@
 import { Router } from "express";
 import { getAuth, clerkClient } from "@clerk/express";
 import { nanoid } from "nanoid";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, lt } from "drizzle-orm";
 import { getDb, readLegacySettings } from "../db/index.js";
 import { users, feeds, subscriptions, userSettings } from "../db/schema.js";
 
 export const authRouter = Router();
+
+async function repairLegacyFirstUserSubscriptions(userId: string, userCreatedAt: string) {
+  const db = getDb();
+  const allUsers = await db.select({ id: users.id }).from(users);
+  if (allUsers.length !== 1) {
+    return;
+  }
+
+  const rows = await db
+    .select({
+      subscriptionId: subscriptions.id,
+      feedCreatedAt: feeds.createdAt,
+    })
+    .from(subscriptions)
+    .innerJoin(feeds, eq(subscriptions.feedId, feeds.id))
+    .where(
+      and(
+        eq(subscriptions.userId, userId),
+        isNull(subscriptions.endedAt),
+        eq(subscriptions.startedAt, userCreatedAt),
+        lt(feeds.createdAt, userCreatedAt),
+      ),
+    );
+
+  for (const row of rows) {
+    await db
+      .update(subscriptions)
+      .set({ startedAt: row.feedCreatedAt })
+      .where(eq(subscriptions.id, row.subscriptionId));
+  }
+
+  if (rows.length > 0) {
+    console.log(`[auth] Repaired ${rows.length} migrated subscriptions for first user ${userId}`);
+  }
+}
 
 authRouter.get("/me", async (req, res) => {
   const auth = getAuth(req);
@@ -23,6 +58,7 @@ authRouter.get("/me", async (req, res) => {
     // Update last login
     const now = new Date().toISOString();
     await db.update(users).set({ lastLoginAt: now }).where(eq(users.id, existing.id));
+    await repairLegacyFirstUserSubscriptions(existing.id, existing.createdAt);
     res.json({ ...existing, lastLoginAt: now });
     return;
   }
@@ -53,14 +89,16 @@ authRouter.get("/me", async (req, res) => {
       return;
     }
 
-    const legacyFeeds = await tx.select({ id: feeds.id }).from(feeds);
+    const legacyFeeds = await tx
+      .select({ id: feeds.id, feedCreatedAt: feeds.createdAt })
+      .from(feeds);
     if (legacyFeeds.length > 0) {
       await tx.insert(subscriptions).values(
         legacyFeeds.map((feed) => ({
           id: nanoid(),
           userId,
           feedId: feed.id,
-          startedAt: now,
+          startedAt: feed.feedCreatedAt,
           createdAt: now,
         })),
       ).onConflictDoNothing();

@@ -99,20 +99,28 @@ digestsRouter.post("/generate", async (req, res) => {
     res.status(400).json({ error: parsed.error.issues[0].message });
     return;
   }
-  const { date, force } = parsed.data;
+  const { date, force, type } = parsed.data;
   const userId = getRequestUserId(req);
+  console.log(
+    `[digests/generate] Request received: user=${userId} type=${type} date=${date ?? "auto"} force=${Boolean(force)}`,
+  );
 
   try {
     const db = getDb();
     if (date && force) {
+      console.log(`[digests/generate] Deleting existing digest before regeneration: user=${userId} date=${date}`);
       await db
         .delete(digests)
         .where(and(eq(digests.userId, userId), eq(digests.type, "daily"), eq(digests.date, date)));
     }
+    console.log(`[digests/generate] Starting feed sync for user=${userId}`);
     await syncUserFeeds(userId);
+    console.log(`[digests/generate] Feed sync complete for user=${userId}`);
+
     const digestId = await generateDaily(userId, date);
 
     if (!digestId) {
+      console.log(`[digests/generate] No digest generated for user=${userId} date=${date ?? "auto"} (empty result)`);
       res.json({ status: "empty" });
       return;
     }
@@ -122,6 +130,7 @@ digestsRouter.post("/generate", async (req, res) => {
       .from(digests)
       .where(and(eq(digests.id, digestId), eq(digests.userId, userId)));
     if (!digest) {
+      console.error(`[digests/generate] Generated digest id=${digestId} but record not found for user=${userId}`);
       res.status(500).json({ error: "生成后未找到记录" });
       return;
     }
@@ -132,9 +141,12 @@ digestsRouter.post("/generate", async (req, res) => {
       .orderBy(digestItems.sortOrder))
       .map(toDigestItem);
 
+    console.log(
+      `[digests/generate] Success: user=${userId} digestId=${digestId} date=${digest.date} items=${items.length}`,
+    );
     res.status(201).json(toDigest(digest, items));
   } catch (err: unknown) {
-    console.error("[digests/generate] Error:", err);
+    console.error(`[digests/generate] Error for user=${userId}:`, err);
     if (err instanceof Error) {
       res.status(500).json({ error: err.message || "生成失败" });
     } else {

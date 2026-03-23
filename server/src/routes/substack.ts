@@ -83,12 +83,16 @@ substackRouter.get("/reads", async (req, res) => {
     return;
   }
 
+  const normalizedUsername = username.data.trim();
+  console.log(`[substack/reads] Request received for @${normalizedUsername}`);
+
   try {
-    const results = await fetchSubstackReads(username.data.trim());
+    const results = await fetchSubstackReads(normalizedUsername);
+    console.log(`[substack/reads] Request succeeded for @${normalizedUsername}: ${results.length} results`);
     res.json({ results });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "获取订阅列表失败";
-    console.error("[substack/reads] Error:", err);
+    console.error(`[substack/reads] Request failed for @${normalizedUsername}:`, err);
     res.status(500).json({ error: msg });
   }
 });

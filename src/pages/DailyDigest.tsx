@@ -297,29 +297,6 @@ export default function DailyDigest() {
   const [selectingId, setSelectingId] = useState<string | null>(null);
   const { isZen } = useZenMode();
 
-  const autoGenerate = useCallback(async () => {
-    setGenerating(true);
-    try {
-      const result = await api.generateDigest("daily");
-      if ("status" in result && result.status === "empty") {
-        toast(text("暂无新文章，稍后再来看看", "No new articles. Check back later."));
-        return;
-      }
-      // @ts-ignore
-      const digest = await api.fetchDigest(result.id);
-      setCurrent(digest);
-      const list = await api.fetchDigests("daily");
-      setDigestList(list);
-      toast.success(text("日报生成成功", "Digest ready"));
-    } catch (e) {
-      // 生成失败（可能没有新文章），展示空状态提示
-      console.log("[DailyDigest] auto-generate failed:", e);
-      toast(text("暂无新文章，稍后再来看看", "No new articles. Check back later."));
-    } finally {
-      setGenerating(false);
-    }
-  }, [text]);
-
   const loadDigest = useCallback(async () => {
     setLoading(true);
     try {
@@ -334,17 +311,13 @@ export default function DailyDigest() {
       if (dailyList.length > 0) {
         const d = await api.fetchDigest(dailyList[0].id);
         setCurrent(d);
-      } else if (feeds.length > 0) {
-        setLoading(false);
-        await autoGenerate();
-        return;
       }
     } catch {
       toast.error(text("加载失败", "Failed to load"));
     } finally {
       setLoading(false);
     }
-  }, [text, autoGenerate]);
+  }, [text]);
 
   useEffect(() => {
     loadDigest();
@@ -523,8 +496,16 @@ export default function DailyDigest() {
         {!loading && !generating && !current && hasFeeds && (
           <Card className="p-10 text-center">
             <div className="text-sm text-muted-foreground">
-              {text("暂无日报内容。文章同步后会自动生成。", "No digest yet.")}
+              {text("暂无日报内容。点击“立即同步”开始抓取并生成。", "No digest yet. Click Sync Now to fetch and generate.")}
             </div>
+            <Button
+              className="mt-4 gap-1.5"
+              onClick={syncNow}
+              disabled={generating || loading}
+            >
+              <RefreshCw className={`h-4 w-4 ${generating ? "animate-spin" : ""}`} />
+              {text("立即同步", "Sync Now")}
+            </Button>
           </Card>
         )}
 

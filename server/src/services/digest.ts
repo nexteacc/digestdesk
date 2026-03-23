@@ -30,6 +30,10 @@ async function _generateDailyCore(userId: string, date?: string): Promise<string
   const dateLabel = date || getPreviousDateLabel(todayLabel);
   const { startIso: startTime, endIso: endTime } = getDayRangeForTimeZone(dateLabel, timezone);
 
+  console.log(
+    `[digest] Start generateDaily: user=${userId} requestedDate=${date ?? "auto"} targetDate=${dateLabel} timezone=${timezone} language=${language} range=${startTime}..${endTime}`,
+  );
+
   const [existing] = await db
     .select()
     .from(digests)
@@ -63,6 +67,10 @@ async function generateWithId(
     subscribedFeedRows.map((row) => [row.feedId, row.startedAt]),
   );
 
+  console.log(
+    `[digest] User ${userId} has ${subscribedFeedIds.length} active subscriptions for ${dateLabel}`,
+  );
+
   if (subscribedFeedIds.length === 0) {
     console.log(`[digest] User ${userId} has no subscriptions, skipping ${dateLabel}.`);
     return "";
@@ -87,14 +95,26 @@ async function generateWithId(
       ),
     );
 
+  console.log(
+    `[digest] Found ${dayArticles.length} articles in time range for user ${userId} on ${dateLabel}`,
+  );
+
   const uniqueArticles = Array.from(new Map(dayArticles.map(a => [a.url, a])).values());
+  const duplicateCount = dayArticles.length - uniqueArticles.length;
   const eligibleArticles = uniqueArticles.filter((article) => {
     const startedAt = subscriptionStartMap.get(article.feedId);
     return !startedAt || article.publishedAt >= startedAt;
   });
+  const filteredBySubscriptionBoundary = uniqueArticles.length - eligibleArticles.length;
+
+  console.log(
+    `[digest] User ${userId} on ${dateLabel}: unique=${uniqueArticles.length}, deduped=${duplicateCount}, filteredByStartedAt=${filteredBySubscriptionBoundary}, eligible=${eligibleArticles.length}`,
+  );
 
   if (eligibleArticles.length === 0) {
-    console.log(`[digest] No articles found for ${dateLabel}, skipping.`);
+    console.log(
+      `[digest] No eligible articles found for user ${userId} on ${dateLabel}, skipping. range=${startTime}..${endTime}`,
+    );
     return "";
   }
 
