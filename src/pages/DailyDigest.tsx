@@ -499,11 +499,12 @@ export default function DailyDigest() {
               {text("暂无日报内容。点击“立即同步”开始抓取并生成。", "No digest yet. Click Sync Now to fetch and generate.")}
             </div>
             <Button
-              className="mt-4 gap-1.5"
+              size="sm"
+              className="mt-4 gap-1.5 h-8 text-xs font-medium shadow-sm rounded-full"
               onClick={syncNow}
               disabled={generating || loading}
             >
-              <RefreshCw className={`h-4 w-4 ${generating ? "animate-spin" : ""}`} />
+              <RefreshCw className={`h-3.5 w-3.5 ${generating ? "animate-spin" : ""}`} />
               {text("立即同步", "Sync Now")}
             </Button>
           </Card>

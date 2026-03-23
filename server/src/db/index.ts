@@ -83,10 +83,6 @@ export async function initDb() {
   `;
 
   await queryClient`
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_digests_type_date ON digests(type, date);
-  `;
-
-  await queryClient`
     CREATE TABLE IF NOT EXISTS digest_items (
       id TEXT PRIMARY KEY,
       digest_id TEXT NOT NULL REFERENCES digests(id) ON DELETE CASCADE,
@@ -187,6 +183,7 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_digests_user_id ON digests(user_id);
   `;
 
+  // Legacy single-user index must be removed before multi-user data can coexist.
   await queryClient`
     DROP INDEX IF EXISTS idx_digests_type_date;
   `;

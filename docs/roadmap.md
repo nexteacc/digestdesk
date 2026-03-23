@@ -4,9 +4,7 @@
 
 相关文档：
 
-- [产品规则](/Volumes/Sheng/AIcases/digestdesk/docs/product-rules.md)
-- [数据模型](/Volumes/Sheng/AIcases/digestdesk/docs/data-model.md)
-- [API 链路](/Volumes/Sheng/AIcases/digestdesk/docs/api-flow.md)
+- [多用户架构](/Volumes/Sheng/AIcases/digestdesk/docs/MULTI_TENANT_ARCHITECTURE.md)
 
 ## 1. 当前阶段目标
 
