@@ -85,6 +85,8 @@ async function generateWithId(
       url: articles.url,
       publishedAt: articles.publishedAt,
       contentText: articles.contentText,
+      summaryZh: articles.summaryZh,
+      summaryEn: articles.summaryEn,
     })
     .from(articles)
     .where(
@@ -162,8 +164,27 @@ async function generateWithId(
         };
       }
 
+      // Check cache first
+      const cachedField = language === "zh" ? article.summaryZh : article.summaryEn;
+      if (cachedField) {
+        try {
+          const cached = JSON.parse(cachedField);
+          if (cached.oneLiner && cached.keyInsights) {
+            return { ...base, oneLiner: cached.oneLiner, keyInsights: cached.keyInsights };
+          }
+        } catch {
+          // invalid cache, fall through to AI
+        }
+      }
+
       try {
         const summary = await summarizeArticle(contentText, language);
+        // Cache the summary
+        const summaryJson = JSON.stringify({ oneLiner: summary.oneLiner, keyInsights: summary.keyInsights });
+        const updateField = language === "zh" ? { summaryZh: summaryJson } : { summaryEn: summaryJson };
+        await db.update(articles).set(updateField).where(eq(articles.id, article.id)).catch((e) => {
+          console.warn(`[digest] Failed to cache summary for article ${article.id}:`, e instanceof Error ? e.message : e);
+        });
         return {
           ...base,
           oneLiner: summary.oneLiner,

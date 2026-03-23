@@ -74,6 +74,14 @@ export async function initDb() {
   `;
 
   await queryClient`
+    ALTER TABLE articles ADD COLUMN IF NOT EXISTS summary_zh TEXT;
+  `;
+
+  await queryClient`
+    ALTER TABLE articles ADD COLUMN IF NOT EXISTS summary_en TEXT;
+  `;
+
+  await queryClient`
     CREATE TABLE IF NOT EXISTS digests (
       id TEXT PRIMARY KEY,
       type TEXT NOT NULL CHECK(type IN ('daily')),

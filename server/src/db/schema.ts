@@ -50,6 +50,8 @@ export const articles = pgTable("articles", {
   contentText: text("content_text"),
   coverImageUrl: text("cover_image_url"),
   fetchedAt: text("fetched_at").notNull(),
+  summaryZh: text("summary_zh"),
+  summaryEn: text("summary_en"),
 });
 
 export const digests = pgTable("digests", {

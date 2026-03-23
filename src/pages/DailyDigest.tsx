@@ -186,10 +186,10 @@ function WelcomeSearch({ onAdded }: { onAdded: () => void }) {
           {text("欢迎来到你的阅读台", "Welcome to DigestDesk")}
         </div>
         <h3 className="mt-4 text-2xl md:text-3xl font-semibold leading-tight">
-          {text("跨平台追踪你关心的创作者，把他们的更新整理成你的每日简报。", "Track creators across platforms, and turn their updates into your personal daily brief.")}
+          {text("追踪你关心的创作者", "Track the creators you care about")}
         </h3>
         <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
-          {text("从 Substack、RSS、YouTube 等来源持续跟踪同一个创作者，把每天的更新汇成一份你自己的简报。", "Follow the same creator across Substack, RSS, YouTube, and more in one daily briefing workflow.")}
+          {text("每日简报", "Your daily brief")}
         </p>
       </div>
 
@@ -269,17 +269,7 @@ function WelcomeSearch({ onAdded }: { onAdded: () => void }) {
           </div>
         )}
 
-        {!hasSearched && (
-          <p className="mt-6 text-center text-xs text-muted-foreground">
-            {text("也可以前往", "Or visit")}
-            <Link href="/subscriptions">
-              <span className="underline underline-offset-4 hover:text-foreground mx-1">
-                {text("订阅源管理", "Subscriptions")}
-              </span>
-            </Link>
-            {text("通过 URL 添加", "to add feeds by URL")}
-          </p>
-        )}
+
       </div>
     </Card>
   );

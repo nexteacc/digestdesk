@@ -257,7 +257,7 @@ export default function SubscriptionsPage() {
           loading={feedsLoading}
           {...batch}
           onRemove={onRemove}
-          emptyText={text("还没有订阅源。用上面的搜索功能添加试试。", "No subscriptions yet. Search above to add one.")}
+          emptyText={text("还没有订阅源，试试搜索。", "No subscriptions yet. Try searching.")}
         />
       </div>
       <ImportDialog
