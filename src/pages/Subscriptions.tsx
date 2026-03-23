@@ -141,7 +141,7 @@ export default function SubscriptionsPage() {
           <div className="flex items-end justify-between gap-4 flex-wrap">
             <div>
               <h2 className="text-2xl md:text-3xl font-semibold">
-                {text("订阅源管理", "Subscriptions")}
+                {text("追踪创作者", "Track Creators")}
               </h2>
             </div>
             <Button

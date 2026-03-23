@@ -186,10 +186,10 @@ function WelcomeSearch({ onAdded }: { onAdded: () => void }) {
           {text("欢迎来到你的阅读台", "Welcome to DigestDesk")}
         </div>
         <h3 className="mt-4 text-2xl md:text-3xl font-semibold leading-tight">
-          {text("集中跟踪，轻松读完", "Stay on top of your reads")}
+          {text("跨平台追踪你关心的创作者，把他们的更新整理成你的每日简报。", "Track creators across platforms, and turn their updates into your personal daily brief.")}
         </h3>
         <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
-          {text("添加你关注的创作者，DigestDesk 每天帮你读完他们的最新文章", "Follow your favorite creators and get a daily digest.")}
+          {text("从 Substack、RSS、YouTube 等来源持续跟踪同一个创作者，把每天的更新汇成一份你自己的简报。", "Follow the same creator across Substack, RSS, YouTube, and more in one daily briefing workflow.")}
         </p>
       </div>
 
@@ -496,7 +496,7 @@ export default function DailyDigest() {
         {!loading && !generating && !current && hasFeeds && (
           <Card className="p-10 text-center">
             <div className="text-sm text-muted-foreground">
-              {text("暂无日报内容。点击“立即同步”开始抓取并生成。", "No digest yet. Click Sync Now to fetch and generate.")}
+              {text("还没有生成简报。点击“立即同步”，抓取你正在追踪的创作者更新。", "No brief yet. Click Sync Now to fetch the latest updates from the creators you follow.")}
             </div>
             <Button
               size="sm"
