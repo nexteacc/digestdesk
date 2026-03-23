@@ -9,7 +9,7 @@ DigestDesk 已支持 Substack 和 RSS 两个平台。本项目通过引入工厂
 - 第一阶段（当前）：用户订阅 YouTube 频道，日报中展示新视频的标题、缩略图和链接，作为"更新通知"
 - 第二阶段（未来）：引入 Gemini 等多模态模型，对视频内容进行摘要
 
-核心发现：YouTube 频道官方提供 Atom feed（`https://www.youtube.com/feeds/videos.xml?channel_id=CHANNEL_ID`），可被 rss-parser 直接解析。但与 RSS/Substack 不同的是，视频内容无法通过 Jina Reader 提取文本，需要跳过内容抓取和 AI 总结环节，直接提取 feed 中的描述和缩略图。
+核心发现：YouTube 频道官方提供 Atom feed（`https://www.youtube.com/feeds/videos.xml?channel_id=CHANNEL_ID`），可被 rss-parser 直接解析。当前实现会把 feed 中的描述写入 `articles.content_text`，后续与 RSS/Substack 一样进入统一的 digest 流程；只是当描述过短时会跳过 AI，总结降级为提示文案。
 
 ---
 
@@ -141,18 +141,13 @@ YouTube 路由同理。工厂内部统一处理 Zod 校验、查重、入库、�
 
 ### 3.3 日报生成调整 (`digest.ts`)
 
-YouTube 的内容往往非常短，不满 50 字会跳过 AI 摘要。通过直接调用 `YouTubeAdapter.extractOneLiner` 生成"新视频通知"样式的一句话摘要。
+YouTube 与 RSS/Substack 共用统一的 digest 流程：
 
-```typescript
-const isYouTube = feedSourceMap.get(article.feedId) === "youtube";
-return {
-  ...base,
-  oneLiner: isYouTube
-    ? YouTubeAdapter.extractOneLiner(contentText || "", article.title)
-    : "内容过短，无法生成摘要",
-  keyInsights: [],
-};
-```
+- `contentText` 足够长时，会进入同一个 `summarizeArticle()` 流程
+- 摘要结果按语言缓存到全局 `articles.summary_zh` / `articles.summary_en`
+- `contentText` 过短时，跳过 AI，总结降级为提示文案
+
+这意味着 YouTube 的差异主要发生在内容提取阶段，而不是日报编排阶段。
 
 ---
 
@@ -189,7 +184,7 @@ return {
 | **服务层** | `server/src/services/youtube-discovery.ts` | 多策略 HTML 抓取，解析 channelId |
 | | `server/src/services/content-extractor.ts` | Jina Reader 限流 + Turndown HTML→Markdown |
 | | `server/src/services/rss.ts` | 同步调度器：调 adapter.extractSyncItemContent |
-| | `server/src/services/digest.ts` | 日报生成 + AI 摘要编排 |
+| | `server/src/services/digest.ts` | 日报生成 + AI 摘要编排 + 文章级摘要缓存复用 |
 | **路由层** | `server/src/routes/source-feed-router.ts` | 路由工厂：discover / create / list 模板 |
 | | `server/src/routes/youtube-feeds.ts` | YouTube 路由配置（Zod schema → 调工厂） |
 | | `server/src/routes/rss-feeds.ts` | RSS 路由配置（同上） |
@@ -209,10 +204,11 @@ return {
 
 1. **parseURL 无 retry**：`rss.ts` 的 `rssParser.parseURL` 是单次调用，失败返回 0。但 `syncAllFeeds` 有 try/catch 容错且每 4 小时轮询，天然形成 retry。除非遇到持续性网络问题，否则不影响数据完整性。
 2. **digest.ts 仍有 isYouTube 特判**：这是"摘要降级策略"（内容太短时给用户看什么），不是"内容提取策略"。前者属于日报编排逻辑，不属于源适配器职责。如果未来第 3 个源类型也需要特殊降级，再抽象到 adapter 契约中。
-3. **feeds.ts import 写死 substack**：`/api/feeds/import` 是 Substack 阅读列表专用的导入端点，URL 规范化逻辑也是 Substack 特有的。如果未来需要通用导入（如 OPML），应新建端点而非改造此端点。
-4. **SourceAdapter 接口用 unknown**：`discover` 返回 `Promise<unknown>`，`createFeedDraft` 接受 `Record<string, unknown>`——这是刻意的取舍。三种适配器的输入输出类型完全不同，加泛型会传染到 factory 和 route 的每一处使用。当前方案：接口层宽松保多态，Zod 保运行时安全，具体适配器类各自收窄。
+3. **摘要缓存当前落在 `articles`**：同一篇 YouTube 视频描述在同一语言下不会对不同用户重复总结。当前依赖单实例串行生成；若未来多实例部署，再升级为数据库级并发安全缓存。
+4. **feeds.ts import 写死 substack**：`/api/feeds/import` 是 Substack 阅读列表专用的导入端点，URL 规范化逻辑也是 Substack 特有的。如果未来需要通用导入（如 OPML），应新建端点而非改造此端点。
+5. **SourceAdapter 接口用 unknown**：`discover` 返回 `Promise<unknown>`，`createFeedDraft` 接受 `Record<string, unknown>`——这是刻意的取舍。三种适配器的输入输出类型完全不同，加泛型会传染到 factory 和 route 的每一处使用。当前方案：接口层宽松保多态，Zod 保运行时安全，具体适配器类各自收窄。
 
 ### 未来可做
 
-5. **多模态视频摘要**：引入 Gemini 等多模态模型，对 YouTube 视频内容生成结构化摘要，替代当前的"更新通知"模式。
-6. **DB 迁移系统**：将 `db/index.ts` 中的 raw SQL 建表逻辑迁移到 Drizzle Kit 迁移系统，随着 schema 演进降低维护成本。
+6. **多模态视频摘要**：引入 Gemini 等多模态模型，对 YouTube 视频内容生成结构化摘要，替代当前仅依赖视频描述的摘要模式。
+7. **DB 迁移系统**：将 `db/index.ts` 中的 raw SQL 建表逻辑迁移到 Drizzle Kit 迁移系统，随着 schema 演进降低维护成本。
