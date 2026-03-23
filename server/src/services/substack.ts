@@ -130,47 +130,6 @@ export async function searchSubstack(
 export async function fetchSubstackReads(
   username: string,
 ): Promise<SubstackSearchResult[]> {
-  const pageUrl = `https://substack.com/@${encodeURIComponent(username)}/reads`;
-  console.log(`[substack/reads] Fetching public reads for @${username} from ${pageUrl}`);
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
-  let response: Response;
-  try {
-    response = await fetch(pageUrl, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        Accept: "text/html",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-    });
-  } catch (err) {
-    console.error(
-      `[substack/reads] Network request failed for @${username}:`,
-      err instanceof Error ? err.message : err,
-    );
-    throw err;
-  } finally {
-    clearTimeout(timeout);
-  }
-
-  console.log(
-    `[substack/reads] Response for @${username}: status=${response.status} ok=${response.ok}`,
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      response.status === 404
-        ? "找不到该用户，请检查用户名"
-        : `请求失败 (${response.status})`,
-    );
-  }
-
-  const html = await response.text();
-  console.log(`[substack/reads] HTML size for @${username}: ${html.length} chars`);
-
   const getString = (value: unknown): string =>
     typeof value === "string" ? value : "";
 
@@ -196,12 +155,36 @@ export async function fetchSubstackReads(
     return `https://${url}`;
   };
 
-  function parseFromPreloads(): SubstackSearchResult[] {
+  function mapPublicationRecords(publications: unknown[]): SubstackSearchResult[] {
+    return publications.map((raw) => {
+      const publicationContainer = getObj(raw);
+      const pub = getObj(publicationContainer.publication);
+      const source = Object.keys(pub).length > 0 ? pub : publicationContainer;
+      const name = getString(source.name);
+      const logoUrl = getString(source.logo_url);
+      const description = getString(source.hero_text) || getString(source.description);
+      const subdomain = getString(source.subdomain);
+      const customDomain = getString(source.custom_domain);
+
+      const author = getObj(source.author);
+      const authorName = getString(author.name) || getString(source.author_name);
+
+      const url = customDomain
+        ? `https://${customDomain}`
+        : subdomain
+          ? `https://${subdomain}.substack.com`
+          : "";
+
+      return { name, logoUrl, description, url, authorName };
+    }).filter((item) => item.url && item.name);
+  }
+
+  function parseFromPreloads(html: string, sourceLabel: string): SubstackSearchResult[] {
     const match = html.match(
       /window\._preloads\s*=\s*JSON\.parse\(("(?:[^"\\]|\\.)*")\)/,
     );
     if (!match) {
-      console.warn(`[substack/reads] @${username}: window._preloads not found`);
+      console.warn(`[substack/reads] @${username} ${sourceLabel}: window._preloads not found`);
       return [];
     }
 
@@ -210,7 +193,7 @@ export async function fetchSubstackReads(
       const jsonString = JSON.parse(match[1]) as string;
       preloads = JSON.parse(jsonString) as Record<string, unknown>;
     } catch {
-      console.warn(`[substack/reads] @${username}: window._preloads JSON parse failed`);
+      console.warn(`[substack/reads] @${username} ${sourceLabel}: window._preloads JSON parse failed`);
       return [];
     }
 
@@ -229,32 +212,18 @@ export async function fetchSubstackReads(
         .filter(Boolean);
     }
 
+    if (publications.length === 0 && Array.isArray(profile.visibleSubscriptions)) {
+      publications = profile.visibleSubscriptions;
+    }
+
     console.log(
-      `[substack/reads] @${username}: preloads parser found ${publications.length} raw publications`,
+      `[substack/reads] @${username} ${sourceLabel}: preloads parser found ${publications.length} raw publications`,
     );
 
-    return publications.map((raw) => {
-      const pub = getObj(raw);
-      const name = getString(pub.name);
-      const logoUrl = getString(pub.logo_url);
-      const description = getString(pub.hero_text) || getString(pub.description);
-      const subdomain = getString(pub.subdomain);
-      const customDomain = getString(pub.custom_domain);
-
-      const author = getObj(pub.author);
-      const authorName = getString(author.name) || getString(pub.author_name);
-
-      const url = customDomain
-        ? `https://${customDomain}`
-        : subdomain
-          ? `https://${subdomain}.substack.com`
-          : "";
-
-      return { name, logoUrl, description, url, authorName };
-    }).filter((item) => item.url && item.name);
+    return mapPublicationRecords(publications);
   }
 
-  function parseFromHtml(): SubstackSearchResult[] {
+  function parseFromHtml(html: string, sourceLabel: string): SubstackSearchResult[] {
     const publications = new Map<string, SubstackSearchResult>();
     const blockRegex = /<a\b[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/gsi;
 
@@ -303,25 +272,94 @@ export async function fetchSubstackReads(
     }
 
     console.log(
-      `[substack/reads] @${username}: html parser found ${publications.size} publications`,
+      `[substack/reads] @${username} ${sourceLabel}: html parser found ${publications.size} publications`,
     );
     return Array.from(publications.values());
   }
 
-  const fromPreloads = parseFromPreloads();
-  if (fromPreloads.length > 0) {
+  async function fetchHtml(pageUrl: string, sourceLabel: string) {
+    console.log(`[substack/reads] Fetching ${sourceLabel} for @${username} from ${pageUrl}`);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    let response: Response;
+    try {
+      response = await fetch(pageUrl, {
+        signal: controller.signal,
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+          Accept: "text/html",
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+      });
+    } catch (err) {
+      console.error(
+        `[substack/reads] Network request failed for @${username} ${sourceLabel}:`,
+        err instanceof Error ? err.message : err,
+      );
+      throw err;
+    } finally {
+      clearTimeout(timeout);
+    }
+
     console.log(
-      `[substack/reads] @${username}: using preloads parser with ${fromPreloads.length} results`,
+      `[substack/reads] Response for @${username} ${sourceLabel}: status=${response.status} ok=${response.ok}`,
     );
-    return fromPreloads;
+
+    if (!response.ok) {
+      throw new Error(
+        response.status === 404
+          ? "找不到该用户，请检查用户名"
+          : `请求失败 (${response.status})`,
+      );
+    }
+
+    const html = await response.text();
+    console.log(`[substack/reads] HTML size for @${username} ${sourceLabel}: ${html.length} chars`);
+    return html;
   }
 
-  const fromHtml = parseFromHtml();
-  if (fromHtml.length > 0) {
-    console.warn(
-      `[substack/reads] @${username}: falling back to HTML parser with ${fromHtml.length} results`,
+  const readsHtml = await fetchHtml(
+    `https://substack.com/@${encodeURIComponent(username)}/reads`,
+    "reads-page",
+  );
+
+  const readsPreloads = parseFromPreloads(readsHtml, "reads-page");
+  if (readsPreloads.length > 0) {
+    console.log(
+      `[substack/reads] @${username}: using preloads parser from reads-page with ${readsPreloads.length} results`,
     );
-    return fromHtml;
+    return readsPreloads;
+  }
+
+  const readsHtmlFallback = parseFromHtml(readsHtml, "reads-page");
+  if (readsHtmlFallback.length > 0) {
+    console.warn(
+      `[substack/reads] @${username}: falling back to HTML parser from reads-page with ${readsHtmlFallback.length} results`,
+    );
+    return readsHtmlFallback;
+  }
+
+  const profileHtml = await fetchHtml(
+    `https://substack.com/@${encodeURIComponent(username)}`,
+    "profile-page",
+  );
+
+  const profilePreloads = parseFromPreloads(profileHtml, "profile-page");
+  if (profilePreloads.length > 0) {
+    console.log(
+      `[substack/reads] @${username}: using preloads parser from profile-page with ${profilePreloads.length} results`,
+    );
+    return profilePreloads;
+  }
+
+  const profileHtmlFallback = parseFromHtml(profileHtml, "profile-page");
+  if (profileHtmlFallback.length > 0) {
+    console.warn(
+      `[substack/reads] @${username}: falling back to HTML parser from profile-page with ${profileHtmlFallback.length} results`,
+    );
+    return profileHtmlFallback;
   }
 
   console.error(
