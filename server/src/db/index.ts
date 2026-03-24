@@ -201,6 +201,44 @@ export async function initDb() {
     ON digests(user_id, type, date);
   `;
 
+  await queryClient`
+    CREATE TABLE IF NOT EXISTS digest_jobs (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      job_type TEXT NOT NULL CHECK(job_type IN ('daily_digest')),
+      target_date TEXT NOT NULL,
+      scheduled_for TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('pending', 'running', 'succeeded', 'failed', 'skipped', 'cancelled')),
+      attempt_count INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      locked_at TEXT,
+      locked_by TEXT,
+      created_at TEXT NOT NULL,
+      started_at TEXT,
+      finished_at TEXT
+    );
+  `;
+
+  await queryClient`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_digest_jobs_user_type_target_unique
+    ON digest_jobs(user_id, job_type, target_date);
+  `;
+
+  await queryClient`
+    CREATE INDEX IF NOT EXISTS idx_digest_jobs_status_scheduled_for
+    ON digest_jobs(status, scheduled_for);
+  `;
+
+  await queryClient`
+    CREATE INDEX IF NOT EXISTS idx_digest_jobs_user_id
+    ON digest_jobs(user_id);
+  `;
+
+  await queryClient`
+    CREATE INDEX IF NOT EXISTS idx_digest_jobs_user_target_date
+    ON digest_jobs(user_id, target_date);
+  `;
+
   console.log("Database initialized (PostgreSQL).");
 }
 

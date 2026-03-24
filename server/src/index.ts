@@ -14,7 +14,6 @@ import { settingsRouter } from "./routes/settings.js";
 import { authRouter } from "./routes/auth.js";
 import { resolveUser } from "./middleware/resolve-user.js";
 import { initDb } from "./db/index.js";
-import { startScheduler } from "./cron/scheduler.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -65,9 +64,6 @@ const startServer = async () => {
     console.log("Starting initialization...");
     await initDb();
     console.log("Database initialized.");
-
-    startScheduler();
-    console.log("Scheduler started.");
     ready = true;
 
     app.listen(Number(PORT), "0.0.0.0", () => {

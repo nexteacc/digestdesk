@@ -69,6 +69,12 @@ function parseDateLabel(dateLabel: string) {
   return { year, month, day };
 }
 
+export function shiftDateLabel(dateLabel: string, dayOffset: number) {
+  const { year, month, day } = parseDateLabel(dateLabel);
+  const shifted = new Date(Date.UTC(year, month - 1, day + dayOffset, 0, 0, 0));
+  return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, "0")}-${String(shifted.getUTCDate()).padStart(2, "0")}`;
+}
+
 export function getTimeZoneDateLabel(date: Date, timeZone: string): string {
   const parts = formatParts(date, timeZone);
   return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
@@ -107,7 +113,25 @@ export function getDayRangeForTimeZone(dateLabel: string, timeZone: string) {
 }
 
 export function getPreviousDateLabel(dateLabel: string) {
+  return shiftDateLabel(dateLabel, -1);
+}
+
+export function getScheduledTimeForDate(
+  dateLabel: string,
+  timeLabel: string,
+  timeZone: string,
+) {
   const { year, month, day } = parseDateLabel(dateLabel);
-  const previousDay = new Date(Date.UTC(year, month - 1, day - 1, 0, 0, 0));
-  return `${previousDay.getUTCFullYear()}-${String(previousDay.getUTCMonth() + 1).padStart(2, "0")}-${String(previousDay.getUTCDate()).padStart(2, "0")}`;
+  const [hour, minute] = timeLabel.split(":").map(Number);
+  return zonedTimeToUtc(
+    {
+      year,
+      month,
+      day,
+      hour,
+      minute,
+      second: 0,
+    },
+    timeZone,
+  ).toISOString();
 }

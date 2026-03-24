@@ -188,7 +188,7 @@ YouTube 与 RSS/Substack 共用统一的 digest 流程：
 | **路由层** | `server/src/routes/source-feed-router.ts` | 路由工厂：discover / create / list 模板 |
 | | `server/src/routes/youtube-feeds.ts` | YouTube 路由配置（Zod schema → 调工厂） |
 | | `server/src/routes/rss-feeds.ts` | RSS 路由配置（同上） |
-| **定时任务** | `server/src/cron/scheduler.ts` | 每 4h 同步 + 每日定时生成日报 |
+| **定时任务** | `server/src/jobs/dispatch-digest-jobs.ts`, `server/src/jobs/run-digest-jobs.ts` | 平台级 Cron 建立并执行 `digest_jobs` |
 | **前端共享** | `src/hooks/useBatchMode.ts` | 批量选择/删除状态管理 hook |
 | | `src/components/FeedListSection.tsx` | 订阅列表 + 批量操作 + 删除确认 |
 | **前端页面** | `src/pages/YouTubeFeeds.tsx` | YouTube 频道发现与管理 |

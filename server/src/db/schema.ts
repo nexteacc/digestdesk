@@ -88,3 +88,29 @@ export const userSettings = pgTable(
     userIdx: index("idx_user_settings_user_id").on(table.userId),
   }),
 );
+
+export const digestJobs = pgTable(
+  "digest_jobs",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    jobType: text("job_type", { enum: ["daily_digest"] }).notNull(),
+    targetDate: text("target_date").notNull(),
+    scheduledFor: text("scheduled_for").notNull(),
+    status: text("status", {
+      enum: ["pending", "running", "succeeded", "failed", "skipped", "cancelled"],
+    }).notNull(),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    lastError: text("last_error"),
+    lockedAt: text("locked_at"),
+    lockedBy: text("locked_by"),
+    createdAt: text("created_at").notNull(),
+    startedAt: text("started_at"),
+    finishedAt: text("finished_at"),
+  },
+  (table) => ({
+    userIdx: index("idx_digest_jobs_user_id").on(table.userId),
+    statusScheduledIdx: index("idx_digest_jobs_status_scheduled_for").on(table.status, table.scheduledFor),
+    userTargetIdx: index("idx_digest_jobs_user_target_date").on(table.userId, table.targetDate),
+  }),
+);

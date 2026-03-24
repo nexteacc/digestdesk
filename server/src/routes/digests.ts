@@ -3,8 +3,8 @@ import { eq, desc, and } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "../db/index.js";
 import { digests, digestItems } from "../db/schema.js";
-import { generateDaily } from "../services/digest.js";
-import { syncUserFeeds } from "../services/rss.js";
+import { executeDailyDigestJob } from "../services/digest-execution.js";
+import { cancelPendingDigestJobsForDate } from "../services/digest-jobs.js";
 import type { Digest, DigestItem } from "../../../shared/types.js";
 import { getRequestUserId } from "../auth/user-context.js";
 
@@ -112,12 +112,10 @@ digestsRouter.post("/generate", async (req, res) => {
       await db
         .delete(digests)
         .where(and(eq(digests.userId, userId), eq(digests.type, "daily"), eq(digests.date, date)));
+      await cancelPendingDigestJobsForDate(userId, date);
     }
-    console.log(`[digests/generate] Starting feed sync for user=${userId}`);
-    await syncUserFeeds(userId);
-    console.log(`[digests/generate] Feed sync complete for user=${userId}`);
-
-    const digestId = await generateDaily(userId, date);
+    console.log(`[digests/generate] Starting execution for user=${userId}`);
+    const digestId = await executeDailyDigestJob(userId, date);
 
     if (!digestId) {
       console.log(`[digests/generate] No digest generated for user=${userId} date=${date ?? "auto"} (empty result)`);

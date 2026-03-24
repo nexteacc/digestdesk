@@ -1,17 +1,17 @@
 # DigestDesk 多用户架构
 
-本文档收敛多用户系统的三类信息：
+本文档收敛当前正式版本的三类信息：
 
 - 产品规则：系统应该如何工作
 - 数据模型：这些规则如何映射到数据库结构
-- API 链路：后端如何执行这些规则
+- API 与任务链路：后端如何执行这些规则
 
 ## 1. 目标
 
 - 使用 Clerk 管理身份认证
 - 使用全局共享内容资产降低重复抓取和重复存储
 - 使用用户私有订阅关系、日报快照和偏好设置实现多租户隔离
-- 为后续订阅收费、审计、补算日报和功能扩展保留清晰边界
+- 为后续订阅收费、审计、补算日报和运维观测保留清晰边界
 
 ## 2. 正式业务规则
 
@@ -71,9 +71,26 @@
 - `generated_at` 表示这份日报实际生成时间
 - 晨间日报的成熟语义是“今天收到昨天的完整日报”
 - 当前实现按 `article + language` 复用摘要，不按用户重复总结
-- 当前摘要缓存依赖单实例串行生成；若未来上多实例，需要升级为数据库级并发安全方案
+- 当前摘要缓存依赖应用级串行生成；若未来上多实例，需要升级为数据库级并发安全方案
 
-### 2.5 首个用户领取历史数据
+### 2.5 调度规则
+
+- Web 服务不负责定时调度
+- 平台级 Cron 负责定时唤醒任务入口
+- 系统通过 `digest_jobs` 记录每日摘要任务，而不是依赖进程内瞬时状态
+- 自动任务和手动任务共享同一套执行器：同步该用户 feed，再重算该用户 digest
+- 若到达或超过计划时间但任务尚未完成，系统应补跑，而不是错过即放弃
+
+### 2.6 任务状态规则
+
+- `pending`：任务已创建，等待执行
+- `running`：任务已被某个执行器抢占
+- `succeeded`：任务成功生成日报
+- `skipped`：任务执行正常，但没有可生成的日报
+- `failed`：任务执行失败，可由后续运维或重试机制处理
+- `cancelled`：人工触发强制重算时，旧待处理任务会被取消
+
+### 2.7 首个用户领取历史数据
 
 - 这是迁移期规则，不是长期产品规则
 - 首个登录用户自动认领系统已有 feed，建立订阅关系
@@ -88,6 +105,7 @@
 - 用户关系层：`subscriptions`
 - 用户快照层：`digests`, `digest_items`
 - 用户配置层：`user_settings`
+- 调度任务层：`digest_jobs`
 
 ### 3.1 `users`
 
@@ -231,7 +249,44 @@
 - `timezone`
 - `digest_language`
 
-## 4. ER 图
+### 3.8 `digest_jobs`
+
+作用：
+
+- 调度层的持久化任务状态
+
+核心字段：
+
+- `id`
+- `user_id`
+- `job_type`
+- `target_date`
+- `scheduled_for`
+- `status`
+- `attempt_count`
+- `last_error`
+
+语义：
+
+- 一条任务表示“某用户的某个日报日期需要被生成”
+- 任务唯一性是 `(user_id, job_type, target_date)`
+- `target_date` 表示内容所属日期
+- `scheduled_for` 表示该任务计划执行时间
+- 任务层负责补偿、重试和可观测性；结果层仍由 `digests` / `digest_items` 承担
+
+## 4. 执行链路
+
+当前正式执行链路：
+
+1. 用户维护订阅和偏好设置
+2. 平台级 Cron 定时运行 `dispatch-digest-jobs`
+3. dispatch 根据用户时区、`digest_time` 和回补窗口创建 `digest_jobs`
+4. 平台级 Cron 定时运行 `run-digest-jobs`
+5. runner 抢占 `pending` 任务，执行用户级 feed 同步和 `generateDaily`
+6. 结果写入 `digests` / `digest_items`
+7. 任务状态更新为 `succeeded` / `skipped` / `failed`
+
+## 5. ER 图
 
 ```mermaid
 erDiagram
@@ -241,6 +296,7 @@ erDiagram
     USERS ||--o{ DIGESTS : owns
     DIGESTS ||--o{ DIGEST_ITEMS : contains
     USERS ||--o{ USER_SETTINGS : configures
+    USERS ||--o{ DIGEST_JOBS : schedules
 
     USERS {
         text id PK
@@ -307,6 +363,17 @@ erDiagram
         text user_id FK
         text key
         text value
+    }
+
+    DIGEST_JOBS {
+        text id PK
+        text user_id FK
+        text job_type
+        text target_date
+        text scheduled_for
+        text status
+        int attempt_count
+        text last_error
     }
 ```
 

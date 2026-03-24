@@ -17,6 +17,8 @@ const rssParser = new RssParser({
 });
 
 let _syncPromise: Promise<void> | null = null;
+const _feedSyncPromises = new Map<string, Promise<number>>();
+const DEFAULT_RECENT_SYNC_WINDOW_MS = 10 * 60 * 1000;
 
 function normalizeFeedUrl(url: string): string {
   return url
@@ -31,6 +33,13 @@ function pickString(value: unknown): string | null {
     return v || null;
   }
   return null;
+}
+
+function wasSyncedRecently(lastFetchedAt: string | null, freshnessWindowMs: number) {
+  if (!lastFetchedAt) return false;
+  const timestamp = Date.parse(lastFetchedAt);
+  if (Number.isNaN(timestamp)) return false;
+  return Date.now() - timestamp < freshnessWindowMs;
 }
 
 export async function syncAllFeeds(): Promise<void> {
@@ -67,10 +76,18 @@ export async function syncAllFeeds(): Promise<void> {
   return _syncPromise;
 }
 
-export async function syncUserFeeds(userId: string): Promise<void> {
+export async function syncUserFeeds(
+  userId: string,
+  options?: { freshnessWindowMs?: number },
+): Promise<void> {
   const db = getDb();
+  const freshnessWindowMs = options?.freshnessWindowMs ?? DEFAULT_RECENT_SYNC_WINDOW_MS;
   const rows = await db
-    .select({ feedId: subscriptions.feedId, feedName: feeds.name })
+    .select({
+      feedId: subscriptions.feedId,
+      feedName: feeds.name,
+      lastFetchedAt: feeds.lastFetchedAt,
+    })
     .from(subscriptions)
     .innerJoin(feeds, eq(subscriptions.feedId, feeds.id))
     .where(and(eq(subscriptions.userId, userId), isNull(subscriptions.endedAt)));
@@ -78,6 +95,12 @@ export async function syncUserFeeds(userId: string): Promise<void> {
   console.log(`[rss] Starting sync job for user ${userId} with ${rows.length} feeds...`);
 
   for (const row of rows) {
+    if (wasSyncedRecently(row.lastFetchedAt, freshnessWindowMs)) {
+      console.log(
+        `[rss] Skipping recent sync for ${row.feedName} (${row.feedId}); lastFetchedAt=${row.lastFetchedAt}`,
+      );
+      continue;
+    }
     try {
       await syncFeed(row.feedId);
     } catch (err) {
@@ -88,6 +111,25 @@ export async function syncUserFeeds(userId: string): Promise<void> {
 }
 
 export async function syncFeed(feedId: string): Promise<number> {
+  const inFlight = _feedSyncPromises.get(feedId);
+  if (inFlight) {
+    console.log(`[rss] Sharing in-flight sync for feed ${feedId}`);
+    return inFlight;
+  }
+
+  const task = syncFeedInternal(feedId);
+  _feedSyncPromises.set(feedId, task);
+
+  try {
+    return await task;
+  } finally {
+    if (_feedSyncPromises.get(feedId) === task) {
+      _feedSyncPromises.delete(feedId);
+    }
+  }
+}
+
+async function syncFeedInternal(feedId: string): Promise<number> {
   const db = getDb();
   const [feed] = await db.select().from(feeds).where(eq(feeds.id, feedId));
   if (!feed) {
