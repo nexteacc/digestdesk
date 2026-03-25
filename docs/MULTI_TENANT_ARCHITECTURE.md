@@ -76,10 +76,16 @@
 ### 2.5 调度规则
 
 - Web 服务不负责定时调度
-- 平台级 Cron 负责定时唤醒任务入口
+- 独立的 scheduler 服务负责定时唤醒任务入口
 - 系统通过 `digest_jobs` 记录每日摘要任务，而不是依赖进程内瞬时状态
 - 自动任务和手动任务共享同一套执行器：同步该用户 feed，再重算该用户 digest
 - 若到达或超过计划时间但任务尚未完成，系统应补跑，而不是错过即放弃
+
+当前阶段说明：
+
+- 阶段一采用 `web + scheduler + postgres`
+- 阶段二面向更大规模时，可继续拆为 `web + dispatcher + runner + postgres`
+- `scheduler` 是当前平台约束下的运行载体，不改变 `dispatch / run / digest_jobs` 的职责边界
 
 ### 2.6 任务状态规则
 
@@ -279,9 +285,9 @@
 当前正式执行链路：
 
 1. 用户维护订阅和偏好设置
-2. 平台级 Cron 定时运行 `dispatch-digest-jobs`
+2. `scheduler` 服务定时运行 `dispatchDigestJobs`
 3. dispatch 根据用户时区、`digest_time` 和回补窗口创建 `digest_jobs`
-4. 平台级 Cron 定时运行 `run-digest-jobs`
+4. `scheduler` 服务定时运行 `runPendingDigestJobs`
 5. runner 抢占 `pending` 任务，执行用户级 feed 同步和 `generateDaily`
 6. 结果写入 `digests` / `digest_items`
 7. 任务状态更新为 `succeeded` / `skipped` / `failed`

@@ -1,0 +1,151 @@
+# DigestDesk Zeabur Deployment
+
+本文档给出当前在 Zeabur 上的正式部署方式，以及后续面向更大规模用户的演进方向。
+
+## 1. 当前正式部署形态
+
+阶段一先采用三服务形态：
+
+- `web`
+- `scheduler`
+- `postgres`
+
+职责：
+
+- `web`：提供 SPA 与 API
+- `scheduler`：常驻运行，周期性调用 `dispatchDigestJobs` 与 `runPendingDigestJobs`
+- `postgres`：存储共享内容资产、用户数据、digest 结果和 `digest_jobs`
+
+当前不再依赖 `platform cron`。
+
+## 2. 服务命名要求
+
+仓库内提供了按服务名覆盖的 Zeabur 配置文件：
+
+- `zbpack.web.json`
+- `zbpack.scheduler.json`
+
+因此在 Zeabur 中建议服务名直接使用：
+
+- `web`
+- `scheduler`
+
+如果服务名不同，则需要在 Zeabur 控制台中手动填写等价的 build/start command。
+
+## 3. 当前 build / start 命令
+
+### 3.1 Web
+
+- Build: `pnpm build`
+- Start: `pnpm start`
+
+对应文件：
+
+- [`zbpack.web.json`](/Volumes/Sheng/AIcases/digestdesk/zbpack.web.json)
+
+### 3.2 Scheduler
+
+- Build: `pnpm --filter substack-digest-server build`
+- Start: `pnpm --filter substack-digest-server start:scheduler`
+
+对应文件：
+
+- [`zbpack.scheduler.json`](/Volumes/Sheng/AIcases/digestdesk/zbpack.scheduler.json)
+
+## 4. 部署步骤
+
+1. 在 Zeabur 中创建或进入现有 Project。
+2. 部署 PostgreSQL 服务。
+3. 从同一 GitHub 仓库部署第一个 Node 服务，命名为 `web`。
+4. 再从同一 GitHub 仓库部署第二个 Node 服务，命名为 `scheduler`。
+5. 给 `web` 和 `scheduler` 都配置相同的后端环境变量：
+   - `DATABASE_URL` 或 `POSTGRES_CONNECTION_STRING` / `POSTGRES_URI`
+   - `AI_API_KEY`
+   - `AI_MODEL`
+   - `AI_BASE_URL`
+   - `CF_SEARCH_PROXY_URL`
+   - `CF_SEARCH_PROXY_TOKEN`
+   - `CLERK_SECRET_KEY`
+   - 以及前端需要的 `VITE_CLERK_PUBLISHABLE_KEY`
+6. 仅给 `web` 绑定公开域名。
+7. `scheduler` 不需要域名，不对外暴露 HTTP。
+8. `scheduler` 初始保持单实例。
+9. 部署完成后查看日志，确认调度服务正常启动。
+
+## 5. 启动后应看到的日志
+
+`scheduler` 服务启动后，预期应看到类似日志：
+
+```text
+[scheduler] Starting initialization...
+[scheduler] Database initialized.
+[scheduler] Initialized: dispatchCron="*/5 * * * *", runCron="* * * * *", ...
+[scheduler] Service started.
+```
+
+随后会持续出现：
+
+```text
+[scheduler] Dispatch Scheduled tick: ...
+[scheduler] Runner Scheduled tick: ...
+```
+
+## 6. 当前调度频率
+
+当前默认值：
+
+- `dispatch`: 每 5 分钟一次
+- `run`: 每 1 分钟一次
+
+可通过环境变量覆盖：
+
+- `DIGEST_DISPATCH_CRON`
+- `DIGEST_RUN_CRON`
+- `DIGEST_JOB_RUN_LIMIT`
+
+## 7. 当前适用范围
+
+阶段一目标：
+
+- 正确上线
+- 恢复并稳定自动日报
+- 支撑几千量级用户验证
+
+说明：
+
+- 该阶段适合真实生产验证
+- 但不应直接承诺为“1 万用户晨峰稳态版本”
+
+## 8. 面向 1 万用户的下一阶段
+
+当要认真面向 1 万用户时，建议升级为：
+
+- `web`
+- `dispatcher`
+- `runner`
+- `postgres`
+
+对应调整：
+
+- `dispatcher` 只负责创建 `digest_jobs`
+- `runner` 只负责抢占并执行任务
+- `runner` 才做水平扩容
+
+必须补齐的能力：
+
+1. 去掉全局 `_dailyQueue`
+2. 强化 job claim 的数据库级并发安全
+3. 优化 dispatch 的全量用户扫描
+4. 进一步解耦 feed 同步与 digest 生成
+5. 基于真实数据做压测后再谈容量承诺
+
+## 9. 为什么当前方案没有方向性隐形债务
+
+当前阶段虽然还存在容量型债务，但没有方向性错误，原因是：
+
+- 没有把调度重新塞回 `web`
+- 没有放弃 `digest_jobs`
+- 没有破坏共享资产复用和用户结果隔离
+- 没有继续依赖 Zeabur 上并不存在的 `platform cron`
+
+后续扩容是顺着当前模型继续拆分，而不是推翻重写。

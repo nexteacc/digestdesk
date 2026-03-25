@@ -1,0 +1,5 @@
+{
+  "app_dir": "/",
+  "build_command": "pnpm --filter substack-digest-server build",
+  "start_command": "pnpm --filter substack-digest-server start:scheduler"
+}

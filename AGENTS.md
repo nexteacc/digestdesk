@@ -15,6 +15,7 @@ Do not write or output secrets. Do not log or print sensitive data.
 
 ## Extra instructions
 Read relevant file context before edits and avoid unnecessary new files.
+Before proposing or using external platforms, deployment features, third-party services, or developer tools, first verify the capability through explicit research or documentation lookup. Do not assume a platform feature exists or is available on the user's plan without checking first.
 
 ## Dev environment tips
 Development environment is driven by repo configuration files (e.g., package.json scripts, tsconfig, vite config, and .env files). macOS is the local OS for this workspace.

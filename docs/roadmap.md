@@ -13,7 +13,7 @@
 - 多用户核心业务规则统一
 - 全局内容资产与用户私有关系分层完成
 - Clerk 登录链路接入
-- 调度层改造方向收敛为 `digest_jobs + platform cron`
+- 调度层改造方向收敛为 `digest_jobs + dedicated scheduler service`
 
 当前阶段不再继续扩展大功能，先把这套基线站稳。
 
@@ -22,7 +22,7 @@
 目标：
 
 - 将当前版本部署到云平台
-- 验证 `web + postgres + 2 cron jobs` 运行形态
+- 验证 `web + scheduler + postgres` 运行形态
 - 收集首轮联调反馈
 
 重点关注：

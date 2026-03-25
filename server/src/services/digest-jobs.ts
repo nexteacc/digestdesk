@@ -62,17 +62,28 @@ export async function dispatchDigestJobs(now = new Date()) {
         continue;
       }
 
-      await db.insert(digestJobs).values({
-        id: nanoid(),
-        userId: user.id,
-        jobType: JOB_TYPE,
-        targetDate,
-        scheduledFor,
-        status: "pending",
-        attemptCount: 0,
-        createdAt: now.toISOString(),
-      });
-      created += 1;
+      const result = await db
+        .insert(digestJobs)
+        .values({
+          id: nanoid(),
+          userId: user.id,
+          jobType: JOB_TYPE,
+          targetDate,
+          scheduledFor,
+          status: "pending",
+          attemptCount: 0,
+          createdAt: now.toISOString(),
+        })
+        .onConflictDoNothing({
+          target: [digestJobs.userId, digestJobs.jobType, digestJobs.targetDate],
+        })
+        .returning({ id: digestJobs.id });
+
+      if (result.length > 0) {
+        created += 1;
+      } else {
+        existing += 1;
+      }
     }
   }
 
