@@ -45,8 +45,9 @@
 
 ### 3.2 Scheduler
 
-- Build: `pnpm --filter substack-digest-server build`
-- Start: `pnpm --filter substack-digest-server start:scheduler`
+- Root Directory: `/server`
+- Build: `pnpm build`
+- Start: `pnpm start:scheduler`
 
 对应文件：
 
@@ -57,7 +58,7 @@
 1. 在 Zeabur 中创建或进入现有 Project。
 2. 部署 PostgreSQL 服务。
 3. 从同一 GitHub 仓库部署第一个 Node 服务，命名为 `web`。
-4. 再从同一 GitHub 仓库部署第二个 Node 服务，命名为 `scheduler`。
+4. 再从同一 GitHub 仓库部署第二个 Node 服务，作为 `scheduler`。
 5. 给 `web` 和 `scheduler` 都配置相同的后端环境变量：
    - `DATABASE_URL` 或 `POSTGRES_CONNECTION_STRING` / `POSTGRES_URI`
    - `AI_API_KEY`
@@ -71,6 +72,12 @@
 7. `scheduler` 不需要域名，不对外暴露 HTTP。
 8. `scheduler` 初始保持单实例。
 9. 部署完成后查看日志，确认调度服务正常启动。
+
+如果 Zeabur 里没有自动识别 `zbpack.scheduler.json`，则手动配置：
+
+- Root Directory: `/server`
+- `ZBPACK_BUILD_COMMAND=pnpm build`
+- `ZBPACK_START_COMMAND=pnpm start:scheduler`
 
 ## 5. 启动后应看到的日志
 
