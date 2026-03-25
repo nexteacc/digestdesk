@@ -45,7 +45,8 @@
 
 ### 3.2 Scheduler
 
-- Root Directory: `/server`
+- Root Directory: `/`
+- App Directory: `server`
 - Build: `pnpm build`
 - Start: `pnpm start:scheduler`
 
@@ -75,7 +76,8 @@
 
 如果 Zeabur 里没有自动识别 `zbpack.scheduler.json`，则手动配置：
 
-- Root Directory: `/server`
+- Root Directory: `/`
+- `ZBPACK_APP_DIR=server`
 - `ZBPACK_BUILD_COMMAND=pnpm build`
 - `ZBPACK_START_COMMAND=pnpm start:scheduler`
 

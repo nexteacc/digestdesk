@@ -18,7 +18,7 @@ DigestDesk is a reading workflow app that aggregates Substack, RSS, and YouTube 
 ## Deployment
 
 - Zeabur deployment guide: [docs/ZEABUR_DEPLOYMENT.md](/Volumes/Sheng/AIcases/digestdesk/docs/ZEABUR_DEPLOYMENT.md)
-- `scheduler` service should use `/server` as Root Directory
+- `scheduler` service should keep Root Directory at `/` and set app dir to `server`
 
 ## License
 
