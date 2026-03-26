@@ -42,6 +42,8 @@ coverage
 # Environment variants
 .env.*
 server/.env.*
+!.env.web.example
+!.env.scheduler.example
 .claude/*
 
 # Tooling caches

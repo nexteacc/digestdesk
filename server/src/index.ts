@@ -19,8 +19,30 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 const PORT = process.env.PORT || 8080;
+const isNonEmptyString = (value: string | undefined): value is string => Boolean(value);
+const APP_URL = process.env.APP_URL?.trim();
+const CORS_ALLOWED_ORIGINS = (process.env.CORS_ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(isNonEmptyString);
+const allowedOrigins = new Set([APP_URL, ...CORS_ALLOWED_ORIGINS].filter(isNonEmptyString));
+const allowedOriginList = Array.from(allowedOrigins);
 
-app.use(cors());
+if (allowedOriginList.length > 0) {
+  app.use(
+    cors({
+      origin: allowedOriginList,
+      credentials: true,
+    }),
+  );
+} else if (process.env.NODE_ENV !== "production") {
+  app.use(
+    cors({
+      origin: true,
+      credentials: true,
+    }),
+  );
+}
 app.use(express.json());
 app.use(clerkMiddleware());
 

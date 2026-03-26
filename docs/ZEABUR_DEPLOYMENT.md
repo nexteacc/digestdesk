@@ -61,14 +61,28 @@
 3. 从同一 GitHub 仓库部署第一个 Node 服务，命名为 `web`。
 4. 再从同一 GitHub 仓库部署第二个 Node 服务，作为 `scheduler`。
 5. 给 `web` 和 `scheduler` 都配置相同的后端环境变量：
-   - `DATABASE_URL` 或 `POSTGRES_CONNECTION_STRING` / `POSTGRES_URI`
-   - `AI_API_KEY`
-   - `AI_MODEL`
-   - `AI_BASE_URL`
-   - `CF_SEARCH_PROXY_URL`
-   - `CF_SEARCH_PROXY_TOKEN`
-   - `CLERK_SECRET_KEY`
-   - 以及前端需要的 `VITE_CLERK_PUBLISHABLE_KEY`
+   - `web`:
+     - `VITE_CLERK_PUBLISHABLE_KEY`
+     - `CLERK_SECRET_KEY`
+     - `DATABASE_URL` 或 `POSTGRES_CONNECTION_STRING` / `POSTGRES_URI`
+     - `AI_API_KEY`
+     - `AI_MODEL`
+     - `AI_BASE_URL`
+     - `CF_SEARCH_PROXY_URL`
+     - `CF_SEARCH_PROXY_TOKEN`
+     - `JINA_RPM`
+     - `JINA_MAX_CONCURRENCY`
+     - `APP_URL`
+   - `scheduler`:
+     - `DATABASE_URL` 或 `POSTGRES_CONNECTION_STRING` / `POSTGRES_URI`
+     - `AI_API_KEY`
+     - `AI_MODEL`
+     - `AI_BASE_URL`
+     - `JINA_RPM`
+     - `JINA_MAX_CONCURRENCY`
+     - `DIGEST_DISPATCH_CRON`
+     - `DIGEST_RUN_CRON`
+     - `DIGEST_JOB_RUN_LIMIT`
 6. 仅给 `web` 绑定公开域名。
 7. `scheduler` 不需要域名，不对外暴露 HTTP。
 8. `scheduler` 初始保持单实例。
@@ -88,7 +102,7 @@
 ```text
 [scheduler] Starting initialization...
 [scheduler] Database initialized.
-[scheduler] Initialized: dispatchCron="*/5 * * * *", runCron="* * * * *", ...
+[scheduler] Initialized: dispatchCron="*/15 * * * *", runCron="*/5 * * * *", runLimit=10, ...
 [scheduler] Service started.
 ```
 
@@ -101,16 +115,24 @@
 
 ## 6. 当前调度频率
 
-当前默认值：
+当前代码默认值：
 
 - `dispatch`: 每 5 分钟一次
 - `run`: 每 1 分钟一次
+- `runLimit`: 20
 
-可通过环境变量覆盖：
+当前生产推荐值：
 
-- `DIGEST_DISPATCH_CRON`
-- `DIGEST_RUN_CRON`
-- `DIGEST_JOB_RUN_LIMIT`
+- `DIGEST_DISPATCH_CRON=*/15 * * * *`
+- `DIGEST_RUN_CRON=*/5 * * * *`
+- `DIGEST_JOB_RUN_LIMIT=10`
+
+这组值更贴合日报产品的节奏：
+
+- 降低全量用户扫描频次
+- 降低 runner 空跑频次
+- 降低单轮抓取、总结、写库的资源峰值
+- 仍能在用户设定时间附近完成投递
 
 ## 7. 当前适用范围
 
