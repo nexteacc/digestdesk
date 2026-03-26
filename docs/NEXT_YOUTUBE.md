@@ -11,7 +11,7 @@ DigestDesk 已支持 Substack 和 RSS 两个平台。本项目通过引入工厂
 - 第一阶段（当前）：用户订阅 YouTube 频道，日报中展示新视频的标题、缩略图和链接，作为"更新通知"
 - 第二阶段（未来）：引入 Gemini 等多模态模型，对视频内容进行摘要
 
-核心发现：YouTube 频道官方提供 Atom feed（`https://www.youtube.com/feeds/videos.xml?channel_id=CHANNEL_ID`），可被 rss-parser 直接解析。当前实现会把 feed 中的描述写入 `articles.content_text`，后续与 RSS/Substack 一样进入统一的 digest 流程；只是当描述过短时会跳过 AI，总结降级为提示文案。
+核心发现：YouTube 频道除了通用频道 feed（`channel_id=...`）外，还存在可直接按 playlist 读取的长视频 feed。当前实现优先使用 `UULF` long-form playlist RSS（`https://www.youtube.com/feeds/videos.xml?playlist_id=UULF...`）同步长视频，只在极少数异常频道上回退到通用频道 feed，并保留逐条 Shorts 过滤作为 fallback。这样能把 Shorts 过滤成本从“逐条视频判断”降到“按频道选对 feed”。
 
 ---
 
@@ -24,7 +24,22 @@ DigestDesk 已支持 Substack 和 RSS 两个平台。本项目通过引入工厂
 | **条目数量** | 固定返回最新 **15 条**，无分页参数，不可调整 | 影响极小 — cron 每天跑一次，绝大多数频道日更不超过 15 个视频 |
 | **频率限制** | 短时间内重复请求同一频道会返回空响应 | 影响极小 — `syncAllFeeds()` 每个 feed 间隔 1 秒，不会触发 |
 | **历史内容** | 只返回最近 15 个视频，无法获取更早的内容 | 可接受 — 产品定位是"每日更新通知"，不需要历史回溯 |
-| **无官方文档** | 该 feed 端点无官方 API 文档，但自 2015 年至今持续可用 | 低风险 — 大量 RSS 阅读器依赖此端点，YouTube 不太可能下线 |
+| **无官方文档** | 该 feed / playlist RSS 端点无官方 API 文档，但当前仍可用 | 中低风险 — 可用但不应视为官方 SLA，保留 channel feed fallback |
+
+### 已验证的长视频 / Shorts playlist 规律
+
+基于 2026-03-26 的现场验证：
+
+- `UULF{channelId 去掉 UC 前缀后的部分}` 返回 `Videos`
+- `UUSH{channelId 去掉 UC 前缀后的部分}` 返回 `Short videos`
+- `UULF` 条目链接为 `watch?v=...`
+- `UUSH` 条目链接为 `shorts/...`
+
+因此当前策略改为：
+
+1. 默认同步 `UULF` long-form playlist RSS
+2. 只有当 `UULF` 读取失败时，才回退到 `channel_id` 通用 feed
+3. 回退路径继续使用逐条 Shorts 判定，保证兼容性
 
 ### 时间字段说明
 
@@ -66,6 +81,7 @@ export interface SourceAdapter {
 - `extractThumbnail`：处理嵌套的 `mediaGroup?.['media:thumbnail']` 或通过 URL 回退。
 - `getDescription`：处理视频短描述。
 - `extractOneLiner`：剔除广告和空段落，获取纯文本视频通知摘要。
+- `shouldSyncItem`：仅在回退到通用频道 feed 时才启用 Shorts 过滤；正常情况下 `UULF` feed 已经只包含长视频。
 
 ### 1.3 核心服务解耦 (`rss.ts` & `content-extractor.ts`)
 
@@ -131,6 +147,7 @@ YouTube 路由同理。工厂内部统一处理 Zod 校验、查重、入库、�
 | `youtube.com/watch?v=VIDEO_ID` | 同上 |
 
 - 自定义了 `YouTubeDiscoveryError`（继承 `AppError`）以提供友好的探测失败信息。
+- 探测成功后，默认返回 `UULF` long-form feed 作为 `feedUrl`；若读取失败，则自动回退到通用频道 feed 做预览。
 
 ### 3.2 路由端点
 
@@ -209,8 +226,9 @@ YouTube 与 RSS/Substack 共用统一的 digest 流程：
 3. **摘要缓存当前落在 `articles`**：同一篇 YouTube 视频描述在同一语言下不会对不同用户重复总结。当前依赖单实例串行生成；若未来多实例部署，再升级为数据库级并发安全缓存。
 4. **feeds.ts import 写死 substack**：`/api/feeds/import` 是 Substack 阅读列表专用的导入端点，URL 规范化逻辑也是 Substack 特有的。如果未来需要通用导入（如 OPML），应新建端点而非改造此端点。
 5. **SourceAdapter 接口用 unknown**：`discover` 返回 `Promise<unknown>`，`createFeedDraft` 接受 `Record<string, unknown>`——这是刻意的取舍。三种适配器的输入输出类型完全不同，加泛型会传染到 factory 和 route 的每一处使用。当前方案：接口层宽松保多态，Zod 保运行时安全，具体适配器类各自收窄。
+6. **长视频优先于逐条 Shorts 判定**：当前默认走 `UULF` long-form playlist RSS，把 YouTube 的“只要长视频”约束前移到 feed 选择层，而不是放在每条 article 的判定层。只有在 playlist RSS 不可用时，才回退到通用频道 feed + 逐条 Shorts 探测。
 
 ### 未来可做
 
-6. **多模态视频摘要**：引入 Gemini 等多模态模型，对 YouTube 视频内容生成结构化摘要，替代当前仅依赖视频描述的摘要模式。
-7. **DB 迁移系统**：将 `db/index.ts` 中的 raw SQL 建表逻辑迁移到 Drizzle Kit 迁移系统，随着 schema 演进降低维护成本。
+7. **多模态视频摘要**：引入 Gemini 等多模态模型，对 YouTube 视频内容生成结构化摘要，替代当前仅依赖视频描述的摘要模式。
+8. **DB 迁移系统**：将 `db/index.ts` 中的 raw SQL 建表逻辑迁移到 Drizzle Kit 迁移系统，随着 schema 演进降低维护成本。

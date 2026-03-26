@@ -5,6 +5,11 @@ import { getDb } from "../db/index.js";
 import { feeds, articles, subscriptions } from "../db/schema.js";
 import { getSourceAdapter } from "../sources/factory.js";
 import type { SourceType } from "../sources/types.js";
+import {
+  buildYouTubeChannelFeedUrl,
+  extractChannelIdFromYouTubeFeedUrl,
+  isYouTubeLongFormFeedUrl,
+} from "./youtube-discovery.js";
 
 const rssParser = new RssParser({
   timeout: 15000,
@@ -141,11 +146,33 @@ async function syncFeedInternal(feedId: string): Promise<number> {
   console.log(`[rss] Syncing: ${feed.name} (${effectiveFeedUrl})`);
 
   let parsed;
+  let parsedFeedUrl = effectiveFeedUrl;
   try {
     parsed = await rssParser.parseURL(effectiveFeedUrl);
   } catch (err) {
-    console.error(`[rss] Failed to fetch ${effectiveFeedUrl}:`, err);
-    return 0;
+    if (feed.sourceType !== "youtube") {
+      console.error(`[rss] Failed to fetch ${effectiveFeedUrl}:`, err);
+      return 0;
+    }
+
+    const channelId = extractChannelIdFromYouTubeFeedUrl(effectiveFeedUrl);
+    const fallbackFeedUrl = channelId ? buildYouTubeChannelFeedUrl(channelId) : null;
+    if (!fallbackFeedUrl || fallbackFeedUrl === effectiveFeedUrl) {
+      console.error(`[rss] Failed to fetch ${effectiveFeedUrl}:`, err);
+      return 0;
+    }
+
+    try {
+      parsed = await rssParser.parseURL(fallbackFeedUrl);
+      parsedFeedUrl = fallbackFeedUrl;
+      console.warn(
+        `[rss] Falling back to channel feed for ${feed.name}: primary=${effectiveFeedUrl} fallback=${fallbackFeedUrl}`,
+      );
+    } catch (fallbackErr) {
+      console.error(`[rss] Failed to fetch ${effectiveFeedUrl}:`, err);
+      console.error(`[rss] Failed to fetch fallback ${fallbackFeedUrl}:`, fallbackErr);
+      return 0;
+    }
   }
 
   const now = new Date().toISOString();
@@ -154,6 +181,9 @@ async function syncFeedInternal(feedId: string): Promise<number> {
   let filteredItems = 0;
   const isYouTubeFeed = feed.sourceType === "youtube";
   const adapter = getSourceAdapter(feed.sourceType as SourceType);
+  const usedFallbackYouTubeFeed = isYouTubeFeed && parsedFeedUrl !== effectiveFeedUrl;
+  const skipsShortFiltering =
+    isYouTubeFeed && !usedFallbackYouTubeFeed && isYouTubeLongFormFeedUrl(parsedFeedUrl);
 
   for (const item of parsed.items || []) {
     totalItems++;
@@ -162,7 +192,7 @@ async function syncFeedInternal(feedId: string): Promise<number> {
     const guid = item.guid || articleUrl;
 
     if (!articleUrl) continue;
-    if (adapter.shouldSyncItem) {
+    if (adapter.shouldSyncItem && !skipsShortFiltering) {
       const shouldSync = await adapter.shouldSyncItem(
         item as unknown as Record<string, unknown>,
         articleUrl,

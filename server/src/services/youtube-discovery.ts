@@ -20,6 +20,10 @@ const YOUTUBE_HOSTS = new Set([
 
 const YOUTUBE_CHANNEL_ID_REGEX = /^UC[a-zA-Z0-9_-]{22}$/;
 const SHORTS_RESULT_CACHE = new Map<string, boolean>();
+const YOUTUBE_CHANNEL_FEED_URL = "https://www.youtube.com/feeds/videos.xml?channel_id=";
+const YOUTUBE_PLAYLIST_FEED_URL = "https://www.youtube.com/feeds/videos.xml?playlist_id=";
+const YOUTUBE_LONG_FORM_PLAYLIST_PREFIX = "UULF";
+const YOUTUBE_SHORTS_PLAYLIST_PREFIX = "UUSH";
 
 export class YouTubeDiscoveryError extends AppError {
   constructor(message: string, status: number, code: string) {
@@ -33,7 +37,61 @@ function isYouTubeHostname(hostname: string): boolean {
 }
 
 export function buildYouTubeFeedUrl(channelId: string): string {
-  return `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
+  return buildYouTubeLongFormFeedUrl(channelId);
+}
+
+export function buildYouTubeChannelFeedUrl(channelId: string): string {
+  return `${YOUTUBE_CHANNEL_FEED_URL}${channelId}`;
+}
+
+export function buildYouTubeLongFormPlaylistId(channelId: string): string {
+  return `${YOUTUBE_LONG_FORM_PLAYLIST_PREFIX}${channelId.slice(2)}`;
+}
+
+export function buildYouTubeShortsPlaylistId(channelId: string): string {
+  return `${YOUTUBE_SHORTS_PLAYLIST_PREFIX}${channelId.slice(2)}`;
+}
+
+export function buildYouTubeLongFormFeedUrl(channelId: string): string {
+  return `${YOUTUBE_PLAYLIST_FEED_URL}${buildYouTubeLongFormPlaylistId(channelId)}`;
+}
+
+export function buildYouTubeShortsFeedUrl(channelId: string): string {
+  return `${YOUTUBE_PLAYLIST_FEED_URL}${buildYouTubeShortsPlaylistId(channelId)}`;
+}
+
+export function extractChannelIdFromYouTubeFeedUrl(feedUrl: string): string | null {
+  try {
+    const parsed = new URL(feedUrl);
+    const channelId = parsed.searchParams.get("channel_id");
+    if (channelId && YOUTUBE_CHANNEL_ID_REGEX.test(channelId)) {
+      return channelId;
+    }
+
+    const playlistId = parsed.searchParams.get("playlist_id");
+    if (
+      playlistId &&
+      (playlistId.startsWith(YOUTUBE_LONG_FORM_PLAYLIST_PREFIX) ||
+        playlistId.startsWith(YOUTUBE_SHORTS_PLAYLIST_PREFIX))
+    ) {
+      const derivedChannelId = `UC${playlistId.slice(4)}`;
+      return YOUTUBE_CHANNEL_ID_REGEX.test(derivedChannelId) ? derivedChannelId : null;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+export function isYouTubeLongFormFeedUrl(feedUrl: string): boolean {
+  try {
+    const parsed = new URL(feedUrl);
+    const playlistId = parsed.searchParams.get("playlist_id");
+    return Boolean(playlistId?.startsWith(YOUTUBE_LONG_FORM_PLAYLIST_PREFIX));
+  } catch {
+    return false;
+  }
 }
 
 export function buildYouTubeChannelUrl(channelId: string): string {
@@ -131,20 +189,27 @@ export async function discoverYouTubeChannel(url: string): Promise<DiscoveredYou
 
   const channelUrl = buildYouTubeChannelUrl(channelId);
   const feedUrl = buildYouTubeFeedUrl(channelId);
+  const fallbackFeedUrl = buildYouTubeChannelFeedUrl(channelId);
 
   // 获取频道 logo
   const logoUrl = await fetchChannelLogo(channelUrl);
 
   // 解析 RSS feed 获取频道名称和最近视频
   let feed;
+  let usedFallbackFeed = false;
   try {
     feed = await rssParser.parseURL(feedUrl);
   } catch {
-    throw new YouTubeDiscoveryError(
-      "无法读取该频道订阅源，请稍后重试",
-      502,
-      "YOUTUBE_FEED_UNAVAILABLE",
-    );
+    try {
+      feed = await rssParser.parseURL(fallbackFeedUrl);
+      usedFallbackFeed = true;
+    } catch {
+      throw new YouTubeDiscoveryError(
+        "无法读取该频道订阅源，请稍后重试",
+        502,
+        "YOUTUBE_FEED_UNAVAILABLE",
+      );
+    }
   }
 
   const title = feed.title || "未知频道";
@@ -152,7 +217,7 @@ export async function discoverYouTubeChannel(url: string): Promise<DiscoveredYou
   for (const item of feed.items || []) {
     const itemUrl = item.link || "";
     if (!itemUrl) continue;
-    if (await isYouTubeShort(itemUrl)) {
+    if (usedFallbackFeed && await isYouTubeShort(itemUrl)) {
       continue;
     }
 
