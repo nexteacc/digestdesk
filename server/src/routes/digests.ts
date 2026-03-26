@@ -40,6 +40,7 @@ function toDigest(row: typeof digests.$inferSelect, items: DigestItem[]): Digest
 function toDigestItem(row: typeof digestItems.$inferSelect): DigestItem {
   return {
     id: row.id,
+    feedId: row.feedId ?? undefined,
     feedTitle: row.feedName,
     title: row.articleTitle,
     author: row.author ?? undefined,

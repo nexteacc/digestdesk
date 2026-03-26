@@ -15,6 +15,7 @@ export type Feed = {
 
 export type DigestItem = {
   id: string;
+  feedId?: string;
   feedTitle: string;
   title: string;
   author?: string;

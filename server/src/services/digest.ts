@@ -133,6 +133,7 @@ async function generateWithId(
 
   type ItemResult = {
     articleId: string;
+    feedId: string;
     feedName: string;
     title: string;
     author: string | null;
@@ -148,6 +149,7 @@ async function generateWithId(
       const feedName = feedMap.get(article.feedId) || "未知来源";
       const base = {
         articleId: article.id,
+        feedId: article.feedId,
         feedName,
         title: article.title,
         author: article.author,
@@ -229,6 +231,7 @@ async function generateWithId(
           id: nanoid(),
           digestId,
           articleId: it.articleId,
+          feedId: it.feedId,
           feedName: it.feedName,
           articleTitle: it.title,
           author: it.author || null,

@@ -66,6 +66,7 @@ export const digestItems = pgTable("digest_items", {
   id: text("id").primaryKey(),
   digestId: text("digest_id").notNull().references(() => digests.id, { onDelete: "cascade" }),
   articleId: text("article_id"),
+  feedId: text("feed_id").references(() => feeds.id, { onDelete: "set null" }),
   feedName: text("feed_name").notNull(),
   articleTitle: text("article_title").notNull(),
   author: text("author"),

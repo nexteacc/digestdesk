@@ -376,12 +376,14 @@ export default function DailyDigest() {
   const { feedCount, digestDays, articleCount } = stats;
 
   // --- TOC ---
-  const feedLogoMap = useMemo(() => {
-    const map = new Map<string, string | undefined>();
+  const feedLogoMaps = useMemo(() => {
+    const byId = new Map<string, string | undefined>();
+    const byTitle = new Map<string, string | undefined>();
     feeds.forEach((f) => {
-      map.set(f.title, f.logoUrl);
+      byId.set(f.id, f.logoUrl);
+      byTitle.set(f.title, f.logoUrl);
     });
-    return map;
+    return { byId, byTitle };
   }, [feeds]);
 
   const toc = useMemo(() => {
@@ -390,9 +392,9 @@ export default function DailyDigest() {
       id: `a-${slugify(it.feedTitle)}-${slugify(it.title)}-${it.id.slice(0, 6)}`,
       title: it.title,
       feedTitle: it.feedTitle,
-      logoUrl: feedLogoMap.get(it.feedTitle),
+      logoUrl: (it.feedId ? feedLogoMaps.byId.get(it.feedId) : undefined) ?? feedLogoMaps.byTitle.get(it.feedTitle),
     }));
-  }, [current, feedLogoMap]);
+  }, [current, feedLogoMaps]);
 
   const handleTocClick = useCallback((id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });

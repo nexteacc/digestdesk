@@ -95,6 +95,7 @@ export async function initDb() {
       id TEXT PRIMARY KEY,
       digest_id TEXT NOT NULL REFERENCES digests(id) ON DELETE CASCADE,
       article_id TEXT,
+      feed_id TEXT REFERENCES feeds(id) ON DELETE SET NULL,
       feed_name TEXT NOT NULL,
       article_title TEXT NOT NULL,
       author TEXT,
@@ -107,7 +108,15 @@ export async function initDb() {
   `;
 
   await queryClient`
+    ALTER TABLE digest_items ADD COLUMN IF NOT EXISTS feed_id TEXT REFERENCES feeds(id) ON DELETE SET NULL;
+  `;
+
+  await queryClient`
     CREATE INDEX IF NOT EXISTS idx_digest_items_digest_id ON digest_items(digest_id);
+  `;
+
+  await queryClient`
+    CREATE INDEX IF NOT EXISTS idx_digest_items_feed_id ON digest_items(feed_id);
   `;
 
   await queryClient`
