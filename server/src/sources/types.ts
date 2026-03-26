@@ -19,6 +19,10 @@ export interface SourceAdapter {
   readonly sourceType: SourceType;
   discover(rawUrl: string): Promise<unknown>;
   createFeedDraft(input: Record<string, unknown>): FeedDraft | Promise<FeedDraft>;
+  shouldSyncItem?(
+    item: Record<string, unknown>,
+    articleUrl: string,
+  ): Promise<boolean>;
   extractSyncItemContent(
     item: Record<string, unknown>,
     articleUrl: string,

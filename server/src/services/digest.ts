@@ -195,7 +195,7 @@ async function generateWithId(
       } catch (err) {
         return {
           ...base,
-          oneLiner: "AI 总结生成失败。",
+          oneLiner: language === "zh" ? "暂时无法生成摘要。" : "Summary unavailable for now.",
           keyInsights: [],
         };
       }

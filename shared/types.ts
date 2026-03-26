@@ -100,6 +100,15 @@ export type DiscoveredYouTubeChannel = {
   }>;
 };
 
+export type GoogleYouTubeSubscription = {
+  channelId: string;
+  title: string;
+  description?: string;
+  logoUrl?: string;
+  channelUrl: string;
+  feedUrl: string;
+};
+
 export type Settings = {
   digestTime: string;
   timezone: string;

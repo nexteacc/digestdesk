@@ -47,7 +47,7 @@ function GeneratingProgress() {
 
   const phaseText: Record<(typeof PROGRESS_PHASES)[number]["key"], string> = {
     sync: text("正在同步最新文章…", "Syncing articles..."),
-    read: text("AI 正在阅读文章…", "Reading..."),
+    read: text("编辑正在阅读文章…", "Your editor is reading..."),
     summary: text("正在生成摘要…", "Generating..."),
     polish: text("正在整理排版…", "Wrapping up..."),
   };
@@ -313,12 +313,11 @@ export default function DailyDigest() {
     loadDigest();
   }, [loadDigest]);
 
-  // 立即同步并生成今日日报
+  // 立即同步并刷新最近一期日报
   async function syncNow() {
     setGenerating(true);
     try {
-      const today = new Date().toISOString().slice(0, 10);
-      const result = await api.generateDigest("daily", { date: today, force: true });
+      const result = await api.generateDigest("daily", { force: true });
       if ("status" in result && result.status === "empty") {
         toast(text("暂无新文章，稍后再来看看", "No new articles. Check back later."));
         return;
@@ -328,7 +327,7 @@ export default function DailyDigest() {
       setCurrent(digest);
       const list = await api.fetchDigests("daily");
       setDigestList(list);
-      toast.success(text("同步并生成今日日报成功", "Today's digest is ready"));
+      toast.success(text("同步完成，日报已更新", "Sync complete. Your digest has been updated."));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : text("同步失败", "Sync failed"));
     } finally {

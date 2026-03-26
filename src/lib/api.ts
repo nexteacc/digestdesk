@@ -6,10 +6,23 @@ import type {
   SubstackInfo,
   DiscoveredFeed,
   DiscoveredYouTubeChannel,
+  GoogleYouTubeSubscription,
   Settings,
 } from "./types";
 
 const BASE = "/api";
+
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -18,7 +31,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Request failed (${res.status})`);
+    throw new ApiError(body.error || `Request failed (${res.status})`, res.status, body.code);
   }
   return res.json();
 }
@@ -169,6 +182,10 @@ export function deleteYouTubeFeed(id: string): Promise<void> {
 
 export function batchDeleteYouTubeFeeds(ids: string[]): Promise<{ deleted: number }> {
   return batchDeleteFeeds(ids);
+}
+
+export function fetchGoogleYouTubeSubscriptions(): Promise<{ items: GoogleYouTubeSubscription[] }> {
+  return request("/youtube-feeds/google-subscriptions");
 }
 
 // --- Settings ---

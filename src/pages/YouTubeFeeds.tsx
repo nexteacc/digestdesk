@@ -11,8 +11,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useI18n } from "@/contexts/I18nContext";
 import { useBatchMode } from "@/hooks/useBatchMode";
 import * as api from "@/lib/api";
-import type { Feed, DiscoveredYouTubeChannel } from "@/lib/types";
-import { Search } from "lucide-react";
+import { ApiError } from "@/lib/api";
+import type { Feed, DiscoveredYouTubeChannel, GoogleYouTubeSubscription } from "@/lib/types";
+import { Search, Download, RefreshCw } from "lucide-react";
 
 export default function YouTubeFeedsPage() {
   const { text } = useI18n();
@@ -24,6 +25,11 @@ export default function YouTubeFeedsPage() {
   const [discovering, setDiscovering] = useState(false);
   const [discovered, setDiscovered] = useState<DiscoveredYouTubeChannel | null>(null);
   const [adding, setAdding] = useState(false);
+  const [importingSubscriptions, setImportingSubscriptions] = useState(false);
+  const [googleSubscriptions, setGoogleSubscriptions] = useState<GoogleYouTubeSubscription[]>([]);
+  const [selectedImports, setSelectedImports] = useState<string[]>([]);
+  const [importSubmitting, setImportSubmitting] = useState(false);
+  const [requiresGoogleReauth, setRequiresGoogleReauth] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -100,6 +106,111 @@ export default function YouTubeFeedsPage() {
     return feeds.some((f) => f.feedUrl === feedUrl);
   }
 
+  function toggleImport(channelId: string) {
+    setSelectedImports((current) =>
+      current.includes(channelId)
+        ? current.filter((id) => id !== channelId)
+        : [...current, channelId],
+    );
+  }
+
+  function selectAllImportable() {
+    setSelectedImports(
+      googleSubscriptions
+        .filter((item) => !isSubscribed(item.feedUrl))
+        .map((item) => item.channelId),
+    );
+  }
+
+  function clearImportSelection() {
+    setSelectedImports([]);
+  }
+
+  async function onFetchGoogleSubscriptions() {
+    setImportingSubscriptions(true);
+    setRequiresGoogleReauth(false);
+    try {
+      const result = await api.fetchGoogleYouTubeSubscriptions();
+      setGoogleSubscriptions(result.items);
+      setSelectedImports(
+        result.items
+          .filter((item) => !isSubscribed(item.feedUrl))
+          .map((item) => item.channelId),
+      );
+      if (result.items.length === 0) {
+        toast(text("没有读取到 YouTube 订阅频道", "No YouTube subscriptions found"));
+      }
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "GOOGLE_YOUTUBE_REAUTH_REQUIRED") {
+        setRequiresGoogleReauth(true);
+        setGoogleSubscriptions([]);
+        setSelectedImports([]);
+        toast.error(
+          text(
+            "需要补充 Google 授权后才能读取 YouTube 订阅",
+            "Reconnect Google to read YouTube subscriptions",
+          ),
+        );
+        return;
+      }
+      toast.error(
+        error instanceof Error ? error.message : text("读取订阅失败", "Failed to load subscriptions"),
+      );
+    } finally {
+      setImportingSubscriptions(false);
+    }
+  }
+
+  async function onImportSelectedSubscriptions() {
+    const targets = googleSubscriptions.filter(
+      (item) => selectedImports.includes(item.channelId) && !isSubscribed(item.feedUrl),
+    );
+    if (targets.length === 0) {
+      toast.error(text("请先选择要导入的频道", "Select channels to import"));
+      return;
+    }
+
+    setImportSubmitting(true);
+    let created = 0;
+    let skipped = 0;
+
+    for (const item of targets) {
+      try {
+        await api.createYouTubeFeed({
+          channelId: item.channelId,
+          title: item.title,
+          logoUrl: item.logoUrl,
+        });
+        created += 1;
+      } catch (error) {
+        if (error instanceof Error && error.message.includes(text("该频道已订阅", "already"))) {
+          skipped += 1;
+          continue;
+        }
+        console.error("[youtube] Failed to import Google subscription:", item.channelId, error);
+        skipped += 1;
+      }
+    }
+
+    await refresh();
+    setGoogleSubscriptions((current) =>
+      current.filter((item) => !selectedImports.includes(item.channelId)),
+    );
+    setSelectedImports([]);
+    setImportSubmitting(false);
+
+    if (created > 0) {
+      toast.success(
+        text(`已导入 ${created} 个 YouTube 频道`, `Imported ${created} YouTube channels`),
+      );
+    }
+    if (skipped > 0) {
+      toast(
+        text(`跳过 ${skipped} 个频道`, `Skipped ${skipped} channels`),
+      );
+    }
+  }
+
   async function onRemove(id: string) {
     try {
       await api.deleteYouTubeFeed(id);
@@ -115,11 +226,136 @@ export default function YouTubeFeedsPage() {
       <div className="flex flex-col gap-6">
         {/* Header */}
         <div>
-          <h2 className="text-2xl md:text-3xl font-semibold">
-            {text("YouTube 频道", "YouTube Channels")}
-          </h2>
+          <div className="flex items-end justify-between gap-4 flex-wrap">
+            <h2 className="text-2xl md:text-3xl font-semibold">
+              {text("YouTube 频道", "YouTube Channels")}
+            </h2>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 border-primary/50 text-primary hover:bg-primary/10 hover:border-primary hover:text-primary transition-colors"
+              onClick={onFetchGoogleSubscriptions}
+              disabled={importingSubscriptions}
+            >
+              {importingSubscriptions ? (
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Download className="h-3.5 w-3.5" />
+              )}
+              {text("导入我的 YouTube 订阅", "Import my YouTube subscriptions")}
+            </Button>
+          </div>
           <Separator className="mt-4" />
         </div>
+
+        {(requiresGoogleReauth || googleSubscriptions.length > 0) && (
+          <Card className="p-4 md:p-5">
+            <div className="space-y-4">
+              {requiresGoogleReauth ? (
+                <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                  <p className="font-medium">
+                    {text("还需要一次 Google 授权", "One more Google authorization is required")}
+                  </p>
+                  <p className="mt-1 text-amber-900/80">
+                    {text(
+                      "请点击右上角头像，进入账户面板后重新连接 Google，允许读取 YouTube 订阅列表，然后回到这里重试。",
+                      "Open the account panel from the top-right avatar, reconnect Google with YouTube access, then come back and try again.",
+                    )}
+                  </p>
+                </div>
+              ) : null}
+
+              {googleSubscriptions.length > 0 ? (
+                <>
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                      <h3 className="text-sm font-medium">
+                        {text("从 Google 读取到的 YouTube 订阅", "YouTube subscriptions from Google")}
+                      </h3>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {text(
+                          "选择要导入到 DigestDesk 的频道",
+                          "Choose which channels to import into DigestDesk",
+                        )}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={selectAllImportable}
+                        disabled={importSubmitting}
+                      >
+                        {text("全选可导入", "Select all")}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={clearImportSelection}
+                        disabled={importSubmitting || selectedImports.length === 0}
+                      >
+                        {text("清空选择", "Clear")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={onImportSelectedSubscriptions}
+                        disabled={importSubmitting || selectedImports.length === 0}
+                      >
+                        {importSubmitting
+                          ? text("导入中…", "Importing...")
+                          : text(`导入已选 ${selectedImports.length} 个`, `Import ${selectedImports.length} selected`)}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {googleSubscriptions.map((item) => {
+                      const subscribed = isSubscribed(item.feedUrl);
+                      const checked = selectedImports.includes(item.channelId);
+
+                      return (
+                        <label
+                          key={item.channelId}
+                          className="flex items-center gap-3 rounded-md border border-border p-3 cursor-pointer hover:bg-accent/30 transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4"
+                            checked={checked}
+                            disabled={subscribed || importSubmitting}
+                            onChange={() => toggleImport(item.channelId)}
+                          />
+                          <Avatar className="h-10 w-10">
+                            {item.logoUrl ? <AvatarImage src={item.logoUrl} alt={item.title} /> : null}
+                            <AvatarFallback>
+                              <img src="/logos/youtube.svg" alt="YouTube" className="h-4 w-4" />
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium truncate">{item.title}</div>
+                            <div className="text-xs text-muted-foreground truncate mt-0.5">
+                              {item.channelUrl}
+                            </div>
+                            {item.description ? (
+                              <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                                {item.description}
+                              </p>
+                            ) : null}
+                          </div>
+                          <div className="shrink-0 text-xs text-muted-foreground">
+                            {subscribed ? text("已订阅", "Subscribed") : text("可导入", "Ready")}
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </Card>
+        )}
 
         {/* Discover YouTube Channel */}
         <Card className="p-4 md:p-5">

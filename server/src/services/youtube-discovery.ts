@@ -19,6 +19,7 @@ const YOUTUBE_HOSTS = new Set([
 ]);
 
 const YOUTUBE_CHANNEL_ID_REGEX = /^UC[a-zA-Z0-9_-]{22}$/;
+const SHORTS_RESULT_CACHE = new Map<string, boolean>();
 
 export class YouTubeDiscoveryError extends AppError {
   constructor(message: string, status: number, code: string) {
@@ -37,6 +38,58 @@ export function buildYouTubeFeedUrl(channelId: string): string {
 
 export function buildYouTubeChannelUrl(channelId: string): string {
   return `https://www.youtube.com/channel/${channelId}`;
+}
+
+export function extractYouTubeVideoId(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.pathname.includes("/shorts/")) {
+      const parts = parsed.pathname.split("/").filter(Boolean);
+      const shortsIndex = parts.indexOf("shorts");
+      return shortsIndex >= 0 ? parts[shortsIndex + 1] || null : null;
+    }
+    if (parsed.hostname.includes("youtu.be")) {
+      return parsed.pathname.slice(1) || null;
+    }
+    return parsed.searchParams.get("v");
+  } catch {
+    return null;
+  }
+}
+
+export async function isYouTubeShort(videoUrl: string): Promise<boolean> {
+  if (videoUrl.includes("/shorts/")) {
+    return true;
+  }
+
+  const videoId = extractYouTubeVideoId(videoUrl);
+  if (!videoId) {
+    return false;
+  }
+
+  const cached = SHORTS_RESULT_CACHE.get(videoId);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  try {
+    const response = await fetch(`https://www.youtube.com/shorts/${videoId}`, {
+      method: "HEAD",
+      redirect: "manual",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+
+    const isShort = response.ok;
+    SHORTS_RESULT_CACHE.set(videoId, isShort);
+    return isShort;
+  } catch (err) {
+    console.warn("[youtube] Failed to detect Shorts video:", videoId, err);
+    return false;
+  }
 }
 
 function normalizeInputUrl(raw: string): URL {
@@ -95,17 +148,28 @@ export async function discoverYouTubeChannel(url: string): Promise<DiscoveredYou
   }
 
   const title = feed.title || "未知频道";
-  const recentVideos = (feed.items || []).slice(0, 5).map((item) => {
-    const videoId = extractVideoId(item.link || "");
-    return {
+  const recentVideos = [];
+  for (const item of feed.items || []) {
+    const itemUrl = item.link || "";
+    if (!itemUrl) continue;
+    if (await isYouTubeShort(itemUrl)) {
+      continue;
+    }
+
+    const videoId = extractYouTubeVideoId(itemUrl);
+    recentVideos.push({
       title: item.title || "无标题",
-      url: item.link || "",
+      url: itemUrl,
       thumbnailUrl: videoId
         ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
         : "",
       publishedAt: item.isoDate || item.pubDate || "",
-    };
-  });
+    });
+
+    if (recentVideos.length >= 5) {
+      break;
+    }
+  }
 
   return {
     channelId,
@@ -209,19 +273,4 @@ async function fetchChannelLogo(channelUrl: string): Promise<string> {
     console.warn(`[youtube] 获取频道头像失败:`, err);
   }
   return "";
-}
-
-/**
- * 从视频 URL 中提取 videoId
- */
-function extractVideoId(url: string): string | null {
-  try {
-    const parsed = new URL(url);
-    if (parsed.hostname.includes("youtu.be")) {
-      return parsed.pathname.slice(1);
-    }
-    return parsed.searchParams.get("v");
-  } catch {
-    return null;
-  }
 }

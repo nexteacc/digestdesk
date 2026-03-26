@@ -9,5 +9,6 @@ export type {
   DigestListItem,
   DiscoveredFeed,
   DiscoveredYouTubeChannel,
+  GoogleYouTubeSubscription,
   Settings,
 } from "../../shared/types";

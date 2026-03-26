@@ -104,7 +104,7 @@ export default function SettingsPage() {
                   {text("日报语言", "Digest Language")}
                 </label>
                 <p className="text-xs text-muted-foreground">
-                  {text("AI 总结生成的语言", "AI generation language")}
+                  {text("编辑撰写摘要时使用的语言", "Language used for your editor's summaries")}
                 </p>
               </div>
               <Select value={digestLanguage} onValueChange={(v) => setDigestLanguage(v as "zh" | "en")}>

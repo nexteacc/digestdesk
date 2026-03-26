@@ -112,7 +112,14 @@ export default function AppShell({ children }: PropsWithChildren) {
                 EN
               </Button>
             </div>
-            <UserButton afterSignOutUrl="/" />
+            <UserButton
+              afterSignOutUrl="/"
+              userProfileProps={{
+                additionalOAuthScopes: {
+                  google: ["https://www.googleapis.com/auth/youtube.readonly"],
+                },
+              }}
+            />
             </div>
           </div>
         </header>

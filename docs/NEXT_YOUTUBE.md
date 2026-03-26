@@ -1,4 +1,6 @@
-# YouTube 频道支持 — 架构与实现总结
+# Next YouTube
+
+本文档记录 YouTube 作为下一专题的现状、已验证实现和后续演进方向。
 
 ## Context
 

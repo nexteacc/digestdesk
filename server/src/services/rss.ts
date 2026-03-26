@@ -150,13 +150,28 @@ async function syncFeedInternal(feedId: string): Promise<number> {
 
   const now = new Date().toISOString();
   let newCount = 0;
+  let totalItems = 0;
+  let filteredItems = 0;
+  const isYouTubeFeed = feed.sourceType === "youtube";
+  const adapter = getSourceAdapter(feed.sourceType as SourceType);
 
   for (const item of parsed.items || []) {
+    totalItems++;
     const itemRecord = item as unknown as Record<string, unknown>;
     const articleUrl = item.link || "";
     const guid = item.guid || articleUrl;
 
     if (!articleUrl) continue;
+    if (adapter.shouldSyncItem) {
+      const shouldSync = await adapter.shouldSyncItem(
+        item as unknown as Record<string, unknown>,
+        articleUrl,
+      );
+      if (!shouldSync) {
+        filteredItems++;
+        continue;
+      }
+    }
 
     const [existing] = await db
       .select({ id: articles.id })
@@ -165,7 +180,6 @@ async function syncFeedInternal(feedId: string): Promise<number> {
 
     if (existing) continue;
 
-    const adapter = getSourceAdapter(feed.sourceType as SourceType);
     const { contentMarkdown, coverImageUrl } =
       await adapter.extractSyncItemContent(item as unknown as Record<string, unknown>, articleUrl);
 
@@ -188,6 +202,11 @@ async function syncFeedInternal(feedId: string): Promise<number> {
 
   await db.update(feeds).set({ lastFetchedAt: now }).where(eq(feeds.id, feedId));
 
+  if (isYouTubeFeed) {
+    console.log(
+      `[rss] YouTube sync stats for ${feed.name}: totalItems=${totalItems} filteredShorts=${filteredItems} inserted=${newCount}`,
+    );
+  }
   console.log(`[rss] ${feed.name}: ${newCount} new articles`);
   return newCount;
 }

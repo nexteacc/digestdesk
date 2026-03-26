@@ -2,6 +2,7 @@ import {
   buildYouTubeChannelUrl,
   buildYouTubeFeedUrl,
   discoverYouTubeChannel,
+  isYouTubeShort,
   YouTubeDiscoveryError,
 } from "../../services/youtube-discovery.js";
 import { AppError } from "../app-error.js";
@@ -48,6 +49,11 @@ export class YouTubeAdapter implements SourceAdapter {
       }
       throw new AppError("探测失败，请稍后重试", 500, "DISCOVERY_FAILED");
     }
+  }
+
+  async shouldSyncItem(_item: Record<string, unknown>, articleUrl: string): Promise<boolean> {
+    const isShort = await isYouTubeShort(articleUrl);
+    return !isShort;
   }
 
   createFeedDraft(input: {
