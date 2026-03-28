@@ -1,9 +1,10 @@
 import { SignInButton } from "@clerk/react";
 
+const titleWords = ["Your", "everyday", "editor"];
+
 const featureList = [
-  "Bring Substack, RSS, and YouTube updates into one reading desk.",
-  "Review incoming items in a calm daily workflow instead of scattered tabs.",
-  "Keep subscriptions organized without losing the original source context.",
+  "Track the creators you care about",
+  "Your daily personal newspaper",
 ];
 
 export default function PublicHome() {
@@ -37,49 +38,64 @@ export default function PublicHome() {
 
       <main className="flex-1">
         <div className="mx-auto max-w-6xl px-4 py-12 md:px-6 md:py-20">
-          <section className="grid gap-10 border-y border-border py-10 md:grid-cols-[1.25fr_0.9fr] md:gap-16">
-            <div>
-              <p className="text-[11px] tracking-[0.28em] uppercase text-muted-foreground">
-                Product Overview
-              </p>
-              <h2 className="mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-foreground md:text-6xl">
-                A personal desk for reading across newsletters, feeds, and channel updates.
-              </h2>
-              <p className="mt-6 max-w-2xl text-base leading-7 text-foreground/80 md:text-lg">
-                DigestDesk helps users collect and review updates from Substack, RSS, and YouTube
-                in one place. It is built for focused reading, quick triage, and a cleaner daily
-                workflow around the sources you already follow.
-              </p>
+          <section className="py-10 md:py-14">
+            <div className="grid gap-10 md:grid-cols-[minmax(0,1.15fr)_360px] md:items-start md:gap-12">
+              <div className="max-w-3xl">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="h-px w-12 bg-border" />
+                  <span className="text-[10px] tracking-[0.25em] uppercase text-muted-foreground animate-[fadeIn_0.6s_ease_forwards] opacity-0">
+                    ✦
+                  </span>
+                  <div className="h-px w-12 bg-border" />
+                </div>
 
-              <div className="mt-8 flex flex-wrap gap-3">
-                <SignInButton
-                  mode="modal"
-                  fallbackRedirectUrl="/"
-                  forceRedirectUrl="/"
-                  signUpFallbackRedirectUrl="/"
-                  signUpForceRedirectUrl="/"
+                <h2
+                  className="max-w-2xl text-4xl font-semibold tracking-tight md:text-6xl"
+                  style={{ fontFamily: "'Fraunces', ui-serif, Georgia, serif" }}
                 >
-                  <button className="inline-flex items-center gap-2 rounded-sm px-6 py-2.5 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer shadow-sm">
-                    Sign in
-                  </button>
-                </SignInButton>
-                <a
-                  href="#/privacy"
-                  className="inline-flex items-center rounded-sm border border-border px-6 py-2.5 text-sm font-medium hover:bg-accent transition-colors"
+                  {titleWords.map((word, i) => (
+                    <span
+                      key={word}
+                      className={`mr-[0.22em] inline-block animate-[wordReveal_0.7s_ease_forwards] opacity-0 ${
+                        word === "everyday" ? "text-[var(--primary)]" : "text-foreground"
+                      }`}
+                      style={{ animationDelay: `${0.2 + i * 0.16}s` }}
+                    >
+                      {word}
+                    </span>
+                  ))}
+                </h2>
+
+                <div
+                  className="mt-8 flex flex-wrap gap-3 animate-[fadeIn_0.6s_ease_forwards] opacity-0"
+                  style={{ animationDelay: "0.85s" }}
                 >
-                  Review privacy policy
-                </a>
+                  <SignInButton
+                    mode="modal"
+                    fallbackRedirectUrl="/"
+                    forceRedirectUrl="/"
+                    signUpFallbackRedirectUrl="/"
+                    signUpForceRedirectUrl="/"
+                  >
+                    <button className="inline-flex items-center gap-2 rounded-sm px-6 py-2.5 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer shadow-sm">
+                      Sign in
+                    </button>
+                  </SignInButton>
+                </div>
               </div>
-            </div>
 
-            <div className="space-y-4">
-              <div className="rounded-sm border border-border bg-card/80 p-5">
+              <div
+                className="rounded-sm border border-border bg-card/80 p-5 md:p-6 animate-[fadeIn_0.6s_ease_forwards] opacity-0"
+                style={{ animationDelay: "1s" }}
+              >
                 <p className="text-[11px] tracking-[0.24em] uppercase text-muted-foreground">
-                  Core Use
+                  Why It Matters
                 </p>
-                <ul className="mt-4 space-y-3 text-sm leading-6 text-foreground/80">
+                <ul className="mt-4 space-y-4 text-sm leading-6 text-foreground/80">
                   {featureList.map((item) => (
-                    <li key={item}>{item}</li>
+                    <li key={item} className="border-b border-border/70 pb-4 last:border-b-0 last:pb-0">
+                      {item}
+                    </li>
                   ))}
                 </ul>
               </div>
@@ -87,20 +103,6 @@ export default function PublicHome() {
           </section>
         </div>
       </main>
-
-      <footer className="hairline">
-        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-4 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between md:px-6">
-          <p>DigestDesk helps users organize Substack, RSS, and YouTube updates into one personal workflow.</p>
-          <div className="flex gap-4">
-            <a href="#/privacy" className="hover:text-foreground transition-colors">
-              Privacy
-            </a>
-            <a href="#/terms" className="hover:text-foreground transition-colors">
-              Terms
-            </a>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
