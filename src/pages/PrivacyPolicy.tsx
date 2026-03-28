@@ -13,10 +13,10 @@ export default function PrivacyPolicyPage() {
           DigestDesk is operated by an individual developer. If you have privacy questions or
           deletion requests, contact the operator at{" "}
           <a
-            href="mailto:support@digestdesk.app"
+            href="mailto:nextbigtoy@gmail.com"
             className="text-primary underline underline-offset-4"
           >
-            support@digestdesk.app
+            nextbigtoy@gmail.com
           </a>
           .
         </p>

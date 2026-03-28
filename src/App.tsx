@@ -2,7 +2,7 @@ import { Show, useAuth } from "@clerk/react";
 import { useEffect, useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Router, Route, Switch } from "wouter";
+import { Router, Route, Switch, useLocation } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeContext";
@@ -34,9 +34,16 @@ function DashboardRoutes() {
 
 function ProtectedRoute({ component: Component }: { component: () => React.JSX.Element }) {
   const { isSignedIn } = useAuth();
+  const [, navigate] = useLocation();
+
+  useEffect(() => {
+    if (!isSignedIn) {
+      navigate("/");
+    }
+  }, [isSignedIn, navigate]);
 
   if (!isSignedIn) {
-    return <PublicHome />;
+    return null;
   }
 
   return <Component />;
