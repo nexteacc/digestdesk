@@ -73,6 +73,8 @@
      - `JINA_RPM`
      - `JINA_MAX_CONCURRENCY`
      - `APP_URL`
+     - `VITE_ENABLE_GOOGLE_YOUTUBE_IMPORT`
+     - `ENABLE_GOOGLE_YOUTUBE_IMPORT`
    - `scheduler`:
      - `DATABASE_URL` 或 `POSTGRES_CONNECTION_STRING` / `POSTGRES_URI`
      - `AI_API_KEY`
@@ -87,6 +89,13 @@
 7. `scheduler` 不需要域名，不对外暴露 HTTP。
 8. `scheduler` 初始保持单实例。
 9. 部署完成后查看日志，确认调度服务正常启动。
+
+当前建议：
+
+- 主站先上线时，将 `VITE_ENABLE_GOOGLE_YOUTUBE_IMPORT=false`
+- 同时将 `ENABLE_GOOGLE_YOUTUBE_IMPORT=false`
+- 这样可以先发布 Digest / RSS / Substack / 手动添加 YouTube 频道能力
+- 等 Google 完成 YouTube 敏感 scope 审核后，再把这两个变量切到 `true`
 
 如果 Zeabur 里没有自动识别 `zbpack.scheduler.json`，则手动配置：
 

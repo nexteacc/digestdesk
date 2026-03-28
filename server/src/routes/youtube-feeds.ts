@@ -31,8 +31,17 @@ const baseRouter = createSourceFeedRouter({
 });
 
 export const youtubeFeedsRouter = Router();
+const googleYouTubeImportEnabled = process.env.ENABLE_GOOGLE_YOUTUBE_IMPORT === "true";
 
 youtubeFeedsRouter.get("/google-subscriptions", async (req, res) => {
+  if (!googleYouTubeImportEnabled) {
+    res.status(403).json({
+      error: "Google YouTube 导入功能暂未开放",
+      code: "GOOGLE_YOUTUBE_IMPORT_DISABLED",
+    });
+    return;
+  }
+
   const auth = getAuth(req);
   const clerkUserId = auth.userId;
 

@@ -16,6 +16,8 @@ type NavItem = {
 
 export default function AppShell({ children }: PropsWithChildren) {
   const [location] = useLocation();
+  const googleYouTubeImportEnabled =
+    import.meta.env.VITE_ENABLE_GOOGLE_YOUTUBE_IMPORT === "true";
   const [isCollapsed, setIsCollapsed] = useState(() => {
     try { return localStorage.getItem("sidebar-collapsed") === "true"; }
     catch { return false; }
@@ -115,9 +117,11 @@ export default function AppShell({ children }: PropsWithChildren) {
             <UserButton
               afterSignOutUrl="/"
               userProfileProps={{
-                additionalOAuthScopes: {
-                  google: ["https://www.googleapis.com/auth/youtube.readonly"],
-                },
+                additionalOAuthScopes: googleYouTubeImportEnabled
+                  ? {
+                      google: ["https://www.googleapis.com/auth/youtube.readonly"],
+                    }
+                  : undefined,
               }}
             />
             </div>

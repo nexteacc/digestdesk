@@ -14,18 +14,48 @@ import RssFeedsPage from "@/pages/RssFeeds";
 import YouTubeFeedsPage from "@/pages/YouTubeFeeds";
 import SettingsPage from "@/pages/Settings";
 import NotFound from "@/pages/NotFound";
-import LoginPage from "@/pages/Login";
+import PublicHome from "@/pages/PublicHome";
+import PrivacyPolicyPage from "@/pages/PrivacyPolicy";
+import TermsOfServicePage from "@/pages/TermsOfService";
 import { ensureCurrentUser } from "@/lib/api";
+
+function DashboardRoutes() {
+  return (
+    <Switch>
+      <Route path="/" component={DailyDigest} />
+      <Route path="/subscriptions" component={SubscriptionsPage} />
+      <Route path="/rss" component={RssFeedsPage} />
+      <Route path="/youtube" component={YouTubeFeedsPage} />
+      <Route path="/settings" component={SettingsPage} />
+      <Route component={NotFound} />
+    </Switch>
+  );
+}
+
+function ProtectedRoute({ component: Component }: { component: () => React.JSX.Element }) {
+  const { isSignedIn } = useAuth();
+
+  if (!isSignedIn) {
+    return <PublicHome />;
+  }
+
+  return <Component />;
+}
 
 function AppRouter() {
   return (
     <Router hook={useHashLocation}>
       <Switch>
-        <Route path="/" component={DailyDigest} />
-        <Route path="/subscriptions" component={SubscriptionsPage} />
-        <Route path="/rss" component={RssFeedsPage} />
-        <Route path="/youtube" component={YouTubeFeedsPage} />
-        <Route path="/settings" component={SettingsPage} />
+        <Route path="/privacy" component={PrivacyPolicyPage} />
+        <Route path="/terms" component={TermsOfServicePage} />
+        <Route path="/" component={() => {
+          const { isSignedIn } = useAuth();
+          return isSignedIn ? <AuthenticatedApp /> : <PublicHome />;
+        }} />
+        <Route path="/subscriptions" component={() => <ProtectedRoute component={SubscriptionsPage} />} />
+        <Route path="/rss" component={() => <ProtectedRoute component={RssFeedsPage} />} />
+        <Route path="/youtube" component={() => <ProtectedRoute component={YouTubeFeedsPage} />} />
+        <Route path="/settings" component={() => <ProtectedRoute component={SettingsPage} />} />
         <Route component={NotFound} />
       </Switch>
     </Router>
@@ -41,10 +71,10 @@ function App() {
             <TooltipProvider>
               <Toaster />
               <Show when="signed-in">
-                <AuthenticatedApp />
+                <AppRouter />
               </Show>
               <Show when="signed-out">
-                <LoginPage />
+                <AppRouter />
               </Show>
             </TooltipProvider>
           </ThemeProvider>
@@ -92,7 +122,7 @@ function AuthenticatedApp() {
     return <div className="min-h-screen flex items-center justify-center text-sm text-destructive">Failed to initialize your account.</div>;
   }
 
-  return <AppRouter />;
+  return <DashboardRoutes />;
 }
 
 export default App;
