@@ -165,7 +165,7 @@ export default function SubscriptionsPage() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={onSearchKeyDown}
-                  placeholder={text("搜索你想看的 Substack 出版物", "Search...")}
+                  placeholder={text("搜索你想订阅的 Substack 出版物", "Search for a Substack publication")}
                   className="flex-1"
                 />
                 <Button onClick={onSearch} disabled={searchLoading}>
@@ -257,7 +257,7 @@ export default function SubscriptionsPage() {
           loading={feedsLoading}
           {...batch}
           onRemove={onRemove}
-          emptyText={text("还没有订阅源，试试搜索。", "No subscriptions yet. Try searching.")}
+          emptyText={text("还没有订阅内容，试试搜索。", "No subscriptions yet. Try searching.")}
         />
       </div>
       <ImportDialog

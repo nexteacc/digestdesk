@@ -40,6 +40,12 @@ export default function RssFeedsPage() {
     refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    if (!urlInput.trim()) {
+      setDiscovered(null);
+    }
+  }, [urlInput]);
+
   const batch = useBatchMode({
     allIds: feeds.map((f) => f.id),
     deleteFn: api.batchDeleteFeeds,
@@ -49,7 +55,7 @@ export default function RssFeedsPage() {
   async function onDiscover() {
     const url = urlInput.trim();
     if (!url) {
-      toast.error(text("请输入 URL", "Please enter a URL"));
+      toast.error(text("请先输入链接", "Enter a URL"));
       return;
     }
     setDiscovering(true);
@@ -58,7 +64,7 @@ export default function RssFeedsPage() {
       const result = await api.discoverRssFeed(url);
       setDiscovered(result);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : text("探测失败", "Discovery failed"));
+      toast.error(e instanceof Error ? e.message : text("识别失败", "Could not identify feed"));
     } finally {
       setDiscovering(false);
     }
@@ -135,9 +141,9 @@ export default function RssFeedsPage() {
               />
               <Button onClick={onDiscover} disabled={discovering}>
                 {discovering ? (
-                  <>{text("探测中…", "Discovering...")}</>
+                  <>{text("识别中…", "Checking...")}</>
                 ) : (
-                  <><Search className="h-4 w-4 mr-1.5" />{text("探测", "Discover")}</>
+                  <><Search className="h-4 w-4 mr-1.5" />{text("识别链接", "Check link")}</>
                 )}
               </Button>
             </div>
@@ -208,7 +214,7 @@ export default function RssFeedsPage() {
           loading={feedsLoading}
           {...batch}
           onRemove={onRemove}
-          emptyText={text("还没有 RSS 订阅源。粘贴一个网站链接试试。", "No RSS feeds yet. Paste a URL above to add one.")}
+          emptyText={text("还没有 RSS 订阅。粘贴一个网站链接试试。", "No RSS subscriptions yet. Paste a URL above to add one.")}
           renderAvatarFallback={() => <Rss className="h-3.5 w-3.5" />}
         />
       </div>

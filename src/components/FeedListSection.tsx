@@ -69,7 +69,7 @@ export default function FeedListSection({
             onClick={enterBatchMode}
           >
             <Trash2 className="h-3.5 w-3.5" />
-            {text("一键取消", "Bulk Unsubscribe")}
+            {text("批量管理", "Manage")}
           </Button>
         )}
       </div>
@@ -123,18 +123,18 @@ export default function FeedListSection({
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                     {batchDeleting
-                      ? text("删除中…", "Removing...")
+                      ? text("处理中…", "Processing...")
                       : text(
                           `取消订阅 (${batchSelected.size})`,
                           `Unsubscribe (${batchSelected.size})`,
                         )}
                   </Button>
                 </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      {text("确定一键取消？", "Unsubscribe selected?")}
-                    </AlertDialogTitle>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                      {text(`取消订阅 ${batchSelected.size} 个源？`, `Unsubscribe ${batchSelected.size} sources?`)}
+                      </AlertDialogTitle>
                     <AlertDialogDescription>
                       {text(
                         `将取消订阅 ${batchSelected.size} 个源，后续日报将不再包含这些来源的内容。`,
@@ -147,7 +147,7 @@ export default function FeedListSection({
                       {text("取消", "Cancel")}
                     </AlertDialogCancel>
                     <AlertDialogAction onClick={onBatchDelete}>
-                      {text("确认取消订阅", "Unsubscribe")}
+                      {text("取消订阅", "Unsubscribe")}
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
@@ -239,7 +239,7 @@ export default function FeedListSection({
                       <AlertDialogContent>
                         <AlertDialogHeader>
                           <AlertDialogTitle>
-                            {text("确定取消订阅？", "Unsubscribe?")}
+                            {text(`取消订阅「${f.title}」？`, `Unsubscribe from ${f.title}?`)}
                           </AlertDialogTitle>
                           <AlertDialogDescription>
                             {text(
@@ -253,7 +253,7 @@ export default function FeedListSection({
                             {text("取消", "Cancel")}
                           </AlertDialogCancel>
                           <AlertDialogAction onClick={() => onRemove(f.id)}>
-                            {text("确认取消订阅", "Unsubscribe")}
+                            {text("取消订阅", "Unsubscribe")}
                           </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>

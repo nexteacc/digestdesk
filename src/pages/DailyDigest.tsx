@@ -120,9 +120,9 @@ function ReadingComplete({ itemCount }: { itemCount: number }) {
       {visible && (
         <Card className="p-6 text-center border-green-200 bg-green-50/50 animate-in fade-in duration-700">
           <CheckCircle2 className="h-8 w-8 mx-auto text-green-600" />
-          <div className="mt-3 text-lg font-semibold">{text("今日日报已读完", "All caught up!")}</div>
+          <div className="mt-3 text-lg font-semibold">{text("今天的日报已读完", "You're all caught up")}</div>
           <div className="mt-1 text-sm text-muted-foreground">
-            {text(`共 ${itemCount} 篇文章 · 阅读用时约 ${readingMinutes} 分钟`, `${itemCount} articles · ${readingMinutes} min read`)}
+            {text(`共读完 ${itemCount} 条更新 · 用时约 ${readingMinutes} 分钟`, `${itemCount} updates read · about ${readingMinutes} min`)}
           </div>
           <div className="mt-4">
           </div>
@@ -189,7 +189,7 @@ function WelcomeSearch({ onAdded }: { onAdded: () => void }) {
           {text("追踪你关心的创作者", "Track the creators you care about")}
         </h3>
         <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
-          {text("每日简报", "Your daily brief")}
+          {text("把每天的重要更新整理成一份简洁日报", "Turn daily updates into one concise digest")}
         </p>
       </div>
 
@@ -253,7 +253,7 @@ function WelcomeSearch({ onAdded }: { onAdded: () => void }) {
                       className="shrink-0 gap-1.5"
                     >
                       {subscribing === r.url ? (
-                        <><Loader2 className="h-3 w-3 animate-spin" />{text("添加中", "Adding...")}</>
+                        <><Loader2 className="h-3 w-3 animate-spin" />{text("订阅中…", "Subscribing...")}</>
                       ) : (
                         text("订阅", "Subscribe")
                       )}

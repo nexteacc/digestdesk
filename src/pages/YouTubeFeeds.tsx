@@ -49,6 +49,12 @@ export default function YouTubeFeedsPage() {
     refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    if (!urlInput.trim()) {
+      setDiscovered(null);
+    }
+  }, [urlInput]);
+
   const batch = useBatchMode({
     allIds: feeds.map((f) => f.id),
     deleteFn: api.batchDeleteFeeds,
@@ -60,7 +66,7 @@ export default function YouTubeFeedsPage() {
   async function onDiscover() {
     const url = urlInput.trim();
     if (!url) {
-      toast.error(text("请输入 URL", "Please enter a URL"));
+      toast.error(text("请先输入链接", "Enter a URL"));
       return;
     }
     setDiscovering(true);
@@ -69,7 +75,7 @@ export default function YouTubeFeedsPage() {
       const result = await api.discoverYouTubeChannel(url);
       setDiscovered(result);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : text("探测失败", "Discovery failed"));
+      toast.error(e instanceof Error ? e.message : text("识别失败", "Could not identify channel"));
     } finally {
       setDiscovering(false);
     }
@@ -255,8 +261,8 @@ export default function YouTubeFeedsPage() {
             ) : (
               <p className="max-w-sm text-right text-xs leading-5 text-muted-foreground">
                 {text(
-                  "Google 订阅导入暂未开放，当前可直接粘贴频道链接订阅。",
-                  "Google subscription import is temporarily disabled. Paste channel URLs to subscribe for now.",
+                  "Google 导入暂未开放，当前可直接粘贴频道链接订阅。",
+                  "Google import is temporarily unavailable. Paste a channel URL to subscribe for now.",
                 )}
               </p>
             )}
@@ -274,8 +280,8 @@ export default function YouTubeFeedsPage() {
                   </h3>
                   <p className="text-xs text-muted-foreground mt-1">
                     {text(
-                      "选择要导入到 DigestDesk 的频道",
-                      "Choose which channels to import into DigestDesk",
+                      "选择要添加到 DigestDesk 的频道",
+                      "Choose which channels to add to DigestDesk",
                     )}
                   </p>
                 </div>
@@ -451,9 +457,9 @@ export default function YouTubeFeedsPage() {
               />
               <Button onClick={onDiscover} disabled={discovering}>
                 {discovering ? (
-                  <>{text("探测中…", "Discovering...")}</>
+                  <>{text("识别中…", "Checking...")}</>
                 ) : (
-                  <><Search className="h-4 w-4 mr-1.5" />{text("探测", "Discover")}</>
+                  <><Search className="h-4 w-4 mr-1.5" />{text("识别链接", "Check link")}</>
                 )}
               </Button>
             </div>
@@ -508,7 +514,7 @@ export default function YouTubeFeedsPage() {
                   {discovered.recentVideos && discovered.recentVideos.length > 0 && (
                     <div className="mt-3 space-y-2">
                       <span className="text-xs text-muted-foreground">
-                        {text("最近视频", "Recent Videos")}
+                        {text("最近更新", "Latest updates")}
                       </span>
                       {discovered.recentVideos.slice(0, 3).map((video, i) => (
                         <a

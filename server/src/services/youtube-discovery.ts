@@ -37,6 +37,11 @@ type ChannelMetadata = {
   logoUrl: string;
 };
 
+type YouTubeChannelPresentation = {
+  title: string;
+  logoUrl: string;
+};
+
 function isYouTubeHostname(hostname: string): boolean {
   return YOUTUBE_HOSTS.has(hostname.toLowerCase());
 }
@@ -355,4 +360,38 @@ async function fetchChannelMetadata(channelUrl: string): Promise<ChannelMetadata
     console.warn(`[youtube] 获取频道元信息失败:`, err);
   }
   return { title: "", logoUrl: "" };
+}
+
+export async function resolveYouTubeChannelPresentation(
+  channelUrl: string,
+  feedUrl: string,
+): Promise<YouTubeChannelPresentation> {
+  const channelMetadata = await fetchChannelMetadata(channelUrl);
+
+  try {
+    const fallbackFeedUrl = buildYouTubeChannelFeedUrl(extractChannelIdFromYouTubeFeedUrl(feedUrl) || "");
+    let feed;
+    try {
+      feed = await rssParser.parseURL(feedUrl);
+    } catch {
+      feed = fallbackFeedUrl
+        ? await rssParser.parseURL(fallbackFeedUrl)
+        : null;
+    }
+
+    return {
+      title:
+        channelMetadata.title ||
+        feed?.items?.[0]?.author ||
+        feed?.items?.[0]?.creator ||
+        feed?.title ||
+        "未知频道",
+      logoUrl: channelMetadata.logoUrl,
+    };
+  } catch {
+    return {
+      title: channelMetadata.title || "未知频道",
+      logoUrl: channelMetadata.logoUrl,
+    };
+  }
 }

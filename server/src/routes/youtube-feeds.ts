@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { getAuth, clerkClient } from "@clerk/express";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { getYouTubeAdapter } from "../sources/factory.js";
 import { createSourceFeedRouter } from "./source-feed-router.js";
@@ -7,6 +8,10 @@ import {
   fetchGoogleYouTubeSubscriptions,
   hasYouTubeReadonlyScope,
 } from "../services/google-youtube.js";
+import { getDb } from "../db/index.js";
+import { feeds, subscriptions } from "../db/schema.js";
+import { getRequestUserId } from "../auth/user-context.js";
+import { resolveYouTubeChannelPresentation } from "../services/youtube-discovery.js";
 
 const discoverSchema = z.object({
   url: z.string().trim().min(1, "请输入有效的 YouTube URL"),
@@ -32,6 +37,60 @@ const baseRouter = createSourceFeedRouter({
 
 export const youtubeFeedsRouter = Router();
 const googleYouTubeImportEnabled = process.env.ENABLE_GOOGLE_YOUTUBE_IMPORT === "true";
+
+youtubeFeedsRouter.get("/", async (req, res) => {
+  const db = getDb();
+  const userId = getRequestUserId(req);
+  const rows = await db
+    .select({ feed: feeds })
+    .from(subscriptions)
+    .innerJoin(feeds, eq(subscriptions.feedId, feeds.id))
+    .where(and(eq(subscriptions.userId, userId), isNull(subscriptions.endedAt), eq(feeds.sourceType, "youtube")))
+    .orderBy(desc(feeds.createdAt));
+
+  const normalizedFeeds = await Promise.all(
+    rows.map(async ({ feed }) => {
+      if (feed.name && feed.name !== "Videos") {
+        return feed;
+      }
+
+      const presentation = await resolveYouTubeChannelPresentation(feed.publicationUrl, feed.feedUrl);
+      const nextName = presentation.title || feed.name;
+      const nextLogoUrl = presentation.logoUrl || feed.logoUrl;
+
+      if (nextName !== feed.name || nextLogoUrl !== feed.logoUrl) {
+        await db
+          .update(feeds)
+          .set({
+            name: nextName,
+            logoUrl: nextLogoUrl,
+          })
+          .where(eq(feeds.id, feed.id));
+      }
+
+      return {
+        ...feed,
+        name: nextName,
+        logoUrl: nextLogoUrl,
+      };
+    }),
+  );
+
+  res.json(
+    normalizedFeeds.map((feed) => ({
+      id: feed.id,
+      title: feed.name,
+      description: feed.description,
+      logoUrl: feed.logoUrl,
+      authorName: feed.authorName,
+      url: feed.publicationUrl,
+      feedUrl: feed.feedUrl,
+      sourceType: feed.sourceType,
+      lastFetchedAt: feed.lastFetchedAt,
+      createdAt: feed.createdAt,
+    })),
+  );
+});
 
 youtubeFeedsRouter.get("/google-subscriptions", async (req, res) => {
   if (!googleYouTubeImportEnabled) {

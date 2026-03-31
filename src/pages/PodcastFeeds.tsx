@@ -156,7 +156,7 @@ export default function PodcastFeedsPage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={onSearchKeyDown}
-                placeholder={text("搜索你想追踪的播客节目", "Search for a podcast show")}
+                placeholder={text("搜索你想订阅的播客节目", "Search for a podcast show")}
                 className="flex-1"
               />
               <Button onClick={onSearch} disabled={searchLoading}>
@@ -242,7 +242,7 @@ export default function PodcastFeedsPage() {
           loading={feedsLoading}
           {...batch}
           onRemove={onRemove}
-          emptyText={text("还没有订阅播客节目，试试搜索。", "No podcasts yet. Try searching above.")}
+          emptyText={text("还没有订阅播客节目，试试搜索。", "No podcast subscriptions yet. Try searching above.")}
         />
       </div>
     </AppShell>
