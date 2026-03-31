@@ -48,7 +48,7 @@ function toFeed(row: typeof feeds.$inferSelect): Feed {
     authorName: row.authorName ?? undefined,
     url: row.publicationUrl,
     feedUrl: row.feedUrl,
-    sourceType: row.sourceType as "substack" | "rss" | "youtube",
+    sourceType: row.sourceType as "substack" | "rss" | "youtube" | "podcast",
     lastFetchedAt: row.lastFetchedAt ?? undefined,
     createdAt: row.createdAt,
   };
@@ -57,7 +57,7 @@ function toFeed(row: typeof feeds.$inferSelect): Feed {
 feedsRouter.get("/", async (req, res) => {
   const db = getDb();
   const userId = getRequestUserId(req);
-  const sourceType = req.query.sourceType as "substack" | "rss" | "youtube" | undefined;
+  const sourceType = req.query.sourceType as "substack" | "rss" | "youtube" | "podcast" | undefined;
 
   const filter = sourceType
     ? and(eq(subscriptions.userId, userId), isNull(subscriptions.endedAt), eq(feeds.sourceType, sourceType))

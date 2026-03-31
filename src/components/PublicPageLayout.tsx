@@ -62,7 +62,7 @@ export default function PublicPageLayout({
 
       <footer className="hairline">
         <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-4 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between md:px-6">
-          <p>DigestDesk helps users organize Substack, RSS, and YouTube updates into one personal workflow.</p>
+          <p>DigestDesk helps users organize Substack, Podcast, RSS, and YouTube updates into one personal workflow.</p>
           <div className="flex gap-4">
             <a href="#/" className="hover:text-foreground transition-colors">
               Home

@@ -12,6 +12,7 @@ import DailyDigest from "@/pages/DailyDigest";
 import SubscriptionsPage from "@/pages/Subscriptions";
 import RssFeedsPage from "@/pages/RssFeeds";
 import YouTubeFeedsPage from "@/pages/YouTubeFeeds";
+import PodcastFeedsPage from "@/pages/PodcastFeeds";
 import SettingsPage from "@/pages/Settings";
 import NotFound from "@/pages/NotFound";
 import PublicHome from "@/pages/PublicHome";
@@ -26,6 +27,7 @@ function DashboardRoutes() {
       <Route path="/subscriptions" component={SubscriptionsPage} />
       <Route path="/rss" component={RssFeedsPage} />
       <Route path="/youtube" component={YouTubeFeedsPage} />
+      <Route path="/podcasts" component={PodcastFeedsPage} />
       <Route path="/settings" component={SettingsPage} />
       <Route component={NotFound} />
     </Switch>
@@ -62,6 +64,7 @@ function AppRouter() {
         <Route path="/subscriptions" component={() => <ProtectedRoute component={SubscriptionsPage} />} />
         <Route path="/rss" component={() => <ProtectedRoute component={RssFeedsPage} />} />
         <Route path="/youtube" component={() => <ProtectedRoute component={YouTubeFeedsPage} />} />
+        <Route path="/podcasts" component={() => <ProtectedRoute component={PodcastFeedsPage} />} />
         <Route path="/settings" component={() => <ProtectedRoute component={SettingsPage} />} />
         <Route component={NotFound} />
       </Switch>

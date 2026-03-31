@@ -159,9 +159,14 @@ async function generateWithId(
 
       if (!contentText || contentText.length < 50) {
         const isYouTube = feedSourceMap.get(article.feedId) === "youtube";
+        const isPodcast = feedSourceMap.get(article.feedId) === "podcast";
         return {
           ...base,
-          oneLiner: isYouTube ? "YouTube 视频，暂无文本总结。" : "文章内容太短，无法生成总结。",
+          oneLiner: isYouTube
+            ? "YouTube 视频，暂无文本总结。"
+            : isPodcast
+              ? "播客已更新，以下为简介型快讯。"
+              : "文章内容太短，无法生成总结。",
           keyInsights: [],
         };
       }

@@ -19,6 +19,7 @@ export default function PublicHome() {
               </h1>
               <span className="hidden items-center gap-2 md:flex">
                 <img src="/logos/substack.svg" alt="Substack" className="h-5 w-5" />
+                <img src="/logos/applepodcasts-9933cc.svg" alt="Podcast" className="h-5 w-5" />
                 <img src="/logos/youtube.svg" alt="YouTube" className="h-5 w-5" />
                 <img src="/logos/rss.svg" alt="RSS" className="h-5 w-5" />
               </span>

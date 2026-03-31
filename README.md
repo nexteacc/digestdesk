@@ -1,6 +1,6 @@
 # DigestDesk
 
-DigestDesk is a reading workflow app that aggregates Substack, RSS, and YouTube updates into a user-specific daily digest.
+DigestDesk is a reading workflow app that aggregates Substack, Podcast, RSS, and YouTube updates into a user-specific daily digest.
 
 ## Services
 

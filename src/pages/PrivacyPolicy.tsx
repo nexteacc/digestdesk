@@ -5,7 +5,7 @@ export default function PrivacyPolicyPage() {
     <PublicPageLayout
       eyebrow="Privacy Policy"
       title="Privacy Policy"
-      description="This policy describes how DigestDesk collects, uses, stores, and deletes personal data, including data accessed through Google and YouTube integrations."
+      description="This policy describes how DigestDesk collects, uses, stores, and deletes personal data, including data accessed through Apple, Google, and YouTube integrations."
     >
       <section>
         <h2 className="text-2xl font-semibold text-foreground">1. Controller and contact</h2>

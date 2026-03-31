@@ -5,7 +5,7 @@ export default function TermsOfServicePage() {
     <PublicPageLayout
       eyebrow="Terms of Service"
       title="Terms of Service"
-      description="These terms govern access to and use of DigestDesk, including integrations with third-party services such as Google and YouTube."
+      description="These terms govern access to and use of DigestDesk, including integrations with third-party services such as Apple, Google, and YouTube."
     >
       <section>
         <h2 className="text-2xl font-semibold text-foreground">1. Acceptance of terms</h2>
@@ -19,7 +19,7 @@ export default function TermsOfServicePage() {
         <h2 className="text-2xl font-semibold text-foreground">2. Service description</h2>
         <p className="mt-3">
           DigestDesk is a personal workflow product operated by an individual developer. It helps
-          users organize and review updates from sources such as Substack, RSS, and YouTube
+          users organize and review updates from sources such as Substack, Podcast, RSS, and YouTube
           channels. Certain features may rely on third-party services and APIs.
         </p>
       </section>

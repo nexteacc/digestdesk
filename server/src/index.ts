@@ -10,6 +10,7 @@ import { digestsRouter } from "./routes/digests.js";
 import { substackRouter } from "./routes/substack.js";
 import { rssFeedsRouter } from "./routes/rss-feeds.js";
 import { youtubeFeedsRouter } from "./routes/youtube-feeds.js";
+import { podcastFeedsRouter } from "./routes/podcast-feeds.js";
 import { settingsRouter } from "./routes/settings.js";
 import { authRouter } from "./routes/auth.js";
 import { resolveUser } from "./middleware/resolve-user.js";
@@ -55,6 +56,7 @@ app.use("/api/digests", requireAuth(), resolveUser, digestsRouter);
 app.use("/api/substack", requireAuth(), resolveUser, substackRouter);
 app.use("/api/rss-feeds", requireAuth(), resolveUser, rssFeedsRouter);
 app.use("/api/youtube-feeds", requireAuth(), resolveUser, youtubeFeedsRouter);
+app.use("/api/podcast-feeds", requireAuth(), resolveUser, podcastFeedsRouter);
 app.use("/api/settings", requireAuth(), resolveUser, settingsRouter);
 
 app.get("/api/health", (_req, res) => {

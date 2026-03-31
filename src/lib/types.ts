@@ -4,6 +4,7 @@ export type {
   Feed,
   DigestItem,
   Digest,
+  PodcastSearchResult,
   SubstackSearchResult,
   SubstackInfo,
   DigestListItem,

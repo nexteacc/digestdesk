@@ -31,6 +31,7 @@ export default function AppShell({ children }: PropsWithChildren) {
 
   const manageNav: NavItem[] = [
     { href: "/subscriptions", label: text("关注列表", "Subscriptions"), icon: <img src="/logos/substack.svg" alt="Substack" className="h-4 w-4" /> },
+    { href: "/podcasts", label: text("Podcast 节目", "Podcast Shows"), icon: <img src="/logos/applepodcasts-9933cc.svg" alt="Podcast" className="h-4 w-4" /> },
     { href: "/rss", label: text("RSS 订阅", "RSS Feeds"), icon: <img src="/logos/rss.svg" alt="RSS" className="h-4 w-4" /> },
     { href: "/youtube", label: text("YouTube 频道", "YouTube Channels"), icon: <img src="/logos/youtube.svg" alt="YouTube" className="h-4 w-4" /> },
     { href: "/settings", label: text("偏好设置", "Settings"), icon: <SettingsIcon className="h-4 w-4" /> },
@@ -69,6 +70,11 @@ export default function AppShell({ children }: PropsWithChildren) {
                     <img
                       src="/logos/substack.svg"
                       alt="Substack"
+                      className="h-5 w-5"
+                    />
+                    <img
+                      src="/logos/applepodcasts-9933cc.svg"
+                      alt="Podcast"
                       className="h-5 w-5"
                     />
                     <img

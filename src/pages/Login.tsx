@@ -14,6 +14,7 @@ export default function LoginPage() {
             </h1>
             <span className="flex items-center gap-2">
               <img src="/logos/substack.svg" alt="Substack" className="h-5 w-5" />
+              <img src="/logos/applepodcasts-9933cc.svg" alt="Podcast" className="h-5 w-5" />
               <img src="/logos/youtube.svg" alt="YouTube" className="h-5 w-5" />
               <img src="/logos/rss.svg" alt="RSS" className="h-5 w-5" />
             </span>

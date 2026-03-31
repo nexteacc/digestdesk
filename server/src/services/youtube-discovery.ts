@@ -32,6 +32,11 @@ export class YouTubeDiscoveryError extends AppError {
   }
 }
 
+type ChannelMetadata = {
+  title: string;
+  logoUrl: string;
+};
+
 function isYouTubeHostname(hostname: string): boolean {
   return YOUTUBE_HOSTS.has(hostname.toLowerCase());
 }
@@ -191,8 +196,7 @@ export async function discoverYouTubeChannel(url: string): Promise<DiscoveredYou
   const feedUrl = buildYouTubeFeedUrl(channelId);
   const fallbackFeedUrl = buildYouTubeChannelFeedUrl(channelId);
 
-  // 获取频道 logo
-  const logoUrl = await fetchChannelLogo(channelUrl);
+  const channelMetadata = await fetchChannelMetadata(channelUrl);
 
   // 解析 RSS feed 获取频道名称和最近视频
   let feed;
@@ -212,7 +216,12 @@ export async function discoverYouTubeChannel(url: string): Promise<DiscoveredYou
     }
   }
 
-  const title = feed.title || "未知频道";
+  const title =
+    channelMetadata.title ||
+    feed.items?.[0]?.author ||
+    feed.items?.[0]?.creator ||
+    feed.title ||
+    "未知频道";
   const recentVideos = [];
   for (const item of feed.items || []) {
     const itemUrl = item.link || "";
@@ -241,7 +250,7 @@ export async function discoverYouTubeChannel(url: string): Promise<DiscoveredYou
     feedUrl,
     title,
     channelUrl,
-    logoUrl,
+    logoUrl: channelMetadata.logoUrl,
     recentVideos,
   };
 }
@@ -316,7 +325,7 @@ async function extractChannelId(url: string): Promise<string | null> {
 /**
  * 从频道页面获取高清头像
  */
-async function fetchChannelLogo(channelUrl: string): Promise<string> {
+async function fetchChannelMetadata(channelUrl: string): Promise<ChannelMetadata> {
   try {
     const response = await fetch(channelUrl, {
       headers: {
@@ -327,15 +336,23 @@ async function fetchChannelLogo(channelUrl: string): Promise<string> {
       signal: AbortSignal.timeout(15000),
     });
 
-    if (!response.ok) return "";
+    if (!response.ok) {
+      return { title: "", logoUrl: "" };
+    }
 
     const html = await response.text();
+    const ogTitleMatch = html.match(
+      /<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/
+    );
     const ogImageMatch = html.match(
       /<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/
     );
-    if (ogImageMatch) return ogImageMatch[1];
+    const rawTitle = ogTitleMatch?.[1]?.trim() || "";
+    const title = rawTitle.replace(/\s*-\s*YouTube\s*$/i, "").trim();
+    const logoUrl = ogImageMatch?.[1] || "";
+    return { title, logoUrl };
   } catch (err) {
-    console.warn(`[youtube] 获取频道头像失败:`, err);
+    console.warn(`[youtube] 获取频道元信息失败:`, err);
   }
-  return "";
+  return { title: "", logoUrl: "" };
 }

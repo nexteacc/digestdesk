@@ -2,6 +2,7 @@ import type {
   Feed,
   Digest,
   DigestListItem,
+  PodcastSearchResult,
   SubstackSearchResult,
   SubstackInfo,
   DiscoveredFeed,
@@ -186,6 +187,41 @@ export function batchDeleteYouTubeFeeds(ids: string[]): Promise<{ deleted: numbe
 
 export function fetchGoogleYouTubeSubscriptions(): Promise<{ items: GoogleYouTubeSubscription[] }> {
   return request("/youtube-feeds/google-subscriptions");
+}
+
+// --- Podcast Feeds ---
+
+export async function searchPodcasts(query: string): Promise<PodcastSearchResult[]> {
+  const data = await request<{ results: PodcastSearchResult[] }>(
+    `/podcast-feeds/search?query=${encodeURIComponent(query)}`,
+  );
+  return data.results;
+}
+
+export function createPodcastFeed(data: {
+  title: string;
+  description?: string;
+  logoUrl?: string;
+  authorName?: string;
+  feedUrl: string;
+  siteUrl: string;
+}): Promise<{ id: string; success: true }> {
+  return request("/podcast-feeds", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function fetchPodcastFeeds(): Promise<Feed[]> {
+  return request("/podcast-feeds");
+}
+
+export function deletePodcastFeed(id: string): Promise<void> {
+  return deleteFeed(id);
+}
+
+export function batchDeletePodcastFeeds(ids: string[]): Promise<{ deleted: number }> {
+  return batchDeleteFeeds(ids);
 }
 
 // --- Settings ---

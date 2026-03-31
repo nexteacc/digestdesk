@@ -1,4 +1,4 @@
-export type SourceType = "substack" | "rss" | "youtube";
+export type SourceType = "substack" | "rss" | "youtube" | "podcast";
 
 export interface FeedDraft {
   name: string;

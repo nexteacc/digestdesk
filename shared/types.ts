@@ -8,7 +8,7 @@ export type Feed = {
   authorName?: string;
   url: string;
   feedUrl: string;
-  sourceType: "substack" | "rss" | "youtube";
+  sourceType: "substack" | "rss" | "youtube" | "podcast";
   lastFetchedAt?: string; // ISO
   createdAt: string; // ISO
 };
@@ -53,6 +53,16 @@ export type SubstackInfo = {
     publishedAt: string;
     author?: string;
   }>;
+};
+
+export type PodcastSearchResult = {
+  title: string;
+  description: string;
+  logoUrl: string;
+  authorName: string;
+  feedUrl: string;
+  siteUrl: string;
+  latestPublishedAt?: string;
 };
 
 // GET /api/digests 列表接口返回（不含 items）

@@ -17,7 +17,14 @@ const rssParser = new RssParser({
     "User-Agent": "DigestDesk/1.0 (RSS Reader)",
   },
   customFields: {
-    item: [["media:group", "mediaGroup"]],
+    item: [
+      ["media:group", "mediaGroup"],
+      ["content:encoded", "contentEncoded"],
+      ["itunes:summary", "itunesSummary"],
+      ["itunes:image", "itunesImage"],
+      ["media:content", "mediaContent"],
+      ["media:thumbnail", "mediaThumbnail"],
+    ],
   },
 });
 

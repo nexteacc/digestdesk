@@ -18,7 +18,7 @@ export const feeds = pgTable("feeds", {
   authorName: text("author_name"),
   publicationUrl: text("publication_url").notNull(),
   feedUrl: text("feed_url").notNull().unique(),
-  sourceType: text("source_type", { enum: ["substack", "rss", "youtube"] }).notNull().default("substack"),
+  sourceType: text("source_type", { enum: ["substack", "rss", "youtube", "podcast"] }).notNull().default("substack"),
   createdAt: text("created_at").notNull(),
   lastFetchedAt: text("last_fetched_at"),
 });
