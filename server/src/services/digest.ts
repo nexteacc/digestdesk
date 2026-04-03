@@ -6,7 +6,12 @@ import { feeds, articles, digests, digestItems, subscriptions, userSettings } fr
 import { summarizeArticle } from "./summarizer.js";
 import { getDayRangeForTimeZone, getPreviousDateLabel, getTimeZoneDateLabel } from "../utils/timezone.js";
 
-const CONCURRENCY = 5;
+const DEFAULT_CONCURRENCY = 3;
+
+function getSummaryConcurrency() {
+  const raw = Number(process.env.AI_SUMMARY_CONCURRENCY ?? DEFAULT_CONCURRENCY);
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : DEFAULT_CONCURRENCY;
+}
 
 let _dailyQueue: Promise<string | void> = Promise.resolve();
 
@@ -129,7 +134,7 @@ async function generateWithId(
   const feedMap = new Map(allFeeds.map((f) => [f.id, f.name]));
   const feedSourceMap = new Map(allFeeds.map((f) => [f.id, f.sourceType]));
 
-  const limit = pLimit(CONCURRENCY);
+  const limit = pLimit(getSummaryConcurrency());
 
   type ItemResult = {
     articleId: string;
