@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import AppShell from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import * as api from "@/lib/api";
 import { ApiError } from "@/lib/api";
 import type { DigestSourceType } from "@/lib/types";
 import { DIGEST_SOURCE_META, DIGEST_SOURCE_ORDER } from "@/lib/digest-sources";
-import { Check, ChevronDown, Settings as SettingsIcon } from "lucide-react";
+import { Check, Settings as SettingsIcon } from "lucide-react";
 import type { Settings } from "@/lib/types";
 
 const TIMEZONES = [
@@ -61,7 +61,7 @@ function getSettingsErrorText(error: unknown, text: (zh: string, en: string) => 
   return error instanceof Error ? error.message : text("保存失败", "Failed to save");
 }
 
-function SourceMultiSelect({
+function SourceInlineSelect({
   value,
   onChange,
   disabled,
@@ -70,33 +70,7 @@ function SourceMultiSelect({
   onChange: (next: DigestSourceType[]) => void;
   disabled?: boolean;
 }) {
-  const { text, isZh } = useI18n();
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-
-    function onPointerDown(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    }
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
-
+  const { text } = useI18n();
   const orderedValue = DIGEST_SOURCE_ORDER.filter((type) => value.includes(type));
 
   function toggleSource(type: DigestSourceType) {
@@ -115,81 +89,34 @@ function SourceMultiSelect({
   }
 
   return (
-    <div ref={rootRef} className="relative w-[240px]">
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => setOpen((prev) => !prev)}
-        className="flex h-auto min-h-9 w-full items-center justify-between gap-3 rounded-md border border-input bg-background px-3 py-2 text-left shadow-xs transition-colors hover:bg-accent/40 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            {orderedValue.slice(0, 3).map((type) => {
-              const meta = DIGEST_SOURCE_META[type];
-              return (
-                <span
-                  key={type}
-                  className="flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background"
-                >
-                  <img src={meta.logoUrl} alt={meta.enLabel} className="h-3.5 w-3.5 object-contain" />
-                </span>
-              );
-            })}
-            {orderedValue.length > 3 && (
-              <span className="text-xs text-muted-foreground">+{orderedValue.length - 3}</span>
-            )}
-          </div>
-          <div className="mt-1 truncate text-xs text-muted-foreground">
-            {isZh ? `已选 ${orderedValue.length} 个来源` : `${orderedValue.length} sources selected`}
-          </div>
-        </div>
-        <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-
-      {open && (
-        <div className="absolute right-0 z-20 mt-2 w-[300px] rounded-xl border border-border bg-popover p-2 shadow-lg">
-          <div className="px-2 pb-2 pt-1 text-xs text-muted-foreground">
-            {text("选择哪些来源进入你的每日日报", "Choose which sources should appear in your daily digest")}
-          </div>
-          <div className="space-y-1">
-            {DIGEST_SOURCE_ORDER.map((type) => {
-              const meta = DIGEST_SOURCE_META[type];
-              const selected = value.includes(type);
-              return (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => toggleSource(type)}
-                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors ${
-                    selected ? "bg-accent/70" : "hover:bg-accent/40"
-                  }`}
-                >
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background">
-                    <img src={meta.logoUrl} alt={meta.enLabel} className="h-5 w-5 object-contain" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium text-foreground">
-                      {text(meta.zhLabel, meta.enLabel)}
-                    </span>
-                    <span className="block text-xs text-muted-foreground">
-                      {text(meta.zhDescription, meta.enDescription)}
-                    </span>
-                  </span>
-                  <span
-                    className={`flex h-5 w-5 items-center justify-center rounded-full border ${
-                      selected
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-background text-transparent"
-                    }`}
-                  >
-                    <Check className="h-3 w-3" />
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
+    <div className="flex flex-wrap justify-end gap-2 max-w-[420px]">
+      {DIGEST_SOURCE_ORDER.map((type) => {
+        const meta = DIGEST_SOURCE_META[type];
+        const selected = orderedValue.includes(type);
+        return (
+          <button
+            key={type}
+            type="button"
+            disabled={disabled}
+            onClick={() => toggleSource(type)}
+            className={`inline-flex min-w-[122px] items-center justify-between gap-2 rounded-full border px-3 py-2 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+              selected
+                ? "border-primary/60 bg-primary/8 text-foreground shadow-[inset_0_0_0_1px_rgba(255,103,25,0.14)]"
+                : "border-border bg-background text-muted-foreground hover:border-foreground/20 hover:text-foreground"
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <span className={`flex h-7 w-7 items-center justify-center rounded-full border ${selected ? "border-primary/20 bg-background" : "border-border bg-background"}`}>
+                <img src={meta.logoUrl} alt={meta.enLabel} className="h-4 w-4 object-contain" />
+              </span>
+              <span className="font-medium">{text(meta.zhLabel, meta.enLabel)}</span>
+            </span>
+            <span className={`flex h-4 w-4 items-center justify-center rounded-full transition-colors ${selected ? "bg-primary text-primary-foreground" : "bg-transparent text-transparent"}`}>
+              <Check className="h-3 w-3" />
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -282,8 +209,8 @@ export default function SettingsPage() {
   }
 
   return (
-    <AppShell>
-      <div className="max-w-xl mx-auto py-12 px-4">
+      <AppShell>
+      <div className="max-w-3xl mx-auto py-12 px-4">
         {/* Header */}
         <div className="flex items-center gap-3 mb-10">
           <SettingsIcon className="h-5 w-5 text-muted-foreground" />
@@ -293,16 +220,13 @@ export default function SettingsPage() {
         </div>
 
         <Card className="border shadow-sm overflow-hidden bg-card/50">
-          <div className="p-8 space-y-10">
+          <div className="p-8 space-y-0">
             {/* Digest Language */}
-            <div className="flex items-center justify-between gap-8">
-              <div className="space-y-1">
+            <div className="flex items-center justify-between gap-8 py-1">
+              <div>
                 <label className="text-sm font-medium text-foreground">
                   {text("日报语言", "Digest Language")}
                 </label>
-                <p className="text-xs text-muted-foreground">
-                  {text("编辑撰写摘要时使用的语言", "Language used for your editor's summaries")}
-                </p>
               </div>
               <Select value={digestLanguage} onValueChange={(v) => setDigestLanguage(v as "zh" | "en")}>
                 <SelectTrigger className="w-[200px] h-9">
@@ -316,15 +240,12 @@ export default function SettingsPage() {
             </div>
 
             <div className="flex items-start justify-between gap-8 pt-6 border-t border-border/50">
-              <div className="space-y-1">
+              <div className="pt-2">
                 <label className="text-sm font-medium text-foreground">
                   {text("日报来源", "Digest Sources")}
                 </label>
-                <p className="text-xs text-muted-foreground">
-                  {text("选择哪些订阅来源会进入你的每日日报", "Choose which subscription sources should be included in your daily digest")}
-                </p>
               </div>
-              <SourceMultiSelect
+              <SourceInlineSelect
                 value={orderedSourceTypes}
                 onChange={setDigestSourceTypes}
                 disabled={saving}
@@ -333,13 +254,10 @@ export default function SettingsPage() {
 
             {/* Delivery Time */}
             <div className="flex items-center justify-between gap-8 pt-6 border-t border-border/50">
-              <div className="space-y-1">
+              <div>
                 <label className="text-sm font-medium text-foreground shrink-0">
                   {text("日报生成时间", "Digest Time")}
                 </label>
-                <p className="text-xs text-muted-foreground">
-                  {text("每日自动生成日报的时间", "Auto-generation time")}
-                </p>
               </div>
               <div className="flex items-center gap-2 bg-secondary/30 p-1 rounded-lg border border-border/50">
                 <Select value={hour} onValueChange={setHour}>
@@ -368,13 +286,10 @@ export default function SettingsPage() {
 
             {/* Timezone */}
             <div className="flex items-center justify-between gap-8 pt-6 border-t border-border/50">
-              <div className="space-y-1">
+              <div>
                 <label className="text-sm font-medium text-foreground">
                   {text("所在时区", "Timezone")}
                 </label>
-                <p className="text-xs text-muted-foreground">
-                  {text("日报生成的基准时区", "Base timezone for daily digest")}
-                </p>
               </div>
               <Select value={timezone} onValueChange={setTimezone}>
                 <SelectTrigger className="w-[200px] h-9">
