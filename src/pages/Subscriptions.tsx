@@ -16,6 +16,8 @@ import type { Feed, SubstackSearchResult } from "@/lib/types";
 import { Check, Download } from "lucide-react";
 import ImportDialog from "@/components/ImportDialog";
 
+let substackFeedsCache: Feed[] | null = null;
+
 export default function SubscriptionsPage() {
   const { text } = useI18n();
   const [feeds, setFeeds] = useState<Feed[]>([]);
@@ -30,9 +32,16 @@ export default function SubscriptionsPage() {
   const searchRequestId = useRef(0);
 
   const refresh = useCallback(async () => {
+    if (substackFeedsCache) {
+      setFeeds(substackFeedsCache);
+      setFeedsLoading(false);
+    }
+
     try {
       const f = await api.fetchFeeds();
-      setFeeds(f.filter((item) => item.sourceType === "substack"));
+      const nextFeeds = f.filter((item) => item.sourceType === "substack");
+      substackFeedsCache = nextFeeds;
+      setFeeds(nextFeeds);
     } catch {
       toast.error(text("加载订阅列表失败", "Failed to load"));
     } finally {
@@ -244,7 +253,7 @@ export default function SubscriptionsPage() {
                   </div>
                 ) : (
                   <div className="py-8 text-center text-sm text-muted-foreground">
-
+                    {text("输入出版物名称或作者名，开始建立你的创作者版面。", "Search by publication or author to start building your creator desk.")}
                   </div>
                 )}
               </div>

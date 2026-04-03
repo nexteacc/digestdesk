@@ -1,5 +1,5 @@
 import { Show, useAuth } from "@clerk/react";
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Router, Route, Switch, useLocation } from "wouter";
@@ -8,29 +8,52 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { I18nProvider } from "@/contexts/I18nContext";
 import { ZenModeProvider } from "@/hooks/useZenMode";
-import DailyDigest from "@/pages/DailyDigest";
-import SubscriptionsPage from "@/pages/Subscriptions";
-import RssFeedsPage from "@/pages/RssFeeds";
-import YouTubeFeedsPage from "@/pages/YouTubeFeeds";
-import PodcastFeedsPage from "@/pages/PodcastFeeds";
-import SettingsPage from "@/pages/Settings";
-import NotFound from "@/pages/NotFound";
-import PublicHome from "@/pages/PublicHome";
-import PrivacyPolicyPage from "@/pages/PrivacyPolicy";
-import TermsOfServicePage from "@/pages/TermsOfService";
 import { ensureCurrentUser } from "@/lib/api";
+import {
+  loadDailyDigestPage,
+  loadNotFoundPage,
+  loadPodcastFeedsPage,
+  loadPrivacyPolicyPage,
+  loadPublicHomePage,
+  loadRssFeedsPage,
+  loadSettingsPage,
+  loadSubscriptionsPage,
+  loadTermsOfServicePage,
+  loadYouTubeFeedsPage,
+} from "@/lib/route-preload";
+
+const DailyDigest = lazy(loadDailyDigestPage);
+const SubscriptionsPage = lazy(loadSubscriptionsPage);
+const RssFeedsPage = lazy(loadRssFeedsPage);
+const YouTubeFeedsPage = lazy(loadYouTubeFeedsPage);
+const PodcastFeedsPage = lazy(loadPodcastFeedsPage);
+const SettingsPage = lazy(loadSettingsPage);
+const NotFound = lazy(loadNotFoundPage);
+const PublicHome = lazy(loadPublicHomePage);
+const PrivacyPolicyPage = lazy(loadPrivacyPolicyPage);
+const TermsOfServicePage = lazy(loadTermsOfServicePage);
+
+function RouteFallback() {
+  return (
+    <div className="min-h-[40vh] flex items-center justify-center text-sm text-muted-foreground">
+      Loading page...
+    </div>
+  );
+}
 
 function DashboardRoutes() {
   return (
-    <Switch>
-      <Route path="/" component={DailyDigest} />
-      <Route path="/subscriptions" component={SubscriptionsPage} />
-      <Route path="/rss" component={RssFeedsPage} />
-      <Route path="/youtube" component={YouTubeFeedsPage} />
-      <Route path="/podcasts" component={PodcastFeedsPage} />
-      <Route path="/settings" component={SettingsPage} />
-      <Route component={NotFound} />
-    </Switch>
+    <Suspense fallback={<RouteFallback />}>
+      <Switch>
+        <Route path="/" component={DailyDigest} />
+        <Route path="/subscriptions" component={SubscriptionsPage} />
+        <Route path="/rss" component={RssFeedsPage} />
+        <Route path="/youtube" component={YouTubeFeedsPage} />
+        <Route path="/podcasts" component={PodcastFeedsPage} />
+        <Route path="/settings" component={SettingsPage} />
+        <Route component={NotFound} />
+      </Switch>
+    </Suspense>
   );
 }
 
@@ -54,22 +77,46 @@ function ProtectedRoute({ component: Component }: { component: () => React.JSX.E
 function AppRouter() {
   return (
     <Router hook={useHashLocation}>
-      <Switch>
-        <Route path="/privacy" component={PrivacyPolicyPage} />
-        <Route path="/terms" component={TermsOfServicePage} />
-        <Route path="/" component={() => {
-          const { isSignedIn } = useAuth();
-          return isSignedIn ? <AuthenticatedApp /> : <PublicHome />;
-        }} />
-        <Route path="/subscriptions" component={() => <ProtectedRoute component={SubscriptionsPage} />} />
-        <Route path="/rss" component={() => <ProtectedRoute component={RssFeedsPage} />} />
-        <Route path="/youtube" component={() => <ProtectedRoute component={YouTubeFeedsPage} />} />
-        <Route path="/podcasts" component={() => <ProtectedRoute component={PodcastFeedsPage} />} />
-        <Route path="/settings" component={() => <ProtectedRoute component={SettingsPage} />} />
-        <Route component={NotFound} />
-      </Switch>
+      <Suspense fallback={<RouteFallback />}>
+        <Switch>
+          <Route path="/privacy" component={PrivacyPolicyPage} />
+          <Route path="/terms" component={TermsOfServicePage} />
+          <Route path="/" component={HomeRoute} />
+          <Route path="/subscriptions" component={SubscriptionsRoute} />
+          <Route path="/rss" component={RssFeedsRoute} />
+          <Route path="/youtube" component={YouTubeFeedsRoute} />
+          <Route path="/podcasts" component={PodcastFeedsRoute} />
+          <Route path="/settings" component={SettingsRoute} />
+          <Route component={NotFound} />
+        </Switch>
+      </Suspense>
     </Router>
   );
+}
+
+function HomeRoute() {
+  const { isSignedIn } = useAuth();
+  return isSignedIn ? <AuthenticatedApp /> : <PublicHome />;
+}
+
+function SubscriptionsRoute() {
+  return <ProtectedRoute component={SubscriptionsPage} />;
+}
+
+function RssFeedsRoute() {
+  return <ProtectedRoute component={RssFeedsPage} />;
+}
+
+function YouTubeFeedsRoute() {
+  return <ProtectedRoute component={YouTubeFeedsPage} />;
+}
+
+function PodcastFeedsRoute() {
+  return <ProtectedRoute component={PodcastFeedsPage} />;
+}
+
+function SettingsRoute() {
+  return <ProtectedRoute component={SettingsPage} />;
 }
 
 function App() {
@@ -96,7 +143,13 @@ function App() {
 
 function AuthenticatedApp() {
   const { isLoaded, userId } = useAuth();
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [bootstrapState, setBootstrapState] = useState<{
+    resolvedUserId: string | null;
+    status: "ready" | "error" | null;
+  }>({
+    resolvedUserId: null,
+    status: null,
+  });
 
   useEffect(() => {
     if (!isLoaded || !userId) {
@@ -104,18 +157,17 @@ function AuthenticatedApp() {
     }
 
     let cancelled = false;
-    setStatus("loading");
 
     ensureCurrentUser()
       .then(() => {
         if (!cancelled) {
-          setStatus("ready");
+          setBootstrapState({ resolvedUserId: userId, status: "ready" });
         }
       })
       .catch((error) => {
         console.error("[auth/bootstrap] Failed to initialize app user:", error);
         if (!cancelled) {
-          setStatus("error");
+          setBootstrapState({ resolvedUserId: userId, status: "error" });
         }
       });
 
@@ -124,11 +176,11 @@ function AuthenticatedApp() {
     };
   }, [isLoaded, userId]);
 
-  if (!isLoaded || status === "loading") {
+  if (!isLoaded || !userId || bootstrapState.resolvedUserId !== userId) {
     return <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">Loading workspace...</div>;
   }
 
-  if (status === "error") {
+  if (bootstrapState.status === "error") {
     return <div className="min-h-screen flex items-center justify-center text-sm text-destructive">Failed to initialize your account.</div>;
   }
 

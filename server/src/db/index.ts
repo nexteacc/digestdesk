@@ -96,6 +96,7 @@ export async function initDb() {
       digest_id TEXT NOT NULL REFERENCES digests(id) ON DELETE CASCADE,
       article_id TEXT,
       feed_id TEXT REFERENCES feeds(id) ON DELETE SET NULL,
+      source_type TEXT NOT NULL DEFAULT 'substack',
       feed_name TEXT NOT NULL,
       article_title TEXT NOT NULL,
       author TEXT,
@@ -109,6 +110,18 @@ export async function initDb() {
 
   await queryClient`
     ALTER TABLE digest_items ADD COLUMN IF NOT EXISTS feed_id TEXT REFERENCES feeds(id) ON DELETE SET NULL;
+  `;
+
+  await queryClient`
+    ALTER TABLE digest_items ADD COLUMN IF NOT EXISTS source_type TEXT NOT NULL DEFAULT 'substack';
+  `;
+
+  await queryClient`
+    UPDATE digest_items AS di
+    SET source_type = f.source_type
+    FROM feeds AS f
+    WHERE di.feed_id = f.id
+      AND (di.source_type IS NULL OR di.source_type = 'substack');
   `;
 
   await queryClient`

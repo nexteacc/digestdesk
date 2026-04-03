@@ -5,6 +5,7 @@ import { getDb } from "../db/index.js";
 import { feeds, articles, digests, digestItems, subscriptions, userSettings } from "../db/schema.js";
 import { summarizeArticle } from "./summarizer.js";
 import { getDayRangeForTimeZone, getPreviousDateLabel, getTimeZoneDateLabel } from "../utils/timezone.js";
+import { parseDigestSourceTypes } from "./user-settings.js";
 
 const DEFAULT_CONCURRENCY = 3;
 
@@ -31,6 +32,7 @@ async function _generateDailyCore(userId: string, date?: string): Promise<string
   const settings = Object.fromEntries(settingRows.map((row) => [row.key, row.value]));
   const language = (settings.digest_language as "zh" | "en") || "zh";
   const timezone = settings.timezone || "Asia/Shanghai";
+  const enabledSourceTypes = parseDigestSourceTypes(settings.digest_source_types);
   const todayLabel = getTimeZoneDateLabel(new Date(), timezone);
   const dateLabel = date || getPreviousDateLabel(todayLabel);
   const { startIso: startTime, endIso: endTime } = getDayRangeForTimeZone(dateLabel, timezone);
@@ -46,11 +48,11 @@ async function _generateDailyCore(userId: string, date?: string): Promise<string
 
   if (existing) {
     console.log(`[digest] Daily for ${userId} on ${dateLabel} already exists, regenerating...`);
-    return generateWithId(userId, existing.id, dateLabel, startTime, endTime, language);
+    return generateWithId(userId, existing.id, dateLabel, startTime, endTime, language, enabledSourceTypes);
   }
 
   const digestId = nanoid();
-  return generateWithId(userId, digestId, dateLabel, startTime, endTime, language);
+  return generateWithId(userId, digestId, dateLabel, startTime, endTime, language, enabledSourceTypes);
 }
 
 async function generateWithId(
@@ -60,6 +62,7 @@ async function generateWithId(
   startTime: string,
   endTime: string,
   language: "zh" | "en" = "zh",
+  enabledSourceTypes: Array<"substack" | "rss" | "youtube" | "podcast">,
 ): Promise<string> {
   const db = getDb();
 
@@ -81,6 +84,22 @@ async function generateWithId(
     return "";
   }
 
+  const allFeeds = await db
+    .select({ id: feeds.id, name: feeds.name, sourceType: feeds.sourceType })
+    .from(feeds)
+    .where(inArray(feeds.id, subscribedFeedIds));
+  const allowedFeedRows = allFeeds.filter((feed) => enabledSourceTypes.includes(feed.sourceType));
+  const allowedFeedIds = allowedFeedRows.map((feed) => feed.id);
+
+  console.log(
+    `[digest] User ${userId} enabled sources=${enabledSourceTypes.join(",")} allowedFeeds=${allowedFeedIds.length}/${subscribedFeedIds.length}`,
+  );
+
+  if (allowedFeedIds.length === 0) {
+    console.log(`[digest] User ${userId} has no subscriptions matching enabled digest sources, skipping ${dateLabel}.`);
+    return "";
+  }
+
   const dayArticles = await db
     .select({
       id: articles.id,
@@ -96,7 +115,7 @@ async function generateWithId(
     .from(articles)
     .where(
       and(
-        inArray(articles.feedId, subscribedFeedIds),
+        inArray(articles.feedId, allowedFeedIds),
         gte(articles.publishedAt, startTime),
         lt(articles.publishedAt, endTime),
       ),
@@ -127,10 +146,6 @@ async function generateWithId(
 
   console.log(`[digest] Processing ${eligibleArticles.length} unique articles for user ${userId} in ${language}`);
 
-  const allFeeds = await db
-    .select({ id: feeds.id, name: feeds.name, sourceType: feeds.sourceType })
-    .from(feeds)
-    .where(inArray(feeds.id, subscribedFeedIds));
   const feedMap = new Map(allFeeds.map((f) => [f.id, f.name]));
   const feedSourceMap = new Map(allFeeds.map((f) => [f.id, f.sourceType]));
 
@@ -139,6 +154,7 @@ async function generateWithId(
   type ItemResult = {
     articleId: string;
     feedId: string;
+    sourceType: "substack" | "rss" | "youtube" | "podcast";
     feedName: string;
     title: string;
     author: string | null;
@@ -151,10 +167,12 @@ async function generateWithId(
   const tasks = eligibleArticles.map((article) =>
     limit(async (): Promise<ItemResult> => {
       const contentText = article.contentText || "";
-      const feedName = feedMap.get(article.feedId) || "未知来源";
+      const feedName = feedMap.get(article.feedId) || (language === "zh" ? "未知来源" : "Unknown source");
+      const sourceType = feedSourceMap.get(article.feedId) || "substack";
       const base = {
         articleId: article.id,
         feedId: article.feedId,
+        sourceType,
         feedName,
         title: article.title,
         author: article.author,
@@ -163,15 +181,15 @@ async function generateWithId(
       };
 
       if (!contentText || contentText.length < 50) {
-        const isYouTube = feedSourceMap.get(article.feedId) === "youtube";
-        const isPodcast = feedSourceMap.get(article.feedId) === "podcast";
+        const isYouTube = sourceType === "youtube";
+        const isPodcast = sourceType === "podcast";
         return {
           ...base,
           oneLiner: isYouTube
-            ? "YouTube 视频，暂无文本总结。"
+            ? (language === "zh" ? "YouTube 视频，暂无文本总结。" : "YouTube update with no transcript-based summary yet.")
             : isPodcast
-              ? "播客已更新，以下为简介型快讯。"
-              : "文章内容太短，无法生成总结。",
+              ? (language === "zh" ? "播客已更新，以下为简介型快讯。" : "Podcast updated. Summary is based on the available episode description.")
+              : (language === "zh" ? "文章内容太短，无法生成总结。" : "Content is too short to generate a useful summary."),
           keyInsights: [],
         };
       }
@@ -202,7 +220,7 @@ async function generateWithId(
           oneLiner: summary.oneLiner,
           keyInsights: summary.keyInsights,
         };
-      } catch (err) {
+      } catch {
         return {
           ...base,
           oneLiner: language === "zh" ? "暂时无法生成摘要。" : "Summary unavailable for now.",
@@ -242,6 +260,7 @@ async function generateWithId(
           digestId,
           articleId: it.articleId,
           feedId: it.feedId,
+          sourceType: it.sourceType,
           feedName: it.feedName,
           articleTitle: it.title,
           author: it.author || null,

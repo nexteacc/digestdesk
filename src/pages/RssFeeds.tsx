@@ -14,6 +14,8 @@ import * as api from "@/lib/api";
 import type { Feed, DiscoveredFeed } from "@/lib/types";
 import { Rss, Search } from "lucide-react";
 
+let rssFeedsCache: Feed[] | null = null;
+
 export default function RssFeedsPage() {
   const { text } = useI18n();
   const [feeds, setFeeds] = useState<Feed[]>([]);
@@ -26,9 +28,16 @@ export default function RssFeedsPage() {
   const [adding, setAdding] = useState(false);
 
   const refresh = useCallback(async () => {
+    if (rssFeedsCache) {
+      setFeeds(rssFeedsCache);
+      setFeedsLoading(false);
+    }
+
     try {
       const all = await api.fetchFeeds();
-      setFeeds(all.filter((f) => f.sourceType === "rss"));
+      const nextFeeds = all.filter((f) => f.sourceType === "rss");
+      rssFeedsCache = nextFeeds;
+      setFeeds(nextFeeds);
     } catch {
       toast.error(text("加载订阅列表失败", "Failed to load"));
     } finally {
@@ -201,7 +210,7 @@ export default function RssFeedsPage() {
                 </div>
               ) : (
                 <div className="py-4 text-center text-sm text-muted-foreground">
-
+                  {text("粘贴一个网站或 RSS 链接，先识别来源，再决定是否订阅。", "Paste a website or RSS URL to preview the feed before subscribing.")}
                 </div>
               )}
             </div>

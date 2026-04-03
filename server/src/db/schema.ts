@@ -67,6 +67,7 @@ export const digestItems = pgTable("digest_items", {
   digestId: text("digest_id").notNull().references(() => digests.id, { onDelete: "cascade" }),
   articleId: text("article_id"),
   feedId: text("feed_id").references(() => feeds.id, { onDelete: "set null" }),
+  sourceType: text("source_type", { enum: ["substack", "rss", "youtube", "podcast"] }).notNull().default("substack"),
   feedName: text("feed_name").notNull(),
   articleTitle: text("article_title").notNull(),
   author: text("author"),

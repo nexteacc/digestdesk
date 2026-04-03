@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { enUS, zhCN } from "date-fns/locale";
-import { Link } from "wouter";
 import AppShell from "@/components/AppShell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +12,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import * as api from "@/lib/api";
-import type { Digest, DigestListItem, Feed, SubstackSearchResult } from "@/lib/types";
+import type { Digest, DigestItem, DigestListItem, DigestOverview, DigestSourceType, Feed, SubstackSearchResult } from "@/lib/types";
+import { DIGEST_SOURCE_META, DIGEST_SOURCE_ORDER } from "@/lib/digest-sources";
 import {
   ExternalLink,
   Loader2,
@@ -32,6 +32,9 @@ function slugify(s: string) {
     .replace(/(^-|-$)/g, "")
     .slice(0, 80);
 }
+
+let digestOverviewCache: DigestOverview | null = null;
+const digestDetailCache = new Map<string, Digest>();
 
 // --- 生成进度阶段 ---
 const PROGRESS_PHASES = [
@@ -287,27 +290,39 @@ export default function DailyDigest() {
   const [selectingId, setSelectingId] = useState<string | null>(null);
   const { isZen } = useZenMode();
 
-  const loadDigest = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [dailyList, feeds] = await Promise.all([
-        api.fetchDigests("daily"),
-        api.fetchFeeds(),
-      ]);
-      setDigestList(dailyList);
-      setHasFeeds(feeds.length > 0);
-      setFeeds(feeds);
+  const applyOverview = useCallback((overview: DigestOverview) => {
+    digestOverviewCache = overview;
+    if (overview.currentDigest) {
+      digestDetailCache.set(overview.currentDigest.id, overview.currentDigest);
+    }
 
-      if (dailyList.length > 0) {
-        const d = await api.fetchDigest(dailyList[0].id);
-        setCurrent(d);
-      }
+    startTransition(() => {
+      setDigestList(overview.digests);
+      setFeeds(overview.feeds);
+      setHasFeeds(overview.feeds.length > 0);
+      setCurrent(overview.currentDigest);
+    });
+  }, []);
+
+  const loadDigest = useCallback(async () => {
+    if (digestOverviewCache) {
+      applyOverview(digestOverviewCache);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
+    try {
+      const overview = await api.fetchDigestOverview();
+      applyOverview(overview);
     } catch {
-      toast.error(text("加载失败", "Failed to load"));
+      if (!digestOverviewCache) {
+        toast.error(text("加载失败", "Failed to load"));
+      }
     } finally {
       setLoading(false);
     }
-  }, [text]);
+  }, [applyOverview, text]);
 
   useEffect(() => {
     loadDigest();
@@ -322,11 +337,15 @@ export default function DailyDigest() {
         toast(text("暂无新文章，稍后再来看看", "No new articles. Check back later."));
         return;
       }
-      // @ts-ignore
       const digest = await api.fetchDigest(result.id);
-      setCurrent(digest);
       const list = await api.fetchDigests("daily");
-      setDigestList(list);
+      digestDetailCache.set(digest.id, digest);
+      const nextOverview: DigestOverview = {
+        digests: list,
+        currentDigest: digest,
+        feeds,
+      };
+      applyOverview(nextOverview);
       toast.success(text("同步完成，日报已更新", "Sync complete. Your digest has been updated."));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : text("同步失败", "Sync failed"));
@@ -336,10 +355,21 @@ export default function DailyDigest() {
   }
 
   async function selectDigest(item: DigestListItem) {
+    const cached = digestDetailCache.get(item.id);
+    if (cached) {
+      startTransition(() => {
+        setCurrent(cached);
+      });
+      return;
+    }
+
     setSelectingId(item.id);
     try {
       const full = await api.fetchDigest(item.id);
-      setCurrent(full);
+      digestDetailCache.set(item.id, full);
+      startTransition(() => {
+        setCurrent(full);
+      });
     } catch {
       toast.error(text("加载失败", "Failed to load"));
     } finally {
@@ -385,14 +415,30 @@ export default function DailyDigest() {
     return { byId, byTitle };
   }, [feeds]);
 
-  const toc = useMemo(() => {
+  const digestSections = useMemo(() => {
     if (!current) return [];
-    return current.items.map((it) => ({
-      id: `a-${slugify(it.feedTitle)}-${slugify(it.title)}-${it.id.slice(0, 6)}`,
-      title: it.title,
-      feedTitle: it.feedTitle,
-      logoUrl: (it.feedId ? feedLogoMaps.byId.get(it.feedId) : undefined) ?? feedLogoMaps.byTitle.get(it.feedTitle),
-    }));
+
+    const grouped = new Map<DigestSourceType, Array<DigestItem & { anchorId: string; feedLogoUrl?: string }>>();
+
+    current.items.forEach((item) => {
+      const anchorId = `a-${item.sourceType}-${slugify(item.feedTitle)}-${slugify(item.title)}-${item.id.slice(0, 6)}`;
+      const feedLogoUrl = (item.feedId ? feedLogoMaps.byId.get(item.feedId) : undefined) ?? feedLogoMaps.byTitle.get(item.feedTitle);
+      const list = grouped.get(item.sourceType) ?? [];
+      list.push({ ...item, anchorId, feedLogoUrl });
+      grouped.set(item.sourceType, list);
+    });
+
+    return DIGEST_SOURCE_ORDER
+      .map((sourceType) => {
+        const items = grouped.get(sourceType) ?? [];
+        if (items.length === 0) return null;
+        return {
+          sourceType,
+          meta: DIGEST_SOURCE_META[sourceType],
+          items,
+        };
+      })
+      .filter((section): section is NonNullable<typeof section> => section !== null);
   }, [current, feedLogoMaps]);
 
   const handleTocClick = useCallback((id: string) => {
@@ -555,121 +601,166 @@ export default function DailyDigest() {
                   {current.items.length} {text("篇文章", "articles")}
                 </div>
                 <ScrollArea className="mt-4 -mx-2 px-2 h-[400px] md:h-auto md:flex-1 md:min-h-0 md:overscroll-contain">
-                  <ol className="space-y-4 pb-6">
-                    {toc.map((t, idx) => (
-                      <li key={t.id}>
-                        <button
-                          type="button"
-                          className="block w-full text-left leading-snug hover:text-foreground group"
-                          onClick={() => handleTocClick(t.id)}
-                        >
-                          <div className="flex items-center gap-2 text-[12px] text-muted-foreground tracking-wide group-hover:text-foreground transition-colors">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border bg-background text-[10px] group-hover:border-foreground/30 transition-colors">
-                              {String(idx + 1).padStart(2, "0")}
-                            </span>
-                            <Avatar className="h-5 w-5 border border-border bg-muted">
-                              <AvatarImage src={t.logoUrl} alt={t.feedTitle} />
-                              <AvatarFallback className="text-[10px]">
-                                {t.feedTitle.slice(0, 2).toUpperCase()}
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className="truncate">{t.feedTitle}</span>
+                  <div className="space-y-5 pb-6">
+                    {digestSections.map((section) => (
+                      <section key={section.sourceType}>
+                        <div className="flex items-center gap-2 border-b border-border/70 pb-2">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-background">
+                            <img src={section.meta.logoUrl} alt={section.meta.enLabel} className="h-4 w-4 object-contain" />
+                          </span>
+                          <div className="min-w-0">
+                            <div className="text-sm font-semibold">
+                              {text(section.meta.zhLabel, section.meta.enLabel)}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground">
+                              {section.items.length} {text("篇", "items")}
+                            </div>
                           </div>
-                          <div className="mt-1 text-sm underline underline-offset-4 decoration-border group-hover:decoration-foreground/30 transition-colors line-clamp-2">
-                            {t.title}
-                          </div>
-                        </button>
-                      </li>
+                        </div>
+                        <ol className="mt-3 space-y-3">
+                          {section.items.map((item, idx) => (
+                            <li key={item.anchorId}>
+                              <button
+                                type="button"
+                                className="block w-full text-left leading-snug hover:text-foreground group"
+                                onClick={() => handleTocClick(item.anchorId)}
+                              >
+                                <div className="flex items-center gap-2 text-[12px] text-muted-foreground tracking-wide group-hover:text-foreground transition-colors">
+                                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border bg-background text-[10px] group-hover:border-foreground/30 transition-colors">
+                                    {String(idx + 1).padStart(2, "0")}
+                                  </span>
+                                  <Avatar className="h-5 w-5 border border-border bg-muted">
+                                    <AvatarImage src={item.feedLogoUrl} alt={item.feedTitle} />
+                                    <AvatarFallback className="text-[10px]">
+                                      {item.feedTitle.slice(0, 2).toUpperCase()}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <span className="truncate">{item.feedTitle}</span>
+                                </div>
+                                <div className="mt-1 text-sm underline underline-offset-4 decoration-border group-hover:decoration-foreground/30 transition-colors line-clamp-2">
+                                  {item.title}
+                                </div>
+                              </button>
+                            </li>
+                          ))}
+                        </ol>
+                      </section>
                     ))}
-                  </ol>
+                  </div>
                 </ScrollArea>
               </Card>
 
               {/* Articles */}
               <div className="space-y-4">
-                {current.items.map((it, index) => {
-                  const anchorId = toc[index]?.id;
-                  return (
-                    <Card key={it.id} className="p-5 scroll-mt-8" id={anchorId}>
-                      <div className="flex flex-col gap-3">
+                {digestSections.map((section) => (
+                  <section key={section.sourceType} className="space-y-4">
+                    <Card className="gap-0 border-border/80 bg-card/80 p-5">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-background">
+                          <img src={section.meta.logoUrl} alt={section.meta.enLabel} className="h-6 w-6 object-contain" />
+                        </span>
                         <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
-                              {it.feedTitle}
-                            </span>
+                          <div className="text-[11px] tracking-[0.18em] uppercase text-muted-foreground">
+                            {text("栏目", "Section")}
                           </div>
-                          <h4 className="mt-2 text-xl md:text-2xl font-semibold leading-snug break-words">
-                            {it.title}
+                          <h4 className="mt-1 text-2xl font-semibold">
+                            {text(section.meta.zhLabel, section.meta.enLabel)}
+                            <span className="ml-2 text-base font-normal text-muted-foreground">
+                              · {section.items.length} {text("篇", "items")}
+                            </span>
                           </h4>
                         </div>
-                        
-                        <div className="flex flex-col gap-3 items-start">
-                          {it.author && (
-                            <div className="text-xs text-muted-foreground">
-                              {text("作者：", "by ")}{it.author}
-                            </div>
-                          )}
-                          <a
-                            href={it.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex"
-                          >
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="gap-1.5"
-                            >
-                              {text("阅读原文", "View Original")}
-                              <ExternalLink className="h-3.5 w-3.5" />
-                            </Button>
-                          </a>
-                        </div>
-                      </div>
-
-                      <Separator className="my-4" />
-
-                      <div className="pl-4 border-l-4 border-primary my-6">
-                        <div className="text-xs tracking-[0.18em] uppercase text-primary mb-2 font-medium">
-                          {text("一句话总结", "TL;DR")}
-                        </div>
-                        <div className="text-base italic leading-relaxed text-foreground/90 break-words">
-                          {it.oneLiner}
-                        </div>
-                      </div>
-
-                      {it.keyInsights.length > 0 && (
-                        <div className="mt-4">
-                          <div className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
-                            {text("关键洞察", "Takeaways")}
-                          </div>
-                          <ul className="mt-2 list-disc pl-5 space-y-2 text-sm leading-relaxed">
-                            {it.keyInsights.map((k, i) => (
-                              <li key={i}>{k}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      <div className="mt-5 text-xs text-muted-foreground">
-                        <span className="text-primary font-semibold mr-1">
-                          #{String(index + 1).padStart(2, "0")}
-                        </span>
-                        ·{" "}
-                        <button
-                          type="button"
-                          className="underline underline-offset-4 hover:text-foreground"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            window.scrollTo({ top: 0, behavior: "smooth" });
-                          }}
-                        >
-                          {text("回到顶部", "Back to top")}
-                        </button>
                       </div>
                     </Card>
-                  );
-                })}
+
+                    {section.items.map((it, index) => (
+                      <Card key={it.id} className="p-5 scroll-mt-8" id={it.anchorId}>
+                        <div className="flex flex-col gap-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <Avatar className="h-6 w-6 border border-border bg-muted">
+                                <AvatarImage src={it.feedLogoUrl} alt={it.feedTitle} />
+                                <AvatarFallback className="text-[10px]">
+                                  {it.feedTitle.slice(0, 2).toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
+                                {it.feedTitle}
+                              </span>
+                            </div>
+                            <h4 className="mt-2 text-xl md:text-2xl font-semibold leading-snug break-words">
+                              {it.title}
+                            </h4>
+                          </div>
+
+                          <div className="flex flex-col gap-3 items-start">
+                            {it.author && (
+                              <div className="text-xs text-muted-foreground">
+                                {text("作者：", "by ")}{it.author}
+                              </div>
+                            )}
+                            <a
+                              href={it.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex"
+                            >
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1.5"
+                              >
+                                {text("阅读原文", "View Original")}
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </Button>
+                            </a>
+                          </div>
+                        </div>
+
+                        <Separator className="my-4" />
+
+                        <div className="pl-4 border-l-4 border-primary my-6">
+                          <div className="text-xs tracking-[0.18em] uppercase text-primary mb-2 font-medium">
+                            {text("一句话总结", "TL;DR")}
+                          </div>
+                          <div className="text-base italic leading-relaxed text-foreground/90 break-words">
+                            {it.oneLiner}
+                          </div>
+                        </div>
+
+                        {it.keyInsights.length > 0 && (
+                          <div className="mt-4">
+                            <div className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
+                              {text("关键洞察", "Takeaways")}
+                            </div>
+                            <ul className="mt-2 list-disc pl-5 space-y-2 text-sm leading-relaxed">
+                              {it.keyInsights.map((k, i) => (
+                                <li key={i}>{k}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        <div className="mt-5 text-xs text-muted-foreground">
+                          <span className="text-primary font-semibold mr-1">
+                            #{String(index + 1).padStart(2, "0")}
+                          </span>
+                          ·{" "}
+                          <button
+                            type="button"
+                            className="underline underline-offset-4 hover:text-foreground"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              window.scrollTo({ top: 0, behavior: "smooth" });
+                            }}
+                          >
+                            {text("回到顶部", "Back to top")}
+                          </button>
+                        </div>
+                      </Card>
+                    ))}
+                  </section>
+                ))}
 
                 {/* Reading completion ritual */}
                 <ReadingComplete itemCount={current.items.length} />

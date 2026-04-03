@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Newspaper, PanelLeft, Maximize, Minimize, Settings as SettingsIcon, Github } from "lucide-react";
 import { useI18n } from "@/contexts/I18nContext";
 import { useZenMode } from "@/hooks/useZenMode";
+import { preloadRoute } from "@/lib/route-preload";
 
 type NavItem = {
   href: string;
@@ -51,6 +52,10 @@ export default function AppShell({ children }: PropsWithChildren) {
         className: "toast-zen",
       });
     }
+  }
+
+  function handleNavIntent(href: string) {
+    preloadRoute(href);
   }
 
   return (
@@ -204,6 +209,8 @@ export default function AppShell({ children }: PropsWithChildren) {
                           isCollapsed ? "justify-center px-0" : "justify-start px-3 gap-3"
                         )}
                         title={isCollapsed ? item.label : ""}
+                        onMouseEnter={() => handleNavIntent(item.href)}
+                        onFocus={() => handleNavIntent(item.href)}
                       >
                         <div className="flex h-4 w-4 shrink-0 items-center justify-center">
                           {item.icon}
@@ -236,6 +243,8 @@ export default function AppShell({ children }: PropsWithChildren) {
                           isCollapsed ? "justify-center px-0" : "justify-start px-3 gap-3"
                         )}
                         title={isCollapsed ? item.label : ""}
+                        onMouseEnter={() => handleNavIntent(item.href)}
+                        onFocus={() => handleNavIntent(item.href)}
                       >
                         <div className="flex h-4 w-4 shrink-0 items-center justify-center">
                           {item.icon}

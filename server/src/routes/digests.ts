@@ -2,11 +2,12 @@ import { Router } from "express";
 import { eq, desc, and } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "../db/index.js";
-import { digests, digestItems } from "../db/schema.js";
+import { digests, digestItems, feeds, subscriptions } from "../db/schema.js";
 import { executeDailyDigestJob } from "../services/digest-execution.js";
 import { cancelPendingDigestJobsForDate } from "../services/digest-jobs.js";
-import type { Digest, DigestItem } from "../../../shared/types.js";
+import type { Digest, DigestItem, DigestOverview, Feed } from "../../../shared/types.js";
 import { getRequestUserId } from "../auth/user-context.js";
+import { isNull } from "drizzle-orm";
 
 export const digestsRouter = Router();
 
@@ -41,6 +42,7 @@ function toDigestItem(row: typeof digestItems.$inferSelect): DigestItem {
   return {
     id: row.id,
     feedId: row.feedId ?? undefined,
+    sourceType: row.sourceType,
     feedTitle: row.feedName,
     title: row.articleTitle,
     author: row.author ?? undefined,
@@ -48,6 +50,21 @@ function toDigestItem(row: typeof digestItems.$inferSelect): DigestItem {
     oneLiner: row.oneLiner,
     keyInsights: (safeJsonParse(row.keyInsights) as string[]) ?? [],
     publishedAt: row.publishedAt,
+  };
+}
+
+function toFeed(row: typeof feeds.$inferSelect): Feed {
+  return {
+    id: row.id,
+    title: row.name,
+    description: row.description ?? undefined,
+    logoUrl: row.logoUrl ?? undefined,
+    authorName: row.authorName ?? undefined,
+    url: row.publicationUrl,
+    feedUrl: row.feedUrl,
+    sourceType: row.sourceType,
+    lastFetchedAt: row.lastFetchedAt ?? undefined,
+    createdAt: row.createdAt,
   };
 }
 
@@ -69,6 +86,54 @@ digestsRouter.get("/", async (req, res) => {
   }));
 
   res.json(result);
+});
+
+digestsRouter.get("/overview", async (req, res) => {
+  const db = getDb();
+  const userId = getRequestUserId(req);
+
+  const [digestRows, feedRows] = await Promise.all([
+    db
+      .select()
+      .from(digests)
+      .where(and(eq(digests.userId, userId), eq(digests.type, "daily")))
+      .orderBy(desc(digests.date)),
+    db
+      .select({ feed: feeds })
+      .from(subscriptions)
+      .innerJoin(feeds, eq(subscriptions.feedId, feeds.id))
+      .where(and(eq(subscriptions.userId, userId), isNull(subscriptions.endedAt)))
+      .orderBy(desc(feeds.createdAt)),
+  ]);
+
+  const digestList = digestRows.map((row) => ({
+    id: row.id,
+    type: row.type,
+    date: row.date,
+    generatedAt: row.generatedAt,
+  }));
+
+  let currentDigest: Digest | null = null;
+  const latestDigest = digestRows[0];
+
+  if (latestDigest) {
+    const items = (await db
+      .select()
+      .from(digestItems)
+      .where(eq(digestItems.digestId, latestDigest.id))
+      .orderBy(digestItems.sortOrder))
+      .map(toDigestItem);
+
+    currentDigest = toDigest(latestDigest, items);
+  }
+
+  const payload: DigestOverview = {
+    digests: digestList,
+    currentDigest,
+    feeds: feedRows.map(({ feed }) => toFeed(feed)),
+  };
+
+  res.json(payload);
 });
 
 digestsRouter.get("/:id", async (req, res) => {

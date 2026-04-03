@@ -15,6 +15,8 @@ import * as api from "@/lib/api";
 import type { Feed, PodcastSearchResult } from "@/lib/types";
 import { Check } from "lucide-react";
 
+let podcastFeedsCache: Feed[] | null = null;
+
 export default function PodcastFeedsPage() {
   const { text } = useI18n();
   const [feeds, setFeeds] = useState<Feed[]>([]);
@@ -27,8 +29,14 @@ export default function PodcastFeedsPage() {
   const searchRequestId = useRef(0);
 
   const refresh = useCallback(async () => {
+    if (podcastFeedsCache) {
+      setFeeds(podcastFeedsCache);
+      setFeedsLoading(false);
+    }
+
     try {
       const all = await api.fetchPodcastFeeds();
+      podcastFeedsCache = all;
       setFeeds(all);
     } catch {
       toast.error(text("加载播客订阅失败", "Failed to load podcasts"));
@@ -231,7 +239,9 @@ export default function PodcastFeedsPage() {
                   {text("未找到匹配的播客节目，试试其他关键词", "No podcasts found. Try another title.")}
                 </div>
               ) : (
-                <div className="py-8 text-center text-sm text-muted-foreground" />
+                <div className="py-8 text-center text-sm text-muted-foreground">
+                  {text("搜索播客节目名称，先看看结果，再决定是否订阅。", "Search for a podcast title to preview results before subscribing.")}
+                </div>
               )}
             </div>
           </div>

@@ -16,6 +16,8 @@ import { ApiError } from "@/lib/api";
 import type { Feed, DiscoveredYouTubeChannel, GoogleYouTubeSubscription } from "@/lib/types";
 import { Search, Download, RefreshCw, ShieldCheck, X } from "lucide-react";
 
+let youtubeFeedsCache: Feed[] | null = null;
+
 export default function YouTubeFeedsPage() {
   const { text } = useI18n();
   const googleYouTubeImportEnabled =
@@ -35,8 +37,14 @@ export default function YouTubeFeedsPage() {
   const [requiresGoogleReauth, setRequiresGoogleReauth] = useState(false);
 
   const refresh = useCallback(async () => {
+    if (youtubeFeedsCache) {
+      setFeeds(youtubeFeedsCache);
+      setFeedsLoading(false);
+    }
+
     try {
       const all = await api.fetchYouTubeFeeds();
+      youtubeFeedsCache = all;
       setFeeds(all);
     } catch {
       toast.error(text("加载订阅列表失败", "Failed to load"));
@@ -544,7 +552,7 @@ export default function YouTubeFeedsPage() {
                 </div>
               ) : (
                 <div className="py-4 text-center text-sm text-muted-foreground">
-
+                  {text("粘贴频道链接即可预览最近更新，再决定是否订阅。", "Paste a channel URL to preview recent updates before subscribing.")}
                 </div>
               )}
             </div>

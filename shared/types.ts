@@ -1,5 +1,7 @@
 // 前后端共享的类型定义
 
+export type DigestSourceType = "substack" | "rss" | "youtube" | "podcast";
+
 export type Feed = {
   id: string;
   title: string;
@@ -8,7 +10,7 @@ export type Feed = {
   authorName?: string;
   url: string;
   feedUrl: string;
-  sourceType: "substack" | "rss" | "youtube" | "podcast";
+  sourceType: DigestSourceType;
   lastFetchedAt?: string; // ISO
   createdAt: string; // ISO
 };
@@ -16,6 +18,7 @@ export type Feed = {
 export type DigestItem = {
   id: string;
   feedId?: string;
+  sourceType: DigestSourceType;
   feedTitle: string;
   title: string;
   author?: string;
@@ -31,6 +34,12 @@ export type Digest = {
   date: string; // YYYY-MM-DD
   generatedAt: string; // ISO
   items: DigestItem[];
+};
+
+export type DigestOverview = {
+  digests: DigestListItem[];
+  currentDigest: Digest | null;
+  feeds: Feed[];
 };
 
 export type SubstackSearchResult = {
@@ -123,4 +132,5 @@ export type Settings = {
   digestTime: string;
   timezone: string;
   digestLanguage: "zh" | "en";
+  digestSourceTypes: DigestSourceType[];
 };

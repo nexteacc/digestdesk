@@ -1,6 +1,7 @@
 import type {
   Feed,
   Digest,
+  DigestOverview,
   DigestListItem,
   PodcastSearchResult,
   SubstackSearchResult,
@@ -258,4 +259,8 @@ export function generateDigest(
 
 export function fetchDigest(id: string): Promise<Digest> {
   return request(`/digests/${id}`);
+}
+
+export function fetchDigestOverview(): Promise<DigestOverview> {
+  return request("/digests/overview");
 }
