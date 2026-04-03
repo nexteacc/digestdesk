@@ -168,8 +168,8 @@ export default function YouTubeFeedsPage() {
         setSelectedImports([]);
         toast.error(
           text(
-            "需要补充 Google 授权后才能读取 YouTube 订阅",
-            "Reconnect Google to read YouTube subscriptions",
+            "需要重新连接 Google 授权",
+            "Please reconnect Google authorization"
           ),
         );
         return;
@@ -269,8 +269,8 @@ export default function YouTubeFeedsPage() {
             ) : (
               <p className="max-w-sm text-right text-xs leading-5 text-muted-foreground">
                 {text(
-                  "Google 导入暂未开放，当前可直接粘贴频道链接订阅。",
-                  "Google import is temporarily unavailable. Paste a channel URL to subscribe for now.",
+                  "Google 导入暂未开放，请直接粘贴频道链接",
+                  "Google import unavailable. Paste a channel URL instead.",
                 )}
               </p>
             )}
@@ -288,8 +288,8 @@ export default function YouTubeFeedsPage() {
                   </h3>
                   <p className="text-xs text-muted-foreground mt-1">
                     {text(
-                      "选择要添加到 DigestDesk 的频道",
-                      "Choose which channels to add to DigestDesk",
+                      "选择要导入的频道",
+                      "Select channels to import",
                     )}
                   </p>
                 </div>
@@ -388,8 +388,8 @@ export default function YouTubeFeedsPage() {
                         </h3>
                         <p className="mt-1 text-sm text-muted-foreground">
                           {text(
-                            "还差一次 Google 授权，才能读取你的 YouTube 订阅频道。",
-                            "One more Google authorization is required before we can read your YouTube subscriptions.",
+                            "需要 Google 授权读取你的订阅频道",
+                            "Google authorization is required to read your subscriptions."
                           )}
                         </p>
                       </div>
@@ -406,25 +406,25 @@ export default function YouTubeFeedsPage() {
                   <div className="space-y-5 px-5 py-5">
                     <div className="rounded-2xl border border-border bg-muted/30 p-4">
                       <p className="text-sm font-medium">
-                        {text("你需要完成这一步：", "What you need to do:")}
+                        {text("操作步骤：", "Steps:")}
                       </p>
                       <ol className="mt-3 space-y-2 text-sm text-muted-foreground">
                         <li>
                           {text(
-                            "1. 点击右上角头像，打开账户面板。",
-                            "1. Click the top-right avatar to open the account panel.",
+                            "1. 点击右上角头像打开账户面板",
+                            "1. Click top-right avatar to open account panel"
                           )}
                         </li>
                         <li>
                           {text(
-                            "2. 重新连接 Google，并允许读取 YouTube 订阅。",
-                            "2. Reconnect Google and allow YouTube subscription access.",
+                            "2. 重新连接 Google 并允许读取 YouTube 订阅",
+                            "2. Reconnect Google and allow YouTube access"
                           )}
                         </li>
                         <li>
                           {text(
-                            "3. 回到这个页面后，再点击一次“导入我的 YouTube 订阅”。",
-                            "3. Come back here and click “Import my YouTube subscriptions” again.",
+                            "3. 返回此页面重新点击导入",
+                            "3. Return here and click import again"
                           )}
                         </li>
                       </ol>
@@ -552,7 +552,7 @@ export default function YouTubeFeedsPage() {
                 </div>
               ) : (
                 <div className="py-4 text-center text-sm text-muted-foreground">
-                  {text("粘贴频道链接即可预览最近更新，再决定是否订阅。", "Paste a channel URL to preview recent updates before subscribing.")}
+                  {text("粘贴 YouTube 频道链接开始识别", "Paste a YouTube channel URL to get started")}
                 </div>
               )}
             </div>
@@ -565,7 +565,7 @@ export default function YouTubeFeedsPage() {
           loading={feedsLoading}
           {...batch}
           onRemove={onRemove}
-          emptyText={text("还没有 YouTube 订阅。粘贴一个频道链接试试。", "No YouTube channels yet. Paste a channel URL above to add one.")}
+          emptyText={text("暂无 YouTube 订阅", "No YouTube channels yet")}
           renderAvatarFallback={() => (
             <img src="/logos/youtube.svg" alt="YouTube" className="h-3.5 w-3.5" />
           )}

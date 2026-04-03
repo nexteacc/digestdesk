@@ -89,7 +89,7 @@ export default function ImportDialog({ open, onClose, onImported, existingFeeds 
     try {
       const data = await api.fetchSubstackReads(name);
       if (data.length === 0) {
-        toast.error(text("暂未找到可导入的公开订阅", "No public subscriptions were found"));
+        toast.error(text("未找到公开订阅", "No public subscriptions found"));
         setPhase("input");
         return;
       }
@@ -173,7 +173,7 @@ export default function ImportDialog({ open, onClose, onImported, existingFeeds 
           <div>
             <h3 className="text-lg font-semibold">{text("从 Substack 导入", "Import from Substack")}</h3>
             <p className="text-xs text-muted-foreground mt-1">
-              {text("输入你的 Substack 用户名，导入已关注的出版物", "Enter your Substack username to import your subscriptions")}
+              {text("输入 Substack 用户名导入订阅", "Import subscriptions by Substack username")}
             </p>
           </div>
           <Button
@@ -209,7 +209,7 @@ export default function ImportDialog({ open, onClose, onImported, existingFeeds 
                 <Button onClick={handleFetch}>{text("继续", "Continue")}</Button>
               </div>
               <p className="mt-3 text-xs text-muted-foreground leading-relaxed">
-                {text("用户名可在 Substack 个人主页链接中找到，例如", "You can find it in your Substack profile URL, for example")} substack.com/@<span className="font-medium">{text("用户名", "username")}</span>
+                {text("可在个人主页链接中找到，如：", "Found in your profile URL, e.g. ")} substack.com/@<span className="font-medium">{text("用户名", "username")}</span>
                 </p>
               </div>
             )}

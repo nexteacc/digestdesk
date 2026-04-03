@@ -1,5 +1,6 @@
 import RssParser from "rss-parser";
 import type { DiscoveredFeed } from "../../../shared/types.js";
+import { AppError } from "../sources/app-error.js";
 
 const rssParser = new RssParser({
   timeout: 10000,
@@ -66,7 +67,7 @@ export async function discoverFeed(url: string): Promise<DiscoveredFeed> {
     }
   }
 
-  throw new Error("未能找到有效的 RSS 订阅源，请检查 URL 是否正确。");
+  throw new AppError("No RSS feed found. Check the URL.", 404, "DISCOVERY_FAILED", "未找到有效的 RSS 源，请检查 URL");
 }
 
 async function fetchHomepageMetadata(siteUrl: string): Promise<HomepageMetadata> {

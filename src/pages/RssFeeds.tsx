@@ -210,7 +210,7 @@ export default function RssFeedsPage() {
                 </div>
               ) : (
                 <div className="py-4 text-center text-sm text-muted-foreground">
-                  {text("粘贴一个网站或 RSS 链接，先识别来源，再决定是否订阅。", "Paste a website or RSS URL to preview the feed before subscribing.")}
+                  {text("粘贴网站或 RSS 链接开始识别", "Paste a website or RSS URL to get started")}
                 </div>
               )}
             </div>
@@ -223,7 +223,7 @@ export default function RssFeedsPage() {
           loading={feedsLoading}
           {...batch}
           onRemove={onRemove}
-          emptyText={text("还没有 RSS 订阅。粘贴一个网站链接试试。", "No RSS subscriptions yet. Paste a URL above to add one.")}
+          emptyText={text("暂无 RSS 订阅", "No RSS subscriptions yet")}
           renderAvatarFallback={() => <Rss className="h-3.5 w-3.5" />}
         />
       </div>

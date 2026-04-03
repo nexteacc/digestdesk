@@ -26,6 +26,14 @@ export class ApiError extends Error {
   }
 }
 
+function getLocale(): string {
+  try {
+    return localStorage.getItem("digestdesk-locale") || "en";
+  } catch {
+    return "en";
+  }
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     headers: { "Content-Type": "application/json", ...options?.headers },
@@ -33,7 +41,9 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new ApiError(body.error || `Request failed (${res.status})`, res.status, body.code);
+    const locale = getLocale();
+    const message = (locale === "zh" && body.errorZh) ? body.errorZh : (body.error || `Request failed (${res.status})`);
+    throw new ApiError(message, res.status, body.code);
   }
   return res.json();
 }

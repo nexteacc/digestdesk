@@ -26,8 +26,8 @@ const YOUTUBE_LONG_FORM_PLAYLIST_PREFIX = "UULF";
 const YOUTUBE_SHORTS_PLAYLIST_PREFIX = "UUSH";
 
 export class YouTubeDiscoveryError extends AppError {
-  constructor(message: string, status: number, code: string) {
-    super(message, status, code);
+  constructor(message: string, status: number, code: string, messageZh?: string) {
+    super(message, status, code, messageZh);
     this.name = "YouTubeDiscoveryError";
   }
 }
@@ -163,7 +163,7 @@ export async function isYouTubeShort(videoUrl: string): Promise<boolean> {
 function normalizeInputUrl(raw: string): URL {
   const trimmed = raw.trim();
   if (!trimmed) {
-    throw new YouTubeDiscoveryError("请输入 YouTube 频道链接", 400, "INVALID_INPUT");
+    throw new YouTubeDiscoveryError("Enter a YouTube channel URL.", 400, "INVALID_INPUT", "请输入 YouTube 频道链接");
   }
 
   const candidate = /^https?:\/\//i.test(trimmed)
@@ -174,11 +174,11 @@ function normalizeInputUrl(raw: string): URL {
   try {
     parsed = new URL(candidate);
   } catch {
-    throw new YouTubeDiscoveryError("请输入有效的 YouTube URL", 400, "INVALID_URL");
+    throw new YouTubeDiscoveryError("Enter a valid YouTube URL.", 400, "INVALID_URL", "请输入有效的 YouTube URL");
   }
 
   if (!isYouTubeHostname(parsed.hostname)) {
-    throw new YouTubeDiscoveryError("请输入有效的 YouTube URL", 400, "INVALID_YOUTUBE_HOST");
+    throw new YouTubeDiscoveryError("Enter a valid YouTube URL.", 400, "INVALID_YOUTUBE_HOST", "请输入有效的 YouTube URL");
   }
 
   return parsed;
@@ -194,7 +194,7 @@ export async function discoverYouTubeChannel(url: string): Promise<DiscoveredYou
   // 提取 channelId
   const channelId = await extractChannelId(targetUrl);
   if (!channelId) {
-    throw new YouTubeDiscoveryError("无法从该 URL 提取 YouTube 频道信息", 422, "CHANNEL_ID_NOT_FOUND");
+    throw new YouTubeDiscoveryError("Could not identify channel from this URL.", 422, "CHANNEL_ID_NOT_FOUND", "无法从该 URL 提取 YouTube 频道信息");
   }
 
   const channelUrl = buildYouTubeChannelUrl(channelId);
@@ -214,9 +214,10 @@ export async function discoverYouTubeChannel(url: string): Promise<DiscoveredYou
       usedFallbackFeed = true;
     } catch {
       throw new YouTubeDiscoveryError(
-        "无法读取该频道订阅源，请稍后重试",
+        "Channel feed unavailable. Try again later.",
         502,
         "YOUTUBE_FEED_UNAVAILABLE",
+        "无法读取该频道订阅源，请稍后重试",
       );
     }
   }
@@ -226,7 +227,7 @@ export async function discoverYouTubeChannel(url: string): Promise<DiscoveredYou
     feed.items?.[0]?.author ||
     feed.items?.[0]?.creator ||
     feed.title ||
-    "未知频道";
+    "Unknown channel";
   const recentVideos = [];
   for (const item of feed.items || []) {
     const itemUrl = item.link || "";
@@ -237,7 +238,7 @@ export async function discoverYouTubeChannel(url: string): Promise<DiscoveredYou
 
     const videoId = extractYouTubeVideoId(itemUrl);
     recentVideos.push({
-      title: item.title || "无标题",
+      title: item.title || "Untitled",
       url: itemUrl,
       thumbnailUrl: videoId
         ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
@@ -287,9 +288,10 @@ async function extractChannelId(url: string): Promise<string | null> {
     if (!response.ok) {
       if (response.status >= 500) {
         throw new YouTubeDiscoveryError(
-          "YouTube 服务暂时不可用，请稍后重试",
+          "YouTube is temporarily unavailable. Try again later.",
           502,
           "YOUTUBE_UPSTREAM_ERROR",
+          "YouTube 服务暂时不可用，请稍后重试",
         );
       }
       return null;
@@ -318,9 +320,10 @@ async function extractChannelId(url: string): Promise<string | null> {
     }
     console.warn(`[youtube] 抓取页面失败:`, err);
     throw new YouTubeDiscoveryError(
-      "无法访问 YouTube 页面，请稍后重试",
+      "Could not reach YouTube. Try again later.",
       502,
       "YOUTUBE_PAGE_FETCH_FAILED",
+      "无法访问 YouTube 页面，请稍后重试",
     );
   }
 

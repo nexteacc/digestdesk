@@ -145,7 +145,7 @@ digestsRouter.get("/:id", async (req, res) => {
     .where(and(eq(digests.id, req.params.id), eq(digests.userId, userId)));
 
   if (!digest) {
-    res.status(404).json({ error: "日报不存在" });
+    res.status(404).json({ error: "Digest not found.", errorZh: "日报不存在" });
     return;
   }
 
@@ -195,7 +195,7 @@ digestsRouter.post("/generate", async (req, res) => {
       .where(and(eq(digests.id, digestId), eq(digests.userId, userId)));
     if (!digest) {
       console.error(`[digests/generate] Generated digest id=${digestId} but record not found for user=${userId}`);
-      res.status(500).json({ error: "生成后未找到记录" });
+      res.status(500).json({ error: "Digest generation failed.", errorZh: "生成后未找到记录" });
       return;
     }
     const items = (await db
@@ -212,9 +212,9 @@ digestsRouter.post("/generate", async (req, res) => {
   } catch (err: unknown) {
     console.error(`[digests/generate] Error for user=${userId}:`, err);
     if (err instanceof Error) {
-      res.status(500).json({ error: err.message || "生成失败" });
+      res.status(500).json({ error: err.message || "Digest generation failed.", errorZh: "生成失败" });
     } else {
-      res.status(500).json({ error: "生成失败" });
+      res.status(500).json({ error: "Digest generation failed.", errorZh: "生成失败" });
     }
   }
 });

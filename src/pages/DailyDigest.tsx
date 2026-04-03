@@ -50,7 +50,7 @@ function GeneratingProgress() {
 
   const phaseText: Record<(typeof PROGRESS_PHASES)[number]["key"], string> = {
     sync: text("正在同步最新文章…", "Syncing articles..."),
-    read: text("编辑正在阅读文章…", "Your editor is reading..."),
+    read: text("编辑正在阅读…", "Reading..."),
     summary: text("正在生成摘要…", "Generating..."),
     polish: text("正在整理排版…", "Wrapping up..."),
   };
@@ -174,7 +174,7 @@ function WelcomeSearch({ onAdded }: { onAdded: () => void }) {
     setSubscribing(url);
     try {
       await api.createFeed(url);
-      toast.success(text("已订阅，正在准备你的第一份日报…", "Subscribed! Preparing your first digest..."));
+      toast.success(text("已订阅，正在准备日报…", "Subscribed! Preparing digest..."));
       onAdded();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : text("添加失败", "Failed to add"));
@@ -334,7 +334,7 @@ export default function DailyDigest() {
     try {
       const result = await api.generateDigest("daily", { force: true });
       if ("status" in result && result.status === "empty") {
-        toast(text("暂无新文章，稍后再来看看", "No new articles. Check back later."));
+        toast(text("暂无新文章", "No new articles"));
         return;
       }
       const digest = await api.fetchDigest(result.id);
@@ -346,7 +346,7 @@ export default function DailyDigest() {
         feeds,
       };
       applyOverview(nextOverview);
-      toast.success(text("同步完成，日报已更新", "Sync complete. Your digest has been updated."));
+      toast.success(text("同步完成，日报已更新", "Sync complete"));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : text("同步失败", "Sync failed"));
     } finally {
@@ -533,7 +533,7 @@ export default function DailyDigest() {
         {!loading && !generating && !current && hasFeeds && (
           <Card className="p-10 text-center">
             <div className="text-sm text-muted-foreground">
-              {text("还没有生成简报。点击“立即同步”，抓取你正在追踪的创作者更新。", "No brief yet. Click Sync Now to fetch the latest updates from the creators you follow.")}
+              {text("暂无简报。点击“立即同步”获取更新。", "No brief yet. Click Sync Now to fetch updates.")}
             </div>
             <Button
               size="sm"

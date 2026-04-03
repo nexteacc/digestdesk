@@ -24,7 +24,7 @@ substackRouter.get("/info", async (req, res) => {
   } catch (err) {
     const appError = toAppError(err);
     console.error("[substack/info] Error:", appError.message);
-    res.status(appError.status).json({ error: appError.message, code: appError.code });
+    res.status(appError.status).json({ error: appError.message, errorZh: appError.messageZh, code: appError.code });
   }
 });
 
@@ -72,7 +72,7 @@ substackRouter.get("/search", async (req, res) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[substack/search] Error:", msg);
-    res.status(500).json({ error: "搜索失败，请稍后重试" });
+    res.status(500).json({ error: "Search failed. Try again later.", errorZh: "搜索失败，请稍后重试" });
   }
 });
 
@@ -91,7 +91,7 @@ substackRouter.get("/reads", async (req, res) => {
     console.log(`[substack/reads] Request succeeded for @${normalizedUsername}: ${results.length} results`);
     res.json({ results });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "获取订阅列表失败";
+    const msg = err instanceof Error ? err.message : "Failed to load subscriptions.";
     console.error(`[substack/reads] Request failed for @${normalizedUsername}:`, err);
     res.status(500).json({ error: msg });
   }

@@ -14,7 +14,7 @@ export class SubstackAdapter implements SourceAdapter {
   normalizePublicationUrl(rawUrl: string): string {
     const trimmed = rawUrl.trim();
     if (!trimmed) {
-      throw new AppError("请提供 url", 400, "INVALID_INPUT");
+      throw new AppError("URL is required.", 400, "INVALID_INPUT", "请提供 url");
     }
 
     const withProtocol = /^https?:\/\//i.test(trimmed)
@@ -24,7 +24,7 @@ export class SubstackAdapter implements SourceAdapter {
     try {
       return new URL(withProtocol).origin;
     } catch {
-      throw new AppError("请输入有效的 Substack 链接", 400, "INVALID_URL");
+      throw new AppError("Enter a valid Substack URL.", 400, "INVALID_URL", "请输入有效的 Substack 链接");
     }
   }
 
@@ -34,7 +34,7 @@ export class SubstackAdapter implements SourceAdapter {
     try {
       return await getSubstackInfo(publicationUrl);
     } catch {
-      throw new AppError("无法获取出版物信息，请检查链接是否正确", 502, "DISCOVERY_FAILED");
+      throw new AppError("Could not fetch publication. Check the URL.", 502, "DISCOVERY_FAILED", "无法获取出版物，请检查链接");
     }
   }
 

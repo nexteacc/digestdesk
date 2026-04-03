@@ -101,7 +101,7 @@ feedsRouter.post("/", async (req, res) => {
         .orderBy(desc(subscriptions.createdAt));
       if (existingSubscription) {
         if (!existingSubscription.endedAt) {
-          res.status(409).json({ error: "该订阅源已存在" });
+          res.status(409).json({ error: "Already subscribed.", errorZh: "该订阅源已存在" });
           return;
         }
 
@@ -170,7 +170,7 @@ feedsRouter.post("/", async (req, res) => {
   } catch (err) {
     const appError = toAppError(err);
     console.error("[feeds/create] Error:", appError.message);
-    res.status(appError.status).json({ error: appError.message, code: appError.code });
+    res.status(appError.status).json({ error: appError.message, errorZh: appError.messageZh, code: appError.code });
   }
 });
 
@@ -199,7 +199,7 @@ feedsRouter.delete("/:id", async (req, res) => {
     .set({ endedAt: new Date().toISOString() })
     .where(and(eq(subscriptions.userId, userId), eq(subscriptions.feedId, req.params.id), isNull(subscriptions.endedAt)));
   if (result.count === 0) {
-    res.status(404).json({ error: "订阅源不存在" });
+    res.status(404).json({ error: "Feed not found.", errorZh: "订阅源不存在" });
     return;
   }
   res.json({ success: true });

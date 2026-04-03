@@ -124,7 +124,7 @@ export default function PodcastFeedsPage() {
         feedUrl: result.feedUrl,
         siteUrl: result.siteUrl,
       });
-      toast.success(text("已订阅，正在同步播客更新…", "Subscribed! Syncing podcast updates..."));
+      toast.success(text("已订阅，正在同步播客…", "Subscribed! Syncing..."));
       await refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : text("添加失败", "Failed to add"));
@@ -240,7 +240,7 @@ export default function PodcastFeedsPage() {
                 </div>
               ) : (
                 <div className="py-8 text-center text-sm text-muted-foreground">
-                  {text("搜索播客节目名称，先看看结果，再决定是否订阅。", "Search for a podcast title to preview results before subscribing.")}
+                  {text("搜索播客节目名称", "Search for a podcast title")}
                 </div>
               )}
             </div>
@@ -252,7 +252,7 @@ export default function PodcastFeedsPage() {
           loading={feedsLoading}
           {...batch}
           onRemove={onRemove}
-          emptyText={text("还没有订阅播客节目，试试搜索。", "No podcast subscriptions yet. Try searching above.")}
+          emptyText={text("暂无播客订阅", "No podcast subscriptions yet")}
         />
       </div>
     </AppShell>

@@ -14,16 +14,18 @@ export class RssAdapter implements SourceAdapter {
   async discover(rawUrl: string) {
     const trimmed = rawUrl.trim();
     if (!trimmed) {
-      throw new AppError("请输入有效的 URL", 400, "INVALID_INPUT");
+      throw new AppError("Enter a valid URL.", 400, "INVALID_INPUT", "请输入有效的 URL");
     }
 
     try {
       return await discoverFeed(trimmed);
     } catch (err) {
+      if (err instanceof AppError) throw err;
       throw new AppError(
-        err instanceof Error ? err.message : "探测失败",
+        err instanceof Error ? err.message : "Discovery failed.",
         404,
         "DISCOVERY_FAILED",
+        err instanceof Error ? err.message : "探测失败",
       );
     }
   }

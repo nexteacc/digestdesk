@@ -310,8 +310,8 @@ export async function fetchSubstackReads(
     if (!response.ok) {
       throw new Error(
         response.status === 404
-          ? "找不到该用户，请检查用户名"
-          : `请求失败 (${response.status})`,
+          ? "User not found. Check the username."
+          : `Request failed (${response.status})`,
       );
     }
 
@@ -365,5 +365,5 @@ export async function fetchSubstackReads(
   console.error(
     `[substack/reads] @${username}: no publications found after all parsing strategies`,
   );
-  throw new Error("无法解析订阅数据，该用户可能没有公开订阅列表");
+  throw new Error("No public subscriptions found for this user.");
 }

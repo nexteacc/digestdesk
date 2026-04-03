@@ -37,7 +37,7 @@ export class PodcastAdapter implements SourceAdapter {
   readonly sourceType = "podcast" as const;
 
   async discover(): Promise<never> {
-    throw new AppError("请使用搜索功能发现播客", 400, "PODCAST_SEARCH_REQUIRED");
+    throw new AppError("Add podcasts via search.", 400, "PODCAST_SEARCH_REQUIRED", "请通过搜索添加播客");
   }
 
   createFeedDraft(input: {
@@ -53,7 +53,7 @@ export class PodcastAdapter implements SourceAdapter {
     const siteUrl = pickString(input.siteUrl);
 
     if (!title || !feedUrl || !siteUrl) {
-      throw new AppError("播客数据不完整，请重新搜索后再试", 400, "INVALID_PODCAST_INPUT");
+      throw new AppError("Incomplete podcast data. Try searching again.", 400, "INVALID_PODCAST_INPUT", "播客数据不完整，请重新搜索");
     }
 
     return {

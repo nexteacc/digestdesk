@@ -67,14 +67,14 @@ podcastFeedsRouter.get("/search", async (req, res) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : "播客搜索失败";
     console.error("[podcast/search] Error:", message);
-    res.status(502).json({ error: "播客搜索失败，请稍后重试", code: "PODCAST_SEARCH_FAILED" });
+    res.status(502).json({ error: "Podcast search failed. Try again later.", errorZh: "播客搜索失败，请稍后重试", code: "PODCAST_SEARCH_FAILED" });
   }
 });
 
 podcastFeedsRouter.post("/", async (req, res) => {
   const parsed = createPodcastFeedSchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "数据格式不正确" });
+    res.status(400).json({ error: "Invalid request data.", errorZh: "数据格式不正确" });
     return;
   }
 
@@ -92,7 +92,7 @@ podcastFeedsRouter.post("/", async (req, res) => {
     });
 
     if (!verified) {
-      res.status(400).json({ error: "播客 RSS 无法验证，请稍后重试", code: "INVALID_PODCAST_FEED" });
+      res.status(400).json({ error: "Could not verify podcast feed. Try again later.", errorZh: "播客 RSS 无法验证，请稍后重试", code: "INVALID_PODCAST_FEED" });
       return;
     }
 
@@ -117,7 +117,7 @@ podcastFeedsRouter.post("/", async (req, res) => {
 
       if (existingSubscription) {
         if (!existingSubscription.endedAt) {
-          res.status(409).json({ error: "该播客已订阅" });
+          res.status(409).json({ error: "Podcast already subscribed.", errorZh: "该播客已订阅" });
           return;
         }
 
@@ -184,7 +184,7 @@ podcastFeedsRouter.post("/", async (req, res) => {
   } catch (error) {
     const appError = toAppError(error);
     console.error("[podcast/create] Error:", appError.message);
-    res.status(appError.status).json({ error: appError.message, code: appError.code });
+    res.status(appError.status).json({ error: appError.message, errorZh: appError.messageZh, code: appError.code });
   }
 });
 

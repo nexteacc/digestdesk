@@ -45,9 +45,9 @@ export class YouTubeAdapter implements SourceAdapter {
       return await discoverYouTubeChannel(rawUrl);
     } catch (err) {
       if (err instanceof YouTubeDiscoveryError) {
-        throw new AppError(err.message, err.status, err.code);
+        throw new AppError(err.message, err.status, err.code, err.messageZh);
       }
-      throw new AppError("探测失败，请稍后重试", 500, "DISCOVERY_FAILED");
+      throw new AppError("Discovery failed. Try again later.", 500, "DISCOVERY_FAILED", "探测失败，请稍后重试");
     }
   }
 
@@ -63,7 +63,7 @@ export class YouTubeAdapter implements SourceAdapter {
   }): FeedDraft {
     const channelId = input.channelId.trim();
     if (!YOUTUBE_CHANNEL_ID_REGEX.test(channelId)) {
-      throw new AppError("channelId 格式不正确", 400, "INVALID_CHANNEL_ID");
+      throw new AppError("Invalid channel ID format.", 400, "INVALID_CHANNEL_ID", "channelId 格式不正确");
     }
 
     return {

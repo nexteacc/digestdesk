@@ -19,6 +19,7 @@ interface SourceFeedRouterOptions {
   sourceType: SourceType;
   logPrefix: string;
   duplicateError?: string;
+  duplicateErrorEn?: string;
 }
 
 function sanitizeUrl(url: string): string {
@@ -55,6 +56,7 @@ export function createSourceFeedRouter(opts: SourceFeedRouterOptions): Router {
     sourceType,
     logPrefix,
     duplicateError = "该订阅源已存在",
+    duplicateErrorEn = "Already subscribed.",
   } = opts;
 
   router.post("/discover", async (req, res) => {
@@ -72,14 +74,14 @@ export function createSourceFeedRouter(opts: SourceFeedRouterOptions): Router {
     } catch (err) {
       const appError = toAppError(err);
       console.error(`${logPrefix} Discover failed:`, appError.message);
-      res.status(appError.status).json({ error: appError.message, code: appError.code });
+      res.status(appError.status).json({ error: appError.message, errorZh: appError.messageZh, code: appError.code });
     }
   });
 
   router.post("/", async (req, res) => {
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "数据格式不正确" });
+      res.status(400).json({ error: "Invalid request data.", errorZh: "数据格式不正确" });
       return;
     }
 
@@ -111,7 +113,7 @@ export function createSourceFeedRouter(opts: SourceFeedRouterOptions): Router {
         if (existingSubscription) {
           if (!existingSubscription.endedAt) {
             console.warn(`${logPrefix} Duplicate active subscription for user=${userId} feed=${existing.id}`);
-            res.status(409).json({ error: duplicateError });
+            res.status(409).json({ error: duplicateErrorEn, errorZh: duplicateError });
             return;
           }
 
@@ -194,7 +196,7 @@ export function createSourceFeedRouter(opts: SourceFeedRouterOptions): Router {
     } catch (err) {
       const appError = toAppError(err);
       console.error(`${logPrefix} Error adding feed:`, appError.message);
-      res.status(appError.status).json({ error: appError.message, code: appError.code });
+      res.status(appError.status).json({ error: appError.message, errorZh: appError.messageZh, code: appError.code });
     }
   });
 
