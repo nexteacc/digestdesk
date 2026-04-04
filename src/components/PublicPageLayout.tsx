@@ -16,6 +16,13 @@ export default function PublicPageLayout({
 }: PublicPageLayoutProps) {
   return (
     <div className="min-h-screen paper-noise flex flex-col">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-sm focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:shadow-md"
+      >
+        Skip to main content
+      </a>
+
       <header className="hairline">
         <div className="mx-auto max-w-6xl px-4 py-4 md:px-6">
           <div className="flex items-center justify-between gap-4">
@@ -43,7 +50,7 @@ export default function PublicPageLayout({
         </div>
       </header>
 
-      <main className="flex-1">
+      <main id="main-content" className="flex-1">
         <div className="mx-auto max-w-4xl px-4 py-12 md:px-6 md:py-16">
           <div className="border-y border-border py-6 md:py-8">
             <p className="text-[11px] tracking-[0.24em] uppercase text-muted-foreground">

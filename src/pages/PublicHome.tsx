@@ -10,6 +10,13 @@ const featureList = [
 export default function PublicHome() {
   return (
     <div className="min-h-screen paper-noise flex flex-col">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-sm focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:shadow-md"
+      >
+        Skip to main content
+      </a>
+
       <header className="hairline">
         <div className="mx-auto max-w-6xl px-4 py-4 md:px-6">
           <div className="flex items-center justify-between gap-4">
@@ -18,10 +25,10 @@ export default function PublicHome() {
                 DigestDesk
               </h1>
               <span className="hidden items-center gap-2 md:flex">
-                <img src="/logos/substack.svg" alt="Substack" className="h-5 w-5" />
-                <img src="/logos/applepodcasts-9933cc.svg" alt="Podcast" className="h-5 w-5" />
-                <img src="/logos/youtube.svg" alt="YouTube" className="h-5 w-5" />
-                <img src="/logos/rss.svg" alt="RSS" className="h-5 w-5" />
+                <img src="/logos/substack.svg" alt="Substack" width={20} height={20} className="h-5 w-5" />
+                <img src="/logos/applepodcasts-9933cc.svg" alt="Podcast" width={20} height={20} className="h-5 w-5" />
+                <img src="/logos/youtube.svg" alt="YouTube" width={20} height={20} className="h-5 w-5" />
+                <img src="/logos/rss.svg" alt="RSS" width={20} height={20} className="h-5 w-5" />
               </span>
             </div>
 
@@ -37,7 +44,7 @@ export default function PublicHome() {
         </div>
       </header>
 
-      <main className="flex-1">
+      <main id="main-content" className="flex-1">
         <div className="mx-auto max-w-6xl px-4 py-12 md:px-6 md:py-20">
           <section className="py-10 md:py-14">
             <div className="grid gap-10 md:grid-cols-[minmax(0,1.15fr)_360px] md:items-start md:gap-12">

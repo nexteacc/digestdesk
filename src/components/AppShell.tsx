@@ -60,9 +60,16 @@ export default function AppShell({ children }: PropsWithChildren) {
 
   return (
     <div className="min-h-screen paper-noise">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-sm focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:shadow-md"
+      >
+        Skip to main content
+      </a>
+
       {/* Masthead */}
       <header className={cn(
-        "relative transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] overflow-hidden",
+        "relative overflow-hidden transition-[max-height,opacity,border-color,box-shadow] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
         isZen ? "max-h-0 opacity-0 border-none" : "max-h-[100px] opacity-100 hairline"
       )}>
         <div className="mx-auto max-w-6xl px-4 py-4 md:px-6">
@@ -102,7 +109,7 @@ export default function AppShell({ children }: PropsWithChildren) {
                 href="https://github.com/nexteacc/digestdesk"
                 target="_blank"
                 rel="noreferrer"
-                className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 title={text("开源代码", "Open Source")}
               >
                 <Github className="h-4 w-4" />
@@ -137,11 +144,11 @@ export default function AppShell({ children }: PropsWithChildren) {
             />
             </div>
           </div>
-        </header>
+      </header>
 
       <div className="relative z-50 flex justify-center h-0">
         <div className={cn(
-          "absolute transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
+          "absolute transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
           isZen ? "opacity-0 scale-0 pointer-events-none -top-4" : "-top-0 -translate-y-1/2 opacity-100 scale-100"
         )}>
           <Button
@@ -161,7 +168,7 @@ export default function AppShell({ children }: PropsWithChildren) {
       </div>
 
       <div className={cn(
-        "mx-auto max-w-6xl px-4 transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
+        "mx-auto max-w-6xl px-4 transition-[padding] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
         "py-6"
       )}>
         <div className={cn(
@@ -174,14 +181,17 @@ export default function AppShell({ children }: PropsWithChildren) {
         )}>
           {/* Sidebar */}
           <aside className={cn(
-            "md:sticky md:top-6 h-fit overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] whitespace-nowrap",
+            "md:sticky md:top-6 h-fit overflow-hidden whitespace-nowrap transition-[opacity,transform,margin] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
             isZen ? "opacity-0 -translate-x-4" : "opacity-100 translate-x-0"
           )}>
             <div className="rounded-lg border border-border bg-card/70 backdrop-blur p-2 shadow-sm">
-              <div 
+              <button
+                type="button"
+                aria-expanded={!isCollapsed}
+                aria-controls="sidebar-navigation"
                 onClick={() => setIsCollapsed(!isCollapsed)}
                 className={cn(
-                  "flex items-center cursor-pointer hover:bg-accent/50 rounded-md transition-colors px-3 py-2",
+                  "flex w-full items-center rounded-md px-3 py-2 text-left transition-colors hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   isCollapsed ? "justify-center" : "justify-between"
                 )}
                 title={isCollapsed ? text("展开导航", "Expand navigation") : text("折叠导航", "Collapse navigation")}
@@ -192,32 +202,34 @@ export default function AppShell({ children }: PropsWithChildren) {
                 <div className="flex h-4 w-4 shrink-0 items-center justify-center">
                   <PanelLeft className={cn("h-4 w-4 text-muted-foreground transition-transform duration-300")} />
                 </div>
-              </div>
+              </button>
               
-              <nav className="mt-2 grid gap-1">
+              <nav id="sidebar-navigation" className="mt-2 grid gap-1">
                 {contentNav.map((item) => {
                   const active =
                     location === item.href ||
                     (item.href !== "/" && location.startsWith(item.href));
                   return (
-                    <Link key={item.href} href={item.href}>
-                      <Button
-                        variant={active ? "secondary" : "ghost"}
-                        className={cn(
-                          "w-full transition-all duration-300",
-                          active && "border border-border",
-                          isCollapsed ? "justify-center px-0" : "justify-start px-3 gap-3"
-                        )}
-                        title={isCollapsed ? item.label : ""}
-                        onMouseEnter={() => handleNavIntent(item.href)}
-                        onFocus={() => handleNavIntent(item.href)}
-                      >
+                    <Button
+                      key={item.href}
+                      asChild
+                      variant={active ? "secondary" : "ghost"}
+                      className={cn(
+                        "w-full transition-[background-color,color,border-color,box-shadow,transform] duration-300",
+                        active && "border border-border",
+                        isCollapsed ? "justify-center px-0" : "justify-start px-3 gap-3"
+                      )}
+                      title={isCollapsed ? item.label : ""}
+                      onMouseEnter={() => handleNavIntent(item.href)}
+                      onFocus={() => handleNavIntent(item.href)}
+                    >
+                      <Link href={item.href}>
                         <div className="flex h-4 w-4 shrink-0 items-center justify-center">
                           {item.icon}
                         </div>
                         {!isCollapsed && <span>{item.label}</span>}
-                      </Button>
-                    </Link>
+                      </Link>
+                    </Button>
                   );
                 })}
               </nav>
@@ -234,24 +246,26 @@ export default function AppShell({ children }: PropsWithChildren) {
                     location === item.href ||
                     (item.href !== "/" && location.startsWith(item.href));
                   return (
-                    <Link key={item.href} href={item.href}>
-                      <Button
-                        variant={active ? "secondary" : "ghost"}
-                        className={cn(
-                          "w-full transition-all duration-300",
-                          active && "border border-border",
-                          isCollapsed ? "justify-center px-0" : "justify-start px-3 gap-3"
-                        )}
-                        title={isCollapsed ? item.label : ""}
-                        onMouseEnter={() => handleNavIntent(item.href)}
-                        onFocus={() => handleNavIntent(item.href)}
-                      >
+                    <Button
+                      key={item.href}
+                      asChild
+                      variant={active ? "secondary" : "ghost"}
+                      className={cn(
+                        "w-full transition-[background-color,color,border-color,box-shadow,transform] duration-300",
+                        active && "border border-border",
+                        isCollapsed ? "justify-center px-0" : "justify-start px-3 gap-3"
+                      )}
+                      title={isCollapsed ? item.label : ""}
+                      onMouseEnter={() => handleNavIntent(item.href)}
+                      onFocus={() => handleNavIntent(item.href)}
+                    >
+                      <Link href={item.href}>
                         <div className="flex h-4 w-4 shrink-0 items-center justify-center">
                           {item.icon}
                         </div>
                         {!isCollapsed && <span>{item.label}</span>}
-                      </Button>
-                    </Link>
+                      </Link>
+                    </Button>
                   );
                 })}
               </nav>
@@ -259,7 +273,7 @@ export default function AppShell({ children }: PropsWithChildren) {
           </aside>
 
           {/* Main Content */}
-          <main className="min-w-0">
+          <main id="main-content" className="min-w-0">
             {children}
           </main>
         </div>

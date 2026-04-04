@@ -140,7 +140,7 @@ Design reminder (commitment):
 }
 
 .zen-transition {
-  transition: all var(--zen-duration) var(--zen-ease) !important;
+  transition: opacity var(--zen-duration) var(--zen-ease), transform var(--zen-duration) var(--zen-ease), max-height var(--zen-duration) var(--zen-ease), margin var(--zen-duration) var(--zen-ease), padding var(--zen-duration) var(--zen-ease), border-color var(--zen-duration) var(--zen-ease), box-shadow var(--zen-duration) var(--zen-ease), background-color var(--zen-duration) var(--zen-ease), color var(--zen-duration) var(--zen-ease) !important;
 }
 
 /* 隐藏不相关元素的通用类 */
@@ -196,4 +196,13 @@ Design reminder (commitment):
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

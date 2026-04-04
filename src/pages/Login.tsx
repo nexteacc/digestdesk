@@ -5,6 +5,13 @@ const words = ["Your", "Daily", "Editor"];
 export default function LoginPage() {
   return (
     <div className="min-h-screen paper-noise flex flex-col">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-sm focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:shadow-md"
+      >
+        Skip to main content
+      </a>
+
       {/* Masthead */}
       <header className="hairline">
         <div className="mx-auto max-w-6xl px-4 py-4 md:px-6">
@@ -13,17 +20,17 @@ export default function LoginPage() {
               DigestDesk
             </h1>
             <span className="flex items-center gap-2">
-              <img src="/logos/substack.svg" alt="Substack" className="h-5 w-5" />
-              <img src="/logos/applepodcasts-9933cc.svg" alt="Podcast" className="h-5 w-5" />
-              <img src="/logos/youtube.svg" alt="YouTube" className="h-5 w-5" />
-              <img src="/logos/rss.svg" alt="RSS" className="h-5 w-5" />
+              <img src="/logos/substack.svg" alt="Substack" width={20} height={20} className="h-5 w-5" />
+              <img src="/logos/applepodcasts-9933cc.svg" alt="Podcast" width={20} height={20} className="h-5 w-5" />
+              <img src="/logos/youtube.svg" alt="YouTube" width={20} height={20} className="h-5 w-5" />
+              <img src="/logos/rss.svg" alt="RSS" width={20} height={20} className="h-5 w-5" />
             </span>
           </div>
         </div>
       </header>
 
       {/* Hero */}
-      <main className="flex-1 flex items-center justify-center px-4">
+      <main id="main-content" className="flex-1 flex items-center justify-center px-4">
         <div className="text-center">
           <div className="flex items-center justify-center gap-3 mb-8">
             <div className="h-px w-12 bg-border" />
