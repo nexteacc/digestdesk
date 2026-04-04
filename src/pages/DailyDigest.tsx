@@ -2,7 +2,7 @@ import { startTransition, useCallback, useEffect, useMemo, useRef, useState } fr
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { enUS, zhCN } from "date-fns/locale";
-import AppShell from "@/components/AppShell";
+
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -446,7 +446,6 @@ export default function DailyDigest() {
   }, []);
 
   return (
-    <AppShell>
       <div className="flex flex-col">
         {/* Header */}
         <div className={cn(
@@ -769,6 +768,5 @@ export default function DailyDigest() {
           </>
         )}
       </div>
-    </AppShell>
   );
 }

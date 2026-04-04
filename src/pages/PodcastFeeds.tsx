@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import AppShell from "@/components/AppShell";
+
 import FeedListSection from "@/components/FeedListSection";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -148,7 +148,6 @@ export default function PodcastFeedsPage() {
   }
 
   return (
-    <AppShell>
       <div className="flex flex-col gap-6">
         <div>
           <h2 className="text-2xl md:text-3xl font-semibold">
@@ -255,6 +254,5 @@ export default function PodcastFeedsPage() {
           emptyText={text("暂无播客订阅", "No podcast subscriptions yet")}
         />
       </div>
-    </AppShell>
   );
 }

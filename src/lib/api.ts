@@ -48,7 +48,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
-export function ensureCurrentUser(): Promise<{
+type CurrentUser = {
   id: string;
   clerkId: string;
   email: string;
@@ -56,8 +56,22 @@ export function ensureCurrentUser(): Promise<{
   avatarUrl: string | null;
   createdAt: string;
   lastLoginAt: string;
-}> {
-  return request("/auth/me");
+};
+
+let _currentUserPromise: Promise<CurrentUser> | null = null;
+
+export function ensureCurrentUser(): Promise<CurrentUser> {
+  if (!_currentUserPromise) {
+    _currentUserPromise = request<CurrentUser>("/auth/me").catch((err) => {
+      _currentUserPromise = null;
+      throw err;
+    });
+  }
+  return _currentUserPromise;
+}
+
+export function clearCurrentUserCache() {
+  _currentUserPromise = null;
 }
 
 // --- Feeds ---

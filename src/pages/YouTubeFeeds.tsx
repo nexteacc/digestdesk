@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import AppShell from "@/components/AppShell";
+
 import FeedListSection from "@/components/FeedListSection";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -243,7 +243,6 @@ export default function YouTubeFeedsPage() {
   }
 
   return (
-    <AppShell>
       <div className="flex flex-col gap-6">
         {/* Header */}
         <div>
@@ -572,6 +571,5 @@ export default function YouTubeFeedsPage() {
           showAuthor={false}
         />
       </div>
-    </AppShell>
   );
 }

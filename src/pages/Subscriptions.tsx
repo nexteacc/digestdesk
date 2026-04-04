@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import AppShell from "@/components/AppShell";
+
 import FeedListSection from "@/components/FeedListSection";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -143,7 +143,7 @@ export default function SubscriptionsPage() {
   }
 
   return (
-    <AppShell>
+    <>
       <div className="flex flex-col gap-6">
         {/* Header */}
         <div>
@@ -275,6 +275,6 @@ export default function SubscriptionsPage() {
         onImported={refresh}
         existingFeeds={feeds}
       />
-    </AppShell>
+    </>
   );
 }

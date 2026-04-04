@@ -222,6 +222,8 @@ export default function AppShell({ children }: PropsWithChildren) {
                       title={isCollapsed ? item.label : ""}
                       onMouseEnter={() => handleNavIntent(item.href)}
                       onFocus={() => handleNavIntent(item.href)}
+                      onPointerDown={() => handleNavIntent(item.href)}
+                      onTouchStart={() => handleNavIntent(item.href)}
                     >
                       <Link href={item.href}>
                         <div className="flex h-4 w-4 shrink-0 items-center justify-center">
@@ -258,6 +260,8 @@ export default function AppShell({ children }: PropsWithChildren) {
                       title={isCollapsed ? item.label : ""}
                       onMouseEnter={() => handleNavIntent(item.href)}
                       onFocus={() => handleNavIntent(item.href)}
+                      onPointerDown={() => handleNavIntent(item.href)}
+                      onTouchStart={() => handleNavIntent(item.href)}
                     >
                       <Link href={item.href}>
                         <div className="flex h-4 w-4 shrink-0 items-center justify-center">

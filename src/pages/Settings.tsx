@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import AppShell from "@/components/AppShell";
+
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -199,17 +199,14 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <AppShell>
         <div className="max-w-2xl mx-auto py-10 px-4 space-y-6">
           <div className="h-8 w-32 bg-muted animate-pulse rounded" />
           <div className="h-[200px] bg-muted animate-pulse rounded-lg" />
         </div>
-      </AppShell>
     );
   }
 
   return (
-      <AppShell>
       <div className="max-w-3xl mx-auto py-12 px-4">
         {/* Header */}
         <div className="flex items-center gap-3 mb-10">
@@ -325,6 +322,5 @@ export default function SettingsPage() {
           </div>
         </Card>
       </div>
-    </AppShell>
   );
 }

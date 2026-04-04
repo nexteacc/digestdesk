@@ -1,10 +1,11 @@
 import { Show, useAuth } from "@clerk/react";
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Component, Suspense, lazy, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Router, Route, Switch, useLocation } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import AppShell from "@/components/AppShell";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { I18nProvider } from "@/contexts/I18nContext";
 import { ZenModeProvider } from "@/hooks/useZenMode";
@@ -35,88 +36,132 @@ const TermsOfServicePage = lazy(loadTermsOfServicePage);
 
 function RouteFallback() {
   return (
-    <div className="min-h-[40vh] flex items-center justify-center text-sm text-muted-foreground">
-      Loading page...
+    <div className="space-y-6 py-2">
+      <div className="h-7 w-48 rounded bg-muted animate-pulse" />
+      <div className="space-y-3">
+        <div className="h-32 rounded-lg bg-muted/60 animate-pulse" />
+        <div className="h-32 rounded-lg bg-muted/40 animate-pulse" />
+        <div className="h-32 rounded-lg bg-muted/30 animate-pulse" />
+      </div>
     </div>
   );
 }
 
-function DashboardRoutes() {
-  return (
-    <Suspense fallback={<RouteFallback />}>
-      <Switch>
-        <Route path="/" component={DailyDigest} />
-        <Route path="/subscriptions" component={SubscriptionsPage} />
-        <Route path="/rss" component={RssFeedsPage} />
-        <Route path="/youtube" component={YouTubeFeedsPage} />
-        <Route path="/podcasts" component={PodcastFeedsPage} />
-        <Route path="/settings" component={SettingsPage} />
-        <Route component={NotFound} />
-      </Switch>
-    </Suspense>
-  );
-}
-
-function ProtectedRoute({ component: Component }: { component: () => React.JSX.Element }) {
-  const { isSignedIn } = useAuth();
-  const [, navigate] = useLocation();
-
-  useEffect(() => {
-    if (!isSignedIn) {
-      navigate("/");
-    }
-  }, [isSignedIn, navigate]);
-
-  if (!isSignedIn) {
-    return null;
+// #13 — chunk 加载失败时可重试，不摧毁整个应用
+class RouteErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
   }
 
-  return <Component />;
+  static getDerivedStateFromError(): { hasError: boolean } {
+    return { hasError: true };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      const isZh = (localStorage.getItem("digestdesk-locale") || "en") === "zh";
+      return (
+        <div className="py-16 text-center">
+          <p className="text-sm text-muted-foreground">
+            {isZh ? "页面加载失败，请检查网络后重试" : "Failed to load page. Check your connection and try again."}
+          </p>
+          <button
+            onClick={() => this.setState({ hasError: false })}
+            className="mt-4 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md"
+          >
+            {isZh ? "重试" : "Retry"}
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// #19 + #20 — 路由切换后移焦点到内容区 + aria-live 播报
+const ROUTE_TITLES: Record<string, [string, string]> = {
+  "/": ["今日日报", "Daily Digest"],
+  "/subscriptions": ["关注列表", "Subscriptions"],
+  "/rss": ["RSS 订阅", "RSS Feeds"],
+  "/youtube": ["YouTube 频道", "YouTube Channels"],
+  "/podcasts": ["Podcast 节目", "Podcast Shows"],
+  "/settings": ["偏好设置", "Settings"],
+};
+
+function RouteAnnouncer() {
+  const [location] = useLocation();
+  const [announcement, setAnnouncement] = useState("");
+  const isFirstRender = useRef(true);
+
+  const getTitle = useCallback(() => {
+    const pair = ROUTE_TITLES[location];
+    if (!pair) return "";
+    const isZh = (localStorage.getItem("digestdesk-locale") || "en") === "zh";
+    return isZh ? pair[0] : pair[1];
+  }, [location]);
+
+  useEffect(() => {
+    // 首次渲染不播报
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+
+    const title = getTitle();
+    if (title) {
+      setAnnouncement(title);
+    }
+
+    // 将焦点移到内容区
+    const main = document.getElementById("main-content");
+    if (main) {
+      main.setAttribute("tabindex", "-1");
+      main.focus({ preventScroll: true });
+    }
+  }, [location, getTitle]);
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      className="sr-only"
+    >
+      {announcement}
+    </div>
+  );
 }
 
 function AppRouter() {
+  const { isSignedIn } = useAuth();
+
   return (
     <Router hook={useHashLocation}>
-      <Suspense fallback={<RouteFallback />}>
-        <Switch>
-          <Route path="/privacy" component={PrivacyPolicyPage} />
-          <Route path="/terms" component={TermsOfServicePage} />
-          <Route path="/" component={HomeRoute} />
-          <Route path="/subscriptions" component={SubscriptionsRoute} />
-          <Route path="/rss" component={RssFeedsRoute} />
-          <Route path="/youtube" component={YouTubeFeedsRoute} />
-          <Route path="/podcasts" component={PodcastFeedsRoute} />
-          <Route path="/settings" component={SettingsRoute} />
-          <Route component={NotFound} />
-        </Switch>
-      </Suspense>
+      <Switch>
+        <Route path="/privacy">
+          <Suspense fallback={<RouteFallback />}>
+            <PrivacyPolicyPage />
+          </Suspense>
+        </Route>
+        <Route path="/terms">
+          <Suspense fallback={<RouteFallback />}>
+            <TermsOfServicePage />
+          </Suspense>
+        </Route>
+        <Route>
+          {isSignedIn ? <AuthenticatedApp /> : (
+            <Suspense fallback={<RouteFallback />}>
+              <Switch>
+                <Route path="/" component={PublicHome} />
+                <Route component={NotFound} />
+              </Switch>
+            </Suspense>
+          )}
+        </Route>
+      </Switch>
     </Router>
   );
-}
-
-function HomeRoute() {
-  const { isSignedIn } = useAuth();
-  return isSignedIn ? <AuthenticatedApp /> : <PublicHome />;
-}
-
-function SubscriptionsRoute() {
-  return <ProtectedRoute component={SubscriptionsPage} />;
-}
-
-function RssFeedsRoute() {
-  return <ProtectedRoute component={RssFeedsPage} />;
-}
-
-function YouTubeFeedsRoute() {
-  return <ProtectedRoute component={YouTubeFeedsPage} />;
-}
-
-function PodcastFeedsRoute() {
-  return <ProtectedRoute component={PodcastFeedsPage} />;
-}
-
-function SettingsRoute() {
-  return <ProtectedRoute component={SettingsPage} />;
 }
 
 function App() {
@@ -184,7 +229,24 @@ function AuthenticatedApp() {
     return <div className="min-h-screen flex items-center justify-center text-sm text-destructive">Failed to initialize your account.</div>;
   }
 
-  return <DashboardRoutes />;
+  return (
+    <AppShell>
+      <RouteAnnouncer />
+      <RouteErrorBoundary>
+        <Suspense fallback={<RouteFallback />}>
+          <Switch>
+            <Route path="/" component={DailyDigest} />
+            <Route path="/subscriptions" component={SubscriptionsPage} />
+            <Route path="/rss" component={RssFeedsPage} />
+            <Route path="/youtube" component={YouTubeFeedsPage} />
+            <Route path="/podcasts" component={PodcastFeedsPage} />
+            <Route path="/settings" component={SettingsPage} />
+            <Route component={NotFound} />
+          </Switch>
+        </Suspense>
+      </RouteErrorBoundary>
+    </AppShell>
+  );
 }
 
 export default App;
