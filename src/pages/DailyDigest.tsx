@@ -157,13 +157,12 @@ function BackToTopButton() {
       title={text("回到顶部", "Back to top")}
       onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
       className={cn(
-        "fixed bottom-6 right-4 z-40 inline-flex h-10 items-center justify-center gap-2 rounded-md border border-foreground/12 bg-background/98 px-3 text-sm font-medium text-foreground shadow-[0_10px_28px_rgba(0,0,0,0.10)] backdrop-blur transition-all duration-300 hover:-translate-y-0.5 hover:border-foreground/22 hover:bg-background hover:shadow-[0_16px_36px_rgba(0,0,0,0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        "md:bottom-10 md:right-8 md:h-11 md:px-4",
+        "fixed bottom-6 right-4 z-40 inline-flex h-14 w-10 items-center justify-center rounded-md border border-foreground/12 bg-background/98 text-foreground shadow-[0_10px_28px_rgba(0,0,0,0.10)] backdrop-blur transition-all duration-300 hover:-translate-y-0.5 hover:border-foreground/22 hover:bg-background hover:shadow-[0_16px_36px_rgba(0,0,0,0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "md:bottom-10 md:right-8 md:h-16 md:w-11",
         visible ? "pointer-events-auto translate-y-0 opacity-100" : "pointer-events-none translate-y-3 opacity-0",
       )}
     >
-      <ArrowUp className="h-4 w-4" />
-      <span className="hidden md:inline">{text("回到顶部", "Back to top")}</span>
+      <ArrowUp className="h-4 w-4 md:h-4.5 md:w-4.5" />
     </button>
   );
 }
