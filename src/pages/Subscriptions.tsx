@@ -9,6 +9,17 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useI18n } from "@/contexts/I18nContext";
 import { useBatchMode } from "@/hooks/useBatchMode";
 import * as api from "@/lib/api";
@@ -122,8 +133,8 @@ export default function SubscriptionsPage() {
     }
   }
 
-  function isSubscribed(resultUrl: string) {
-    return feeds.some((f) => {
+  function findSubscribedFeed(resultUrl: string) {
+    return feeds.find((f) => {
       try {
         return new URL(f.url).hostname === new URL(resultUrl).hostname;
       } catch {
@@ -198,7 +209,8 @@ export default function SubscriptionsPage() {
                 ) : searchResults.length > 0 ? (
                   <div className="space-y-2">
                     {searchResults.map((result) => {
-                      const subscribed = isSubscribed(result.url);
+                      const subscribedFeed = findSubscribedFeed(result.url);
+                      const subscribed = Boolean(subscribedFeed);
                       return (
                         <div
                           key={result.url}
@@ -227,13 +239,41 @@ export default function SubscriptionsPage() {
                             </p>
                           </div>
                           {subscribed ? (
-                            <Badge
-                              variant="secondary"
-                              className="gap-1 border border-border shrink-0"
-                            >
-                              <Check className="h-3 w-3" />
-                              {text("已订阅", "Subscribed")}
-                            </Badge>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="gap-1.5 shrink-0"
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                  {text("已订阅", "Subscribed")}
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>
+                                    {text(`取消订阅「${result.name}」？`, `Unsubscribe from ${result.name}?`)}
+                                  </AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    {text(
+                                      `取消订阅「${result.name}」后，后续日报将不再包含该来源的内容。`,
+                                      `${result.name} will be removed from future digests.`,
+                                    )}
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>
+                                    {text("取消", "Cancel")}
+                                  </AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => subscribedFeed && onRemove(subscribedFeed.id)}
+                                  >
+                                    {text("取消订阅", "Unsubscribe")}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           ) : (
                             <Button
                               size="sm"

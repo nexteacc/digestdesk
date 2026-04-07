@@ -20,6 +20,7 @@ import {
   CheckCircle2,
   Search,
   RefreshCw,
+  ArrowUp,
 } from "lucide-react";
 import { useZenMode } from "@/hooks/useZenMode";
 import { useI18n } from "@/contexts/I18nContext";
@@ -132,6 +133,38 @@ function ReadingComplete({ itemCount }: { itemCount: number }) {
         </Card>
       )}
     </>
+  );
+}
+
+function BackToTopButton() {
+  const { text } = useI18n();
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    function onScroll() {
+      setVisible(window.scrollY > 520);
+    }
+
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  return (
+    <button
+      type="button"
+      aria-label={text("回到顶部", "Back to top")}
+      title={text("回到顶部", "Back to top")}
+      onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+      className={cn(
+        "fixed bottom-6 right-4 z-40 inline-flex h-10 items-center justify-center gap-2 rounded-md border border-foreground/12 bg-background/98 px-3 text-sm font-medium text-foreground shadow-[0_10px_28px_rgba(0,0,0,0.10)] backdrop-blur transition-all duration-300 hover:-translate-y-0.5 hover:border-foreground/22 hover:bg-background hover:shadow-[0_16px_36px_rgba(0,0,0,0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "md:bottom-10 md:right-8 md:h-11 md:px-4",
+        visible ? "pointer-events-auto translate-y-0 opacity-100" : "pointer-events-none translate-y-3 opacity-0",
+      )}
+    >
+      <ArrowUp className="h-4 w-4" />
+      <span className="hidden md:inline">{text("回到顶部", "Back to top")}</span>
+    </button>
   );
 }
 
@@ -744,17 +777,6 @@ export default function DailyDigest() {
                           <span className="text-primary font-semibold mr-1">
                             #{String(index + 1).padStart(2, "0")}
                           </span>
-                          ·{" "}
-                          <button
-                            type="button"
-                            className="underline underline-offset-4 hover:text-foreground"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              window.scrollTo({ top: 0, behavior: "smooth" });
-                            }}
-                          >
-                            {text("回到顶部", "Back to top")}
-                          </button>
                         </div>
                       </Card>
                     ))}
@@ -765,6 +787,7 @@ export default function DailyDigest() {
                 <ReadingComplete itemCount={current.items.length} />
               </div>
             </div>
+            <BackToTopButton />
           </>
         )}
       </div>
