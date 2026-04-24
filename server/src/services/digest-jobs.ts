@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray, lte } from "drizzle-orm";
 import { nanoid } from "nanoid";
+import pLimit from "p-limit";
 import { getDb } from "../db/index.js";
 import { digestJobs, userSettings, users } from "../db/schema.js";
 import {
@@ -36,6 +37,9 @@ export async function dispatchDigestJobs(now = new Date()) {
     const timezone = config.timezone || DEFAULT_TIMEZONE;
     const digestTime = config.digest_time || DEFAULT_DIGEST_TIME;
     const localToday = getTimeZoneDateLabel(now, timezone);
+    console.log(
+      `[digest-jobs] Dispatch scan user=${user.id} timezone=${timezone} digestTime=${digestTime} localToday=${localToday}`,
+    );
 
     for (let offset = DISPATCH_BACKFILL_DAYS - 1; offset >= 0; offset -= 1) {
       const targetDate = shiftDateLabel(getPreviousDateLabel(localToday), -offset);
@@ -43,6 +47,9 @@ export async function dispatchDigestJobs(now = new Date()) {
       const scheduledFor = getScheduledTimeForDate(deliveryDate, digestTime, timezone);
 
       if (scheduledFor > now.toISOString()) {
+        console.log(
+          `[digest-jobs] Dispatch skip future user=${user.id} targetDate=${targetDate} scheduledFor=${scheduledFor}`,
+        );
         continue;
       }
 
@@ -58,6 +65,9 @@ export async function dispatchDigestJobs(now = new Date()) {
         );
 
       if (existingJob) {
+        console.log(
+          `[digest-jobs] Dispatch existing user=${user.id} targetDate=${targetDate} jobId=${existingJob.id}`,
+        );
         existing += 1;
         continue;
       }
@@ -80,6 +90,9 @@ export async function dispatchDigestJobs(now = new Date()) {
         .returning({ id: digestJobs.id });
 
       if (result.length > 0) {
+        console.log(
+          `[digest-jobs] Dispatch created user=${user.id} targetDate=${targetDate} jobId=${result[0].id} scheduledFor=${scheduledFor}`,
+        );
         created += 1;
       } else {
         existing += 1;
@@ -104,6 +117,9 @@ export async function reclaimStaleDigestJobs(now = new Date()) {
     })
     .where(and(eq(digestJobs.status, "running"), lte(digestJobs.lockedAt, staleBefore)));
 
+  if (reclaimed.count > 0) {
+    console.warn(`[digest-jobs] Reclaimed stale running jobs count=${reclaimed.count} staleBefore=${staleBefore}`);
+  }
   return reclaimed.count;
 }
 
@@ -133,6 +149,9 @@ export async function runPendingDigestJobs(options?: { limit?: number; now?: Dat
     )
     .orderBy(asc(digestJobs.scheduledFor))
     .limit(limit);
+  console.log(
+    `[digest-jobs] Runner candidate scan runnerId=${runnerId} now=${now.toISOString()} limit=${limit} candidates=${candidates.length}`,
+  );
 
   const claimed: Array<{ id: string; userId: string; targetDate: string; attemptCount: number }> = [];
 
@@ -149,6 +168,9 @@ export async function runPendingDigestJobs(options?: { limit?: number; now?: Dat
 
     if (result.count > 0) {
       claimed.push(candidate);
+      console.log(
+        `[digest-jobs] Claimed jobId=${candidate.id} user=${candidate.userId} targetDate=${candidate.targetDate} attempt=${candidate.attemptCount + 1} runnerId=${runnerId}`,
+      );
     }
   }
 
@@ -159,9 +181,27 @@ export async function runPendingDigestJobs(options?: { limit?: number; now?: Dat
     failed: 0,
   };
 
-  for (const job of claimed) {
-    try {
-      const digestId = await executeDailyDigestJob(job.userId, job.targetDate);
+  const jobLimit = pLimit(3);
+  const jobResults = await Promise.allSettled(
+    claimed.map(job =>
+      jobLimit(async () => {
+        const jobStartedAt = Date.now();
+        const digestId = await executeDailyDigestJob(job.userId, job.targetDate);
+        console.log(
+          digestId
+            ? `[digest-jobs] Job done jobId=${job.id} user=${job.userId} targetDate=${job.targetDate} digestId=${digestId} durationMs=${Date.now() - jobStartedAt}`
+            : `[digest-jobs] Job done (empty) jobId=${job.id} user=${job.userId} targetDate=${job.targetDate} durationMs=${Date.now() - jobStartedAt}`,
+        );
+        return digestId;
+      }),
+    ),
+  );
+
+  for (let i = 0; i < jobResults.length; i++) {
+    const result = jobResults[i];
+    const job = claimed[i];
+    if (result.status === "fulfilled") {
+      const digestId = result.value;
       await db
         .update(digestJobs)
         .set({
@@ -173,14 +213,15 @@ export async function runPendingDigestJobs(options?: { limit?: number; now?: Dat
           lockedBy: null,
         })
         .where(eq(digestJobs.id, job.id));
-
       if (digestId) {
         summary.succeeded += 1;
+        console.log(`[digest-jobs] Job succeeded jobId=${job.id} user=${job.userId} targetDate=${job.targetDate} digestId=${digestId}`);
       } else {
         summary.skipped += 1;
+        console.log(`[digest-jobs] Job skipped jobId=${job.id} user=${job.userId} targetDate=${job.targetDate} reason=empty_digest`);
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+    } else {
+      const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
       await db
         .update(digestJobs)
         .set({
@@ -193,6 +234,7 @@ export async function runPendingDigestJobs(options?: { limit?: number; now?: Dat
         })
         .where(eq(digestJobs.id, job.id));
       summary.failed += 1;
+      console.error(`[digest-jobs] Job failed jobId=${job.id} user=${job.userId} targetDate=${job.targetDate} error=${message}`);
     }
   }
 

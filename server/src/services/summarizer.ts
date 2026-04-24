@@ -4,6 +4,74 @@ import { z } from "zod";
 
 let _cachedModel: LanguageModel | null = null;
 
+export type AiErrorCategory =
+  | "quota"
+  | "rate_limit"
+  | "auth"
+  | "timeout"
+  | "network"
+  | "invalid_request"
+  | "unknown";
+
+export function classifyAiError(error: unknown): AiErrorCategory {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+
+  if (message.includes("quota") || message.includes("billing")) return "quota";
+  if (message.includes("rate limit") || message.includes("too many requests") || message.includes("429")) {
+    return "rate_limit";
+  }
+  if (
+    message.includes("unauthorized") ||
+    message.includes("authentication") ||
+    message.includes("invalid api key") ||
+    message.includes("401") ||
+    message.includes("403")
+  ) {
+    return "auth";
+  }
+  if (message.includes("timeout") || message.includes("timed out") || message.includes("abort")) {
+    return "timeout";
+  }
+  if (
+    message.includes("fetch failed") ||
+    message.includes("econnreset") ||
+    message.includes("enotfound") ||
+    message.includes("network")
+  ) {
+    return "network";
+  }
+  if (message.includes("invalid") || message.includes("bad request") || message.includes("400")) {
+    return "invalid_request";
+  }
+  return "unknown";
+}
+
+function summarizeErrorMeta(error: unknown) {
+  const err = error as {
+    name?: unknown;
+    message?: unknown;
+    cause?: unknown;
+    statusCode?: unknown;
+    status?: unknown;
+    code?: unknown;
+    responseBody?: unknown;
+  };
+
+  return {
+    category: classifyAiError(error),
+    name: typeof err?.name === "string" ? err.name : null,
+    message: typeof err?.message === "string" ? err.message : String(error),
+    code: typeof err?.code === "string" ? err.code : null,
+    statusCode: typeof err?.statusCode === "number" ? err.statusCode : null,
+    status: typeof err?.status === "number" ? err.status : null,
+    cause:
+      err?.cause instanceof Error
+        ? { name: err.cause.name, message: err.cause.message }
+        : err?.cause ?? null,
+    responseBody: typeof err?.responseBody === "string" ? err.responseBody.slice(0, 500) : null,
+  };
+}
+
 function getModel() {
   if (_cachedModel) return _cachedModel;
   const modelId = process.env.AI_MODEL || "gpt-4o-mini";
@@ -73,14 +141,22 @@ function normalizeSummary(input: unknown): ArticleSummary {
 export async function summarizeArticle(markdown: string, language: "zh" | "en" = "zh"): Promise<ArticleSummary> {
   const model = getModel();
   const promptConfig = PROMPTS[language] || PROMPTS.zh;
-  
-  console.log(`[summarizer] Starting AI summary in ${language}... (Input length: ${markdown.length})`);
+  const modelId = process.env.AI_MODEL || "gpt-4o-mini";
+  const baseURL = process.env.AI_BASE_URL || "https://api.openai.com/v1";
+
+  // Truncate input to reduce token consumption — article openings carry the highest information density
+  const MAX_CONTENT_CHARS = 1500;
+  const truncated = markdown.length > MAX_CONTENT_CHARS ? markdown.slice(0, MAX_CONTENT_CHARS) : markdown;
+
+  console.log(
+    `[summarizer] Starting AI summary language=${language} model=${modelId} baseURL=${baseURL} inputLength=${markdown.length} truncatedLength=${truncated.length}`,
+  );
 
   try {
     const { object } = await generateObject({
       model,
       system: promptConfig.system,
-      prompt: markdown,
+      prompt: truncated,
       schema: z.object({
         oneLiner: z.string().describe(promptConfig.schema.oneLiner),
         keyInsights: z.array(z.string()).length(3).describe(promptConfig.schema.keyInsights),
@@ -90,7 +166,7 @@ export async function summarizeArticle(markdown: string, language: "zh" | "en" =
     console.log(`[summarizer] AI summary complete. One-liner: ${result.oneLiner.slice(0, 50)}...`);
     return result;
   } catch (err) {
-    console.error(`[summarizer] AI summary failed:`, err instanceof Error ? err.message : err);
+    console.error("[summarizer] AI summary failed:", summarizeErrorMeta(err));
     throw err;
   }
 }

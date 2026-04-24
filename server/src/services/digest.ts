@@ -3,7 +3,7 @@ import { eq, and, gte, lt, inArray, isNull } from "drizzle-orm";
 import pLimit from "p-limit";
 import { getDb } from "../db/index.js";
 import { feeds, articles, digests, digestItems, subscriptions, userSettings } from "../db/schema.js";
-import { summarizeArticle } from "./summarizer.js";
+import { classifyAiError, summarizeArticle } from "./summarizer.js";
 import { getDayRangeForTimeZone, getPreviousDateLabel, getTimeZoneDateLabel } from "../utils/timezone.js";
 import { parseDigestSourceTypes } from "./user-settings.js";
 
@@ -14,11 +14,18 @@ function getSummaryConcurrency() {
   return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : DEFAULT_CONCURRENCY;
 }
 
-let _dailyQueue: Promise<string | void> = Promise.resolve();
+// Per-user queues: same user is serialized, different users run in parallel
+const _userQueues = new Map<string, Promise<string | void>>();
 
 export function generateDaily(userId: string, date?: string): Promise<string> {
-  const task = _dailyQueue.catch(() => {}).then(() => _generateDailyCore(userId, date));
-  _dailyQueue = task;
+  const prev = _userQueues.get(userId) ?? Promise.resolve();
+  const task = prev.catch(() => {}).then(() => _generateDailyCore(userId, date));
+  _userQueues.set(userId, task);
+  task.finally(() => {
+    if (_userQueues.get(userId) === task) {
+      _userQueues.delete(userId);
+    }
+  });
   return task;
 }
 
@@ -64,6 +71,7 @@ async function generateWithId(
   language: "zh" | "en" = "zh",
   enabledSourceTypes: Array<"substack" | "rss" | "youtube" | "podcast">,
 ): Promise<string> {
+  const startedAt = Date.now();
   const db = getDb();
 
   const subscribedFeedRows = await db
@@ -183,6 +191,9 @@ async function generateWithId(
       if (!contentText || contentText.length < 50) {
         const isYouTube = sourceType === "youtube";
         const isPodcast = sourceType === "podcast";
+        console.warn(
+          `[digest] Skipping AI summary for article=${article.id} sourceType=${sourceType} contentLength=${contentText.length} reason=content_too_short`,
+        );
         return {
           ...base,
           oneLiner: isYouTube
@@ -200,6 +211,9 @@ async function generateWithId(
         try {
           const cached = JSON.parse(cachedField);
           if (cached.oneLiner && cached.keyInsights) {
+            console.log(
+              `[digest] Summary cache hit article=${article.id} sourceType=${sourceType} language=${language}`,
+            );
             return { ...base, oneLiner: cached.oneLiner, keyInsights: cached.keyInsights };
           }
         } catch {
@@ -220,7 +234,10 @@ async function generateWithId(
           oneLiner: summary.oneLiner,
           keyInsights: summary.keyInsights,
         };
-      } catch {
+      } catch (error) {
+        console.warn(
+          `[digest] Summary fallback article=${article.id} sourceType=${sourceType} language=${language} contentLength=${contentText.length} aiErrorCategory=${classifyAiError(error)} url=${article.url}`,
+        );
         return {
           ...base,
           oneLiner: language === "zh" ? "暂时无法生成摘要。" : "Summary unavailable for now.",
@@ -232,6 +249,10 @@ async function generateWithId(
 
   const items = await Promise.all(tasks);
   items.sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : -1));
+  const fallbackCount = items.filter((item) =>
+    language === "zh" ? item.oneLiner === "暂时无法生成摘要。" : item.oneLiner === "Summary unavailable for now.",
+  ).length;
+  const emptyInsightsCount = items.filter((item) => item.keyInsights.length === 0).length;
 
   const generationTime = new Date().toISOString();
 
@@ -273,6 +294,8 @@ async function generateWithId(
       );
   });
 
-  console.log(`[digest] Daily digest ${digestId} for user ${userId} updated with ${items.length} items`);
+  console.log(
+    `[digest] Daily digest ${digestId} for user ${userId} updated with ${items.length} items fallbackCount=${fallbackCount} emptyInsightsCount=${emptyInsightsCount} durationMs=${Date.now() - startedAt}`,
+  );
   return digestId;
 }

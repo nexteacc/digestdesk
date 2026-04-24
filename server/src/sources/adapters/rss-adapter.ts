@@ -53,16 +53,28 @@ export class RssAdapter implements SourceAdapter {
     item: Record<string, unknown>,
     articleUrl: string,
   ): Promise<SyncItemContent> {
-    let contentMarkdown = await fetchMarkdown(articleUrl);
-    if (!contentMarkdown) {
-      const itemRecord = this.asRecord(item);
-      const contentHtml =
-        (typeof itemRecord["content:encoded"] === "string" ? itemRecord["content:encoded"] : "") ||
-        (typeof itemRecord.content === "string" ? itemRecord.content : "");
-      contentMarkdown = contentHtml ? htmlToMarkdown(contentHtml) : "";
+    // 1. Prefer RSS content:encoded — free, local, no external API quota consumed
+    const itemRecord = this.asRecord(item);
+    const contentHtml =
+      (typeof itemRecord["content:encoded"] === "string" ? itemRecord["content:encoded"] : "") ||
+      (typeof itemRecord.content === "string" ? itemRecord.content : "");
+    let contentMarkdown = contentHtml ? htmlToMarkdown(contentHtml) : "";
+    let extractionMethod = contentHtml ? "rss_html" : "empty";
+
+    // 2. Fall back to Jina only when RSS content is absent or too short
+    if (!contentMarkdown || contentMarkdown.length < 500) {
+      const jinaResult = await fetchMarkdown(articleUrl);
+      if (jinaResult) {
+        contentMarkdown = jinaResult;
+        extractionMethod = "jina_fallback";
+      }
     }
+
     const enclosure = this.asRecord(this.asRecord(item).enclosure);
     const coverImageUrl = typeof enclosure.url === "string" ? enclosure.url : null;
+    console.log(
+      `[rss-adapter] Content extracted articleUrl=${articleUrl} method=${extractionMethod} contentLength=${contentMarkdown?.length || 0}`,
+    );
     return {
       contentMarkdown,
       coverImageUrl,

@@ -36,14 +36,14 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = 2, ba
   try {
     const response = await jinaLimiter.schedule(() => fetch(url, options));
     if ([429, 502, 503, 504].includes(response.status) && retries > 0) {
-      console.log(`[content-extractor] Server returned ${response.status}, retrying in ${backoff}ms...`);
+      console.warn(`[content-extractor] Jina retry status=${response.status} retriesLeft=${retries} backoffMs=${backoff} url=${url}`);
       await new Promise(r => setTimeout(r, backoff));
       return fetchWithRetry(url, options, retries - 1, backoff * 2);
     }
     return response;
   } catch (err) {
     if (retries > 0) {
-      console.log(`[content-extractor] Fetch failed, retrying in ${backoff}ms...`, err);
+      console.warn(`[content-extractor] Jina fetch failed, retrying retriesLeft=${retries} backoffMs=${backoff} url=${url}:`, err);
       await new Promise(r => setTimeout(r, backoff));
       return fetchWithRetry(url, options, retries - 1, backoff * 2);
     }
@@ -53,6 +53,7 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = 2, ba
 
 export async function fetchMarkdown(articleUrl: string): Promise<string | null> {
   try {
+    console.log(`[content-extractor] Fetching markdown via Jina articleUrl=${articleUrl}`);
     const response = await fetchWithRetry(`${JINA_READER_BASE}${articleUrl}`, {
       headers: {
         Accept: "text/markdown",
@@ -62,7 +63,7 @@ export async function fetchMarkdown(articleUrl: string): Promise<string | null> 
     });
 
     if (!response.ok) {
-      console.warn(`[content-extractor] Jina Reader returned ${response.status} for ${articleUrl}`);
+      console.warn(`[content-extractor] Jina Reader returned non-ok status=${response.status} articleUrl=${articleUrl}`);
       return null;
     }
 
@@ -74,13 +75,18 @@ export async function fetchMarkdown(articleUrl: string): Promise<string | null> 
       : markdown;
 
     if (content.length < MIN_CONTENT_LENGTH) {
-      console.warn(`[content-extractor] Jina content too short (${content.length} chars) for ${articleUrl}`);
+      console.warn(
+        `[content-extractor] Jina content too short articleUrl=${articleUrl} contentLength=${content.length} minLength=${MIN_CONTENT_LENGTH}`,
+      );
       return null;
     }
 
+    console.log(
+      `[content-extractor] Jina markdown accepted articleUrl=${articleUrl} contentLength=${content.length}`,
+    );
     return content;
   } catch (err) {
-    console.warn(`[content-extractor] Jina Reader failed for ${articleUrl}:`, err);
+    console.warn(`[content-extractor] Jina Reader failed articleUrl=${articleUrl}:`, err);
     return null;
   }
 }

@@ -1,6 +1,7 @@
 import RssParser from "rss-parser";
 import { nanoid } from "nanoid";
 import { eq, isNull, and } from "drizzle-orm";
+import pLimit from "p-limit";
 import { getDb } from "../db/index.js";
 import { feeds, articles, subscriptions } from "../db/schema.js";
 import { getSourceAdapter } from "../sources/factory.js";
@@ -71,14 +72,20 @@ export async function syncAllFeeds(): Promise<void> {
     console.log(`[rss] Starting sync job for ${allFeeds.length} feeds...`);
 
     try {
-      for (const feed of allFeeds) {
-        try {
-          await syncFeed(feed.id);
-        } catch (err) {
-          console.error(`[rss] Error syncing ${feed.name}:`, err);
-        }
-        await new Promise((r) => setTimeout(r, 1000));
-      }
+      const syncLimit = pLimit(5);
+      await Promise.all(
+        allFeeds.map(feed =>
+          syncLimit(async () => {
+            const feedStartedAt = Date.now();
+            try {
+              await syncFeed(feed.id);
+            } catch (err) {
+              console.error(`[rss] Error syncing ${feed.name}:`, err);
+            }
+            console.log(`[rss] Finished sync loop feed=${feed.id} name=${feed.name} durationMs=${Date.now() - feedStartedAt}`);
+          })
+        )
+      );
     } finally {
       _syncPromise = null;
       console.log("[rss] All feeds sync complete.");
@@ -106,19 +113,31 @@ export async function syncUserFeeds(
 
   console.log(`[rss] Starting sync job for user ${userId} with ${rows.length} feeds...`);
 
-  for (const row of rows) {
-    if (wasSyncedRecently(row.lastFetchedAt, freshnessWindowMs)) {
-      console.log(
-        `[rss] Skipping recent sync for ${row.feedName} (${row.feedId}); lastFetchedAt=${row.lastFetchedAt}`,
-      );
-      continue;
-    }
-    try {
-      await syncFeed(row.feedId);
-    } catch (err) {
-      console.error(`[rss] Error syncing ${row.feedName} for user ${userId}:`, err);
-    }
-    await new Promise((r) => setTimeout(r, 1000));
+  const syncLimit = pLimit(5);
+  await Promise.all(
+    rows
+      .filter(row => !wasSyncedRecently(row.lastFetchedAt, freshnessWindowMs))
+      .map(row =>
+        syncLimit(async () => {
+          const feedStartedAt = Date.now();
+          try {
+            await syncFeed(row.feedId);
+          } catch (err) {
+            console.error(`[rss] Error syncing ${row.feedName} for user ${userId}:`, err);
+          }
+          console.log(
+            `[rss] Finished user feed sync user=${userId} feed=${row.feedId} name=${row.feedName} durationMs=${Date.now() - feedStartedAt}`,
+          );
+        })
+      )
+  );
+
+  // Log skipped feeds
+  const skipped = rows.filter(row => wasSyncedRecently(row.lastFetchedAt, freshnessWindowMs));
+  for (const row of skipped) {
+    console.log(
+      `[rss] Skipping recent sync for ${row.feedName} (${row.feedId}); lastFetchedAt=${row.lastFetchedAt}`,
+    );
   }
 }
 
@@ -142,6 +161,7 @@ export async function syncFeed(feedId: string): Promise<number> {
 }
 
 async function syncFeedInternal(feedId: string): Promise<number> {
+  const startedAt = Date.now();
   const db = getDb();
   const [feed] = await db.select().from(feeds).where(eq(feeds.id, feedId));
   if (!feed) {
@@ -150,7 +170,7 @@ async function syncFeedInternal(feedId: string): Promise<number> {
   }
 
   const effectiveFeedUrl = normalizeFeedUrl(feed.feedUrl);
-  console.log(`[rss] Syncing: ${feed.name} (${effectiveFeedUrl})`);
+  console.log(`[rss] Syncing feedId=${feed.id} sourceType=${feed.sourceType} name=${feed.name} feedUrl=${effectiveFeedUrl}`);
 
   let parsed;
   let parsedFeedUrl = effectiveFeedUrl;
@@ -186,6 +206,9 @@ async function syncFeedInternal(feedId: string): Promise<number> {
   let newCount = 0;
   let totalItems = 0;
   let filteredItems = 0;
+  let existingItems = 0;
+  let insertedWithContent = 0;
+  let insertedWithoutContent = 0;
   const isYouTubeFeed = feed.sourceType === "youtube";
   const adapter = getSourceAdapter(feed.sourceType as SourceType);
   const usedFallbackYouTubeFeed = isYouTubeFeed && parsedFeedUrl !== effectiveFeedUrl;
@@ -215,7 +238,10 @@ async function syncFeedInternal(feedId: string): Promise<number> {
       .from(articles)
       .where(eq(articles.url, articleUrl));
 
-    if (existing) continue;
+    if (existing) {
+      existingItems++;
+      continue;
+    }
 
     const { contentMarkdown, coverImageUrl } =
       await adapter.extractSyncItemContent(item as unknown as Record<string, unknown>, articleUrl);
@@ -235,6 +261,14 @@ async function syncFeedInternal(feedId: string): Promise<number> {
 
     await db.insert(articles).values(article).onConflictDoNothing();
     newCount++;
+    if (contentMarkdown && contentMarkdown.length > 0) {
+      insertedWithContent++;
+    } else {
+      insertedWithoutContent++;
+      console.warn(
+        `[rss] Inserted article without content feedId=${feed.id} articleUrl=${articleUrl} title=${article.title}`,
+      );
+    }
   }
 
   await db.update(feeds).set({ lastFetchedAt: now }).where(eq(feeds.id, feedId));
@@ -244,6 +278,8 @@ async function syncFeedInternal(feedId: string): Promise<number> {
       `[rss] YouTube sync stats for ${feed.name}: totalItems=${totalItems} filteredShorts=${filteredItems} inserted=${newCount}`,
     );
   }
-  console.log(`[rss] ${feed.name}: ${newCount} new articles`);
+  console.log(
+    `[rss] Sync complete feedId=${feed.id} sourceType=${feed.sourceType} name=${feed.name} totalItems=${totalItems} existingItems=${existingItems} filteredItems=${filteredItems} inserted=${newCount} insertedWithContent=${insertedWithContent} insertedWithoutContent=${insertedWithoutContent} durationMs=${Date.now() - startedAt}`,
+  );
   return newCount;
 }
