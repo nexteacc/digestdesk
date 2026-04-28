@@ -22,6 +22,10 @@ import { getDayRangeForTimeZone, getPreviousDateLabel, getTimeZoneDateLabel } fr
 const DEFAULT_CONCURRENCY = 3;
 const MIN_CONTENT_LENGTH = 50;
 
+function isDigestDebugEnabled() {
+  return process.env.DIGEST_DEBUG_LOGS === "true" || process.env.DIGEST_DEBUG_LOGS === "1";
+}
+
 function getPresummarizeConcurrency() {
   const raw = Number(process.env.AI_SUMMARY_CONCURRENCY ?? DEFAULT_CONCURRENCY);
   return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : DEFAULT_CONCURRENCY;
@@ -32,9 +36,15 @@ function getPresummarizeConcurrency() {
  * Only processes articles that don't already have a valid cached summary in the
  * requested language. Safe to call multiple times (idempotent).
  */
-export async function presummarizeForUser(userId: string, targetDate?: string): Promise<void> {
+export async function presummarizeForUser(
+  userId: string,
+  targetDate?: string,
+  options?: { executionId?: string },
+): Promise<void> {
   const startedAt = Date.now();
   const db = getDb();
+  const trace = options?.executionId ? ` executionId=${options.executionId}` : "";
+  const debug = isDigestDebugEnabled();
 
   // Read user settings to get the correct language and timezone
   const settings = await getUserSettingsMap(userId);
@@ -51,7 +61,10 @@ export async function presummarizeForUser(userId: string, targetDate?: string): 
     .from(subscriptions)
     .where(and(eq(subscriptions.userId, userId), isNull(subscriptions.endedAt)));
 
-  if (subscribedFeeds.length === 0) return;
+  if (subscribedFeeds.length === 0) {
+    console.log(`[presummarize] Skip${trace} user=${userId} date=${dateLabel} reason=no_active_subscriptions durationMs=${Date.now() - startedAt}`);
+    return;
+  }
 
   const feedIds = subscribedFeeds.map((r) => r.feedId);
 
@@ -59,6 +72,10 @@ export async function presummarizeForUser(userId: string, targetDate?: string): 
   const articlesInRange = await db
     .select({
       id: articles.id,
+      feedId: articles.feedId,
+      title: articles.title,
+      url: articles.url,
+      publishedAt: articles.publishedAt,
       contentText: articles.contentText,
       summaryZh: articles.summaryZh,
       summaryEn: articles.summaryEn,
@@ -72,30 +89,62 @@ export async function presummarizeForUser(userId: string, targetDate?: string): 
       ),
     );
 
+  let skippedShort = 0;
+  let skippedCached = 0;
+  let invalidCache = 0;
+
   // Keep only articles that need a summary: sufficient content + no valid cache
   const articlesToProcess = articlesInRange.filter((a) => {
-    if (!a.contentText || a.contentText.length < MIN_CONTENT_LENGTH) return false;
+    const contentLength = a.contentText?.length ?? 0;
+    if (contentLength < MIN_CONTENT_LENGTH) {
+      skippedShort += 1;
+      if (debug) {
+        console.log(
+          `[presummarize] Article skip${trace} user=${userId} date=${dateLabel} article=${a.id} feed=${a.feedId} publishedAt=${a.publishedAt} contentLength=${contentLength} reason=content_too_short url=${a.url}`,
+        );
+      }
+      return false;
+    }
     const cached = language === "zh" ? a.summaryZh : a.summaryEn;
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
-        if (parsed.oneLiner && parsed.keyInsights) return false; // already valid
+        if (parsed.oneLiner && parsed.keyInsights) {
+          skippedCached += 1;
+          if (debug) {
+            console.log(
+              `[presummarize] Article skip${trace} user=${userId} date=${dateLabel} article=${a.id} feed=${a.feedId} publishedAt=${a.publishedAt} contentLength=${contentLength} reason=already_cached language=${language} url=${a.url}`,
+            );
+          }
+          return false; // already valid
+        }
+        invalidCache += 1;
       } catch {
+        invalidCache += 1;
         // corrupt cache — re-generate
       }
+    }
+    if (debug) {
+      console.log(
+        `[presummarize] Article queued${trace} user=${userId} date=${dateLabel} article=${a.id} feed=${a.feedId} publishedAt=${a.publishedAt} contentLength=${contentLength} language=${language} url=${a.url}`,
+      );
     }
     return true;
   });
 
+  console.log(
+    `[presummarize] Plan${trace} user=${userId} date=${dateLabel} language=${language} timezone=${timezone} range=${startTime}..${endTime} feeds=${feedIds.length} articlesInRange=${articlesInRange.length} toProcess=${articlesToProcess.length} skippedShort=${skippedShort} skippedCached=${skippedCached} invalidCache=${invalidCache}`,
+  );
+
   if (articlesToProcess.length === 0) {
     console.log(
-      `[presummarize] All articles already cached user=${userId} date=${dateLabel} language=${language} durationMs=${Date.now() - startedAt}`,
+      `[presummarize] Complete${trace} user=${userId} date=${dateLabel} language=${language} succeeded=0 failed=0 durationMs=${Date.now() - startedAt}`,
     );
     return;
   }
 
   console.log(
-    `[presummarize] Start user=${userId} date=${dateLabel} language=${language} articles=${articlesToProcess.length}`,
+    `[presummarize] Start${trace} user=${userId} date=${dateLabel} language=${language} articles=${articlesToProcess.length}`,
   );
 
   const limit = pLimit(getPresummarizeConcurrency());
@@ -110,6 +159,11 @@ export async function presummarizeForUser(userId: string, targetDate?: string): 
           .update(articles)
           .set({ [updateField]: summaryJson })
           .where(eq(articles.id, article.id));
+        if (debug) {
+          console.log(
+            `[presummarize] Article summarized${trace} user=${userId} date=${dateLabel} article=${article.id} language=${language} url=${article.url}`,
+          );
+        }
       }),
     ),
   );
@@ -121,7 +175,7 @@ export async function presummarizeForUser(userId: string, targetDate?: string): 
     results.forEach((r, i) => {
       if (r.status === "rejected") {
         console.warn(
-          `[presummarize] Failed articleId=${articlesToProcess[i].id} user=${userId}:`,
+          `[presummarize] Failed${trace} articleId=${articlesToProcess[i].id} user=${userId} url=${articlesToProcess[i].url}:`,
           r.reason instanceof Error ? r.reason.message : r.reason,
         );
       }
@@ -129,6 +183,6 @@ export async function presummarizeForUser(userId: string, targetDate?: string): 
   }
 
   console.log(
-    `[presummarize] Complete user=${userId} date=${dateLabel} language=${language} succeeded=${succeeded} failed=${failed} durationMs=${Date.now() - startedAt}`,
+    `[presummarize] Complete${trace} user=${userId} date=${dateLabel} language=${language} succeeded=${succeeded} failed=${failed} durationMs=${Date.now() - startedAt}`,
   );
 }

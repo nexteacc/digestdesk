@@ -109,8 +109,9 @@ function RouteAnnouncer() {
     }
 
     const title = getTitle();
+    let announceTimer: ReturnType<typeof setTimeout> | undefined;
     if (title) {
-      setAnnouncement(title);
+      announceTimer = setTimeout(() => setAnnouncement(title), 0);
     }
 
     // 将焦点移到内容区
@@ -119,6 +120,12 @@ function RouteAnnouncer() {
       main.setAttribute("tabindex", "-1");
       main.focus({ preventScroll: true });
     }
+
+    return () => {
+      if (announceTimer) {
+        clearTimeout(announceTimer);
+      }
+    };
   }, [location, getTitle]);
 
   return (

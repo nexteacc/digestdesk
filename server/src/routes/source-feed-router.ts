@@ -4,13 +4,12 @@ import { eq, desc, and, isNull } from "drizzle-orm";
 import type { z } from "zod";
 import { getDb } from "../db/index.js";
 import { feeds, subscriptions } from "../db/schema.js";
-import { syncFeed } from "../services/rss.js";
 import { toAppError } from "../sources/app-error.js";
 import type { SourceAdapter, SourceType } from "../sources/types.js";
 import { getRequestUserId } from "../auth/user-context.js";
 import { getUserTimezone } from "../services/user-settings.js";
 import { getPreviousDateLabel, getTimeZoneDateLabel } from "../utils/timezone.js";
-import { generateDaily } from "../services/digest.js";
+import { executeDailyDigestJob } from "../services/digest-execution.js";
 
 interface SourceFeedRouterOptions {
   adapter: SourceAdapter;
@@ -30,14 +29,11 @@ function sanitizeUrl(url: string): string {
 }
 
 async function triggerInitialSyncAndDigest(userId: string, feedId: string, logPrefix: string) {
-  console.log(`${logPrefix} Initial sync requested for user=${userId} feed=${feedId}`);
-  const newCount = await syncFeed(feedId);
-  console.log(`${logPrefix} Initial sync complete for user=${userId} feed=${feedId} newArticles=${newCount}`);
-
   const timezone = await getUserTimezone(userId);
   const today = getTimeZoneDateLabel(new Date(), timezone);
   const targetDate = getPreviousDateLabel(today);
-  const digestId = await generateDaily(userId, targetDate);
+  console.log(`${logPrefix} Initial digest execution requested for user=${userId} feed=${feedId} date=${targetDate}`);
+  const digestId = await executeDailyDigestJob(userId, targetDate);
 
   if (!digestId) {
     console.log(`${logPrefix} Initial digest result empty for user=${userId} feed=${feedId} date=${targetDate}`);
@@ -175,22 +171,9 @@ export function createSourceFeedRouter(opts: SourceFeedRouterOptions): Router {
         });
       });
 
-      syncFeed(id)
-        .then(async () => {
-          console.log(`${logPrefix} Initial sync complete for new feed user=${userId} feed=${id}`);
-          const timezone = await getUserTimezone(userId);
-          const today = getTimeZoneDateLabel(new Date(), timezone);
-          const targetDate = getPreviousDateLabel(today);
-          const digestId = await generateDaily(userId, targetDate);
-          if (!digestId) {
-            console.log(`${logPrefix} Initial digest result empty for new feed user=${userId} feed=${id} date=${targetDate}`);
-            return;
-          }
-          console.log(`${logPrefix} Initial digest generated for new feed user=${userId} feed=${id} date=${targetDate} digestId=${digestId}`);
-        })
-        .catch((err) =>
-          console.error(`${logPrefix} Initial sync/digest failed for ${id}:`, err),
-        );
+      void triggerInitialSyncAndDigest(userId, id, logPrefix).catch((err) =>
+        console.error(`${logPrefix} Initial sync/digest failed for ${id}:`, err),
+      );
 
       res.json({ id, success: true });
     } catch (err) {

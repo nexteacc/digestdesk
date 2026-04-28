@@ -4,10 +4,18 @@
 Digestdesk project workspace. Implement features and fixes as needed and deliver runnable results.
 
 ## Build and test commands
-Use pnpm as the package manager. Commands are defined in package.json at the repo root and in server/package.json. Build uses pnpm --filter substack-digest-server build. No test script is defined; follow existing scripts if tests are added.
+Use pnpm as the package manager. Commands are defined in package.json at the repo root and in server/package.json.
+
+- Full build: `pnpm build`
+- Server-only build: `pnpm --filter substack-digest-server build`
+- Lint: `pnpm lint`
+
+No test script is defined; follow existing scripts if tests are added.
 
 ## Code style guidelines
 Follow existing code style, naming, and structure; prefer reusing existing libraries and tools.
+
+Digest generation should use the unified execution path (`executeDailyDigestJob`) for user-facing/manual/scheduled generation so feed sync, pre-summarization, and digest assembly stay consistent. Avoid adding new route-level direct calls to `generateDaily` unless intentionally bypassing sync and pre-summary behavior.
 
 
 ## Security considerations

@@ -7,8 +7,7 @@ import { feeds, subscriptions } from "../db/schema.js";
 import { getPodcastAdapter } from "../sources/factory.js";
 import { getRequestUserId } from "../auth/user-context.js";
 import { searchPodcasts, verifyPodcastFeed } from "../services/podcast-discovery.js";
-import { syncFeed } from "../services/rss.js";
-import { generateDaily } from "../services/digest.js";
+import { executeDailyDigestJob } from "../services/digest-execution.js";
 import { getPreviousDateLabel, getTimeZoneDateLabel } from "../utils/timezone.js";
 import { getUserTimezone } from "../services/user-settings.js";
 import { toAppError } from "../sources/app-error.js";
@@ -34,14 +33,11 @@ function sanitizeUrl(url: string): string {
 }
 
 async function triggerInitialSyncAndDigest(userId: string, feedId: string) {
-  console.log(`[podcast] Initial sync requested for user=${userId} feed=${feedId}`);
-  const newCount = await syncFeed(feedId);
-  console.log(`[podcast] Initial sync complete for user=${userId} feed=${feedId} newEpisodes=${newCount}`);
-
   const timezone = await getUserTimezone(userId);
   const today = getTimeZoneDateLabel(new Date(), timezone);
   const targetDate = getPreviousDateLabel(today);
-  const digestId = await generateDaily(userId, targetDate);
+  console.log(`[podcast] Initial digest execution requested for user=${userId} feed=${feedId} date=${targetDate}`);
+  const digestId = await executeDailyDigestJob(userId, targetDate);
 
   if (!digestId) {
     console.log(`[podcast] Initial digest result empty for user=${userId} feed=${feedId} date=${targetDate}`);

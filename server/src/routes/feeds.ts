@@ -4,8 +4,8 @@ import { eq, inArray, desc, and, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "../db/index.js";
 import { feeds, subscriptions } from "../db/schema.js";
-import { syncFeed, syncUserFeeds } from "../services/rss.js";
-import { generateDaily } from "../services/digest.js";
+import { syncUserFeeds } from "../services/rss.js";
+import { executeDailyDigestJob } from "../services/digest-execution.js";
 import type { Feed } from "../../../shared/types.js";
 import { getSubstackAdapter } from "../sources/factory.js";
 import { toAppError } from "../sources/app-error.js";
@@ -38,6 +38,19 @@ const importFeedsSchema = z.object({
 
 export const feedsRouter = Router();
 const substackAdapter = getSubstackAdapter();
+
+async function triggerInitialDigestExecution(userId: string, logContext: string) {
+  const timezone = await getUserTimezone(userId);
+  const today = getTimeZoneDateLabel(new Date(), timezone);
+  const targetDate = getPreviousDateLabel(today);
+  console.log(`[${logContext}] Initial digest execution requested for user=${userId} date=${targetDate}`);
+  const digestId = await executeDailyDigestJob(userId, targetDate);
+  if (!digestId) {
+    console.log(`[${logContext}] Initial digest result empty for user=${userId} date=${targetDate}`);
+    return;
+  }
+  console.log(`[${logContext}] Initial digest generated for user=${userId} date=${targetDate} digestId=${digestId}`);
+}
 
 function toFeed(row: typeof feeds.$inferSelect): Feed {
   return {
@@ -113,6 +126,10 @@ feedsRouter.post("/", async (req, res) => {
           })
           .where(eq(subscriptions.id, existingSubscription.id));
 
+        void triggerInitialDigestExecution(userId, "feeds/create").catch((err) => {
+          console.error(`[feeds/create] Initial digest execution failed for reused feed=${existing.id}:`, err);
+        });
+
         res.status(201).json(toFeed(existing));
         return;
       }
@@ -123,6 +140,10 @@ feedsRouter.post("/", async (req, res) => {
         feedId: existing.id,
         startedAt: new Date().toISOString(),
         createdAt: new Date().toISOString(),
+      });
+
+      void triggerInitialDigestExecution(userId, "feeds/create").catch((err) => {
+        console.error(`[feeds/create] Initial digest execution failed for existing feed=${existing.id}:`, err);
       });
 
       res.status(201).json(toFeed(existing));
@@ -156,17 +177,9 @@ feedsRouter.post("/", async (req, res) => {
 
     res.status(201).json(toFeed(feed));
 
-    // Background sync
-    syncFeed(feed.id)
-      .then(() => {
-        return getUserTimezone(userId).then((timezone) => {
-          const today = getTimeZoneDateLabel(new Date(), timezone);
-          return generateDaily(userId, getPreviousDateLabel(today));
-        });
-      })
-      .catch((err) => {
-        console.error(`[feeds/create] Initial sync/digest failed for ${feed.name}:`, err);
-      });
+    void triggerInitialDigestExecution(userId, "feeds/create").catch((err) => {
+      console.error(`[feeds/create] Initial sync/digest failed for ${feed.name}:`, err);
+    });
   } catch (err) {
     const appError = toAppError(err);
     console.error("[feeds/create] Error:", appError.message);
@@ -226,7 +239,6 @@ feedsRouter.post("/import", async (req, res) => {
   const now = new Date().toISOString();
   let created = 0;
   let skipped = 0;
-  const newFeedIds: string[] = [];
 
   for (const item of items) {
     if (!item.url) {
@@ -271,7 +283,6 @@ feedsRouter.post("/import", async (req, res) => {
       };
 
       await db.insert(feeds).values(feed);
-      newFeedIds.push(feed.id);
     }
 
     const [existingSubscription] = await db
@@ -308,22 +319,12 @@ feedsRouter.post("/import", async (req, res) => {
 
   res.status(201).json({ created, skipped });
 
-  if (newFeedIds.length > 0) {
+  if (created > 0) {
     (async () => {
-      for (const feedId of newFeedIds) {
-        try {
-          await syncFeed(feedId);
-        } catch (e) {
-          console.error(`[feeds/import] Initial sync failed for feed ${feedId}:`, e);
-        }
-        await new Promise((r) => setTimeout(r, 1000));
-      }
       try {
-        const timezone = await getUserTimezone(userId);
-        const today = getTimeZoneDateLabel(new Date(), timezone);
-        await generateDaily(userId, getPreviousDateLabel(today));
+        await triggerInitialDigestExecution(userId, "feeds/import");
       } catch (e) {
-        console.error(`[feeds/import] Initial digest generation failed:`, e);
+        console.error(`[feeds/import] Initial digest execution failed:`, e);
       }
     })();
   }

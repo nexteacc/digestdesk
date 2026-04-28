@@ -173,11 +173,18 @@
 
 必须补齐的能力：
 
-1. 去掉全局 `_dailyQueue`
+1. 基于真实日志确认 scheduler 已出现任务积压或晨峰瓶颈
 2. 强化 job claim 的数据库级并发安全
 3. 优化 dispatch 的全量用户扫描
-4. 进一步解耦 feed 同步与 digest 生成
+4. 根据 `summaryCacheMisses` 和 AI 调用峰值决定是否把摘要进一步前移
 5. 基于真实数据做压测后再谈容量承诺
+
+已完成的阶段一优化：
+
+- `generateDaily` 已改为用户级队列，同一用户串行，不同用户可并行
+- `runPendingDigestJobs` 已支持批量并发执行
+- 用户 feed 同步已支持有限并发和近期同步跳过
+- 新增订阅、手动生成和定时任务已统一进入 `executeDailyDigestJob`
 
 ## 9. 为什么当前方案没有方向性隐形债务
 

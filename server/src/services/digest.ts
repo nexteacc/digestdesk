@@ -9,6 +9,10 @@ import { parseDigestSourceTypes } from "./user-settings.js";
 
 const DEFAULT_CONCURRENCY = 3;
 
+function isDigestDebugEnabled() {
+  return process.env.DIGEST_DEBUG_LOGS === "true" || process.env.DIGEST_DEBUG_LOGS === "1";
+}
+
 function getSummaryConcurrency() {
   const raw = Number(process.env.AI_SUMMARY_CONCURRENCY ?? DEFAULT_CONCURRENCY);
   return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : DEFAULT_CONCURRENCY;
@@ -17,9 +21,13 @@ function getSummaryConcurrency() {
 // Per-user queues: same user is serialized, different users run in parallel
 const _userQueues = new Map<string, Promise<string | void>>();
 
-export function generateDaily(userId: string, date?: string): Promise<string> {
+export function generateDaily(
+  userId: string,
+  date?: string,
+  options?: { executionId?: string },
+): Promise<string> {
   const prev = _userQueues.get(userId) ?? Promise.resolve();
-  const task = prev.catch(() => {}).then(() => _generateDailyCore(userId, date));
+  const task = prev.catch(() => {}).then(() => _generateDailyCore(userId, date, options));
   _userQueues.set(userId, task);
   task.finally(() => {
     if (_userQueues.get(userId) === task) {
@@ -29,8 +37,13 @@ export function generateDaily(userId: string, date?: string): Promise<string> {
   return task;
 }
 
-async function _generateDailyCore(userId: string, date?: string): Promise<string> {
+async function _generateDailyCore(
+  userId: string,
+  date?: string,
+  options?: { executionId?: string },
+): Promise<string> {
   const db = getDb();
+  const trace = options?.executionId ? ` executionId=${options.executionId}` : "";
 
   const settingRows = await db
     .select({ key: userSettings.key, value: userSettings.value })
@@ -45,7 +58,7 @@ async function _generateDailyCore(userId: string, date?: string): Promise<string
   const { startIso: startTime, endIso: endTime } = getDayRangeForTimeZone(dateLabel, timezone);
 
   console.log(
-    `[digest] Start generateDaily: user=${userId} requestedDate=${date ?? "auto"} targetDate=${dateLabel} timezone=${timezone} language=${language} range=${startTime}..${endTime}`,
+    `[digest] Start generateDaily:${trace} user=${userId} requestedDate=${date ?? "auto"} targetDate=${dateLabel} timezone=${timezone} language=${language} range=${startTime}..${endTime}`,
   );
 
   const [existing] = await db
@@ -54,12 +67,12 @@ async function _generateDailyCore(userId: string, date?: string): Promise<string
     .where(and(eq(digests.userId, userId), eq(digests.type, "daily"), eq(digests.date, dateLabel)));
 
   if (existing) {
-    console.log(`[digest] Daily for ${userId} on ${dateLabel} already exists, regenerating...`);
-    return generateWithId(userId, existing.id, dateLabel, startTime, endTime, language, enabledSourceTypes);
+    console.log(`[digest] Daily exists${trace} user=${userId} date=${dateLabel} digestId=${existing.id}; regenerating`);
+    return generateWithId(userId, existing.id, dateLabel, startTime, endTime, language, enabledSourceTypes, options);
   }
 
   const digestId = nanoid();
-  return generateWithId(userId, digestId, dateLabel, startTime, endTime, language, enabledSourceTypes);
+  return generateWithId(userId, digestId, dateLabel, startTime, endTime, language, enabledSourceTypes, options);
 }
 
 async function generateWithId(
@@ -70,9 +83,12 @@ async function generateWithId(
   endTime: string,
   language: "zh" | "en" = "zh",
   enabledSourceTypes: Array<"substack" | "rss" | "youtube" | "podcast">,
+  options?: { executionId?: string },
 ): Promise<string> {
   const startedAt = Date.now();
   const db = getDb();
+  const trace = options?.executionId ? ` executionId=${options.executionId}` : "";
+  const debug = isDigestDebugEnabled();
 
   const subscribedFeedRows = await db
     .select({ feedId: subscriptions.feedId, startedAt: subscriptions.startedAt })
@@ -84,11 +100,11 @@ async function generateWithId(
   );
 
   console.log(
-    `[digest] User ${userId} has ${subscribedFeedIds.length} active subscriptions for ${dateLabel}`,
+    `[digest] Active subscriptions${trace} user=${userId} date=${dateLabel} count=${subscribedFeedIds.length}`,
   );
 
   if (subscribedFeedIds.length === 0) {
-    console.log(`[digest] User ${userId} has no subscriptions, skipping ${dateLabel}.`);
+    console.log(`[digest] Skip${trace} user=${userId} date=${dateLabel} reason=no_active_subscriptions`);
     return "";
   }
 
@@ -100,11 +116,11 @@ async function generateWithId(
   const allowedFeedIds = allowedFeedRows.map((feed) => feed.id);
 
   console.log(
-    `[digest] User ${userId} enabled sources=${enabledSourceTypes.join(",")} allowedFeeds=${allowedFeedIds.length}/${subscribedFeedIds.length}`,
+    `[digest] Source filter${trace} user=${userId} enabledSources=${enabledSourceTypes.join(",")} allowedFeeds=${allowedFeedIds.length}/${subscribedFeedIds.length}`,
   );
 
   if (allowedFeedIds.length === 0) {
-    console.log(`[digest] User ${userId} has no subscriptions matching enabled digest sources, skipping ${dateLabel}.`);
+    console.log(`[digest] Skip${trace} user=${userId} date=${dateLabel} reason=no_allowed_sources`);
     return "";
   }
 
@@ -130,34 +146,49 @@ async function generateWithId(
     );
 
   console.log(
-    `[digest] Found ${dayArticles.length} articles in time range for user ${userId} on ${dateLabel}`,
+    `[digest] Articles in range${trace} user=${userId} date=${dateLabel} count=${dayArticles.length}`,
   );
 
   const uniqueArticles = Array.from(new Map(dayArticles.map(a => [a.url, a])).values());
   const duplicateCount = dayArticles.length - uniqueArticles.length;
+  let filteredBySubscriptionBoundary = 0;
   const eligibleArticles = uniqueArticles.filter((article) => {
     const startedAt = subscriptionStartMap.get(article.feedId);
-    return !startedAt || article.publishedAt >= startedAt;
+    const included = !startedAt || article.publishedAt >= startedAt;
+    if (!included) {
+      filteredBySubscriptionBoundary += 1;
+    }
+    if (debug) {
+      console.log(
+        `[digest] Article eligibility${trace} user=${userId} date=${dateLabel} article=${article.id} feed=${article.feedId} publishedAt=${article.publishedAt} startedAt=${startedAt ?? "none"} included=${included} reason=${included ? "eligible" : "before_subscription"} url=${article.url}`,
+      );
+    }
+    return included;
   });
-  const filteredBySubscriptionBoundary = uniqueArticles.length - eligibleArticles.length;
 
   console.log(
-    `[digest] User ${userId} on ${dateLabel}: unique=${uniqueArticles.length}, deduped=${duplicateCount}, filteredByStartedAt=${filteredBySubscriptionBoundary}, eligible=${eligibleArticles.length}`,
+    `[digest] Eligibility summary${trace} user=${userId} date=${dateLabel} unique=${uniqueArticles.length} deduped=${duplicateCount} filteredByStartedAt=${filteredBySubscriptionBoundary} eligible=${eligibleArticles.length}`,
   );
 
   if (eligibleArticles.length === 0) {
     console.log(
-      `[digest] No eligible articles found for user ${userId} on ${dateLabel}, skipping. range=${startTime}..${endTime}`,
+      `[digest] Skip${trace} user=${userId} date=${dateLabel} reason=no_eligible_articles range=${startTime}..${endTime}`,
     );
     return "";
   }
 
-  console.log(`[digest] Processing ${eligibleArticles.length} unique articles for user ${userId} in ${language}`);
+  console.log(`[digest] Processing${trace} user=${userId} date=${dateLabel} language=${language} articles=${eligibleArticles.length}`);
 
   const feedMap = new Map(allFeeds.map((f) => [f.id, f.name]));
   const feedSourceMap = new Map(allFeeds.map((f) => [f.id, f.sourceType]));
 
   const limit = pLimit(getSummaryConcurrency());
+  let summaryCacheHits = 0;
+  let summaryCacheMisses = 0;
+  let summaryCacheInvalid = 0;
+  let summaryGenerated = 0;
+  let summaryTooShort = 0;
+  let summaryFallbacks = 0;
 
   type ItemResult = {
     articleId: string;
@@ -191,8 +222,9 @@ async function generateWithId(
       if (!contentText || contentText.length < 50) {
         const isYouTube = sourceType === "youtube";
         const isPodcast = sourceType === "podcast";
+        summaryTooShort += 1;
         console.warn(
-          `[digest] Skipping AI summary for article=${article.id} sourceType=${sourceType} contentLength=${contentText.length} reason=content_too_short`,
+          `[digest] Skipping AI summary${trace} article=${article.id} sourceType=${sourceType} contentLength=${contentText.length} reason=content_too_short url=${article.url}`,
         );
         return {
           ...base,
@@ -211,32 +243,43 @@ async function generateWithId(
         try {
           const cached = JSON.parse(cachedField);
           if (cached.oneLiner && cached.keyInsights) {
+            summaryCacheHits += 1;
             console.log(
-              `[digest] Summary cache hit article=${article.id} sourceType=${sourceType} language=${language}`,
+              `[digest] Summary cache hit${trace} article=${article.id} sourceType=${sourceType} language=${language} url=${article.url}`,
             );
             return { ...base, oneLiner: cached.oneLiner, keyInsights: cached.keyInsights };
           }
+          summaryCacheInvalid += 1;
         } catch {
+          summaryCacheInvalid += 1;
           // invalid cache, fall through to AI
         }
       }
+      summaryCacheMisses += 1;
 
       try {
         const summary = await summarizeArticle(contentText, language);
+        summaryGenerated += 1;
         // Cache the summary
         const summaryJson = JSON.stringify({ oneLiner: summary.oneLiner, keyInsights: summary.keyInsights });
         const updateField = language === "zh" ? { summaryZh: summaryJson } : { summaryEn: summaryJson };
         await db.update(articles).set(updateField).where(eq(articles.id, article.id)).catch((e) => {
-          console.warn(`[digest] Failed to cache summary for article ${article.id}:`, e instanceof Error ? e.message : e);
+          console.warn(`[digest] Failed to cache summary${trace} article=${article.id} url=${article.url}:`, e instanceof Error ? e.message : e);
         });
+        if (debug) {
+          console.log(
+            `[digest] Summary generated${trace} article=${article.id} sourceType=${sourceType} language=${language} url=${article.url}`,
+          );
+        }
         return {
           ...base,
           oneLiner: summary.oneLiner,
           keyInsights: summary.keyInsights,
         };
       } catch (error) {
+        summaryFallbacks += 1;
         console.warn(
-          `[digest] Summary fallback article=${article.id} sourceType=${sourceType} language=${language} contentLength=${contentText.length} aiErrorCategory=${classifyAiError(error)} url=${article.url}`,
+          `[digest] Summary fallback${trace} article=${article.id} sourceType=${sourceType} language=${language} contentLength=${contentText.length} aiErrorCategory=${classifyAiError(error)} url=${article.url}`,
         );
         return {
           ...base,
@@ -295,7 +338,7 @@ async function generateWithId(
   });
 
   console.log(
-    `[digest] Daily digest ${digestId} for user ${userId} updated with ${items.length} items fallbackCount=${fallbackCount} emptyInsightsCount=${emptyInsightsCount} durationMs=${Date.now() - startedAt}`,
+    `[digest] Daily digest updated${trace} digestId=${digestId} user=${userId} date=${dateLabel} items=${items.length} summaryCacheHits=${summaryCacheHits} summaryCacheMisses=${summaryCacheMisses} summaryCacheInvalid=${summaryCacheInvalid} summaryGenerated=${summaryGenerated} summaryTooShort=${summaryTooShort} summaryFallbacks=${summaryFallbacks} fallbackCount=${fallbackCount} emptyInsightsCount=${emptyInsightsCount} durationMs=${Date.now() - startedAt}`,
   );
   return digestId;
 }

@@ -78,6 +78,7 @@
 - `digestTime` 决定日报生成或投递时刻，不改变被总结内容所属日期
 - 手动生成日报的本质是：
   - 同步该用户当前订阅的 feed
+  - 按该用户语言和目标日期预生成缺失的文章摘要缓存
   - 复用全局 `articles`
   - 按该用户订阅关系和设置重算用户私有 digest 快照
   - 优先复用 `articles.summary_zh` / `articles.summary_en` 中已有摘要
@@ -306,9 +307,11 @@
 2. `scheduler` 服务定时运行 `dispatchDigestJobs`
 3. dispatch 根据用户时区、`digest_time` 和回补窗口创建 `digest_jobs`
 4. `scheduler` 服务定时运行 `runPendingDigestJobs`
-5. runner 抢占 `pending` 任务，执行用户级 feed 同步和 `generateDaily`
-6. 结果写入 `digests` / `digest_items`
-7. 任务状态更新为 `succeeded` / `skipped` / `failed`
+5. runner 抢占 `pending` 任务，执行统一入口 `executeDailyDigestJob`
+6. `executeDailyDigestJob` 同步用户有效订阅的 feeds
+7. `presummarizeForUser` 按用户语言和目标日期补齐摘要缓存
+8. `generateDaily` 优先读取摘要缓存，组装并写入 `digests` / `digest_items`
+9. 任务状态更新为 `succeeded` / `skipped` / `failed`
 
 ## 5. ER 图
 
@@ -454,8 +457,8 @@ erDiagram
    - 如果已有有效订阅，返回重复错误
    - 如果有历史已取消订阅，恢复该关系并重置 `started_at`
    - 如果从未订阅过，创建新的 `subscription`
-4. 后台触发 feed 同步
-5. 按当前用户规则生成或更新日报
+4. 后台触发统一日报执行入口 `executeDailyDigestJob`
+5. 该入口负责 feed 同步、预摘要和按当前用户规则生成或更新日报
 
 取消订阅：
 
@@ -499,16 +502,18 @@ erDiagram
 
 执行方式：
 
-1. 同步当前用户所有有效订阅的 feeds
-2. 读取当前用户：
+1. 进入统一日报执行入口 `executeDailyDigestJob`
+2. 同步当前用户所有有效订阅的 feeds
+3. 按目标日期和用户语言预生成缺失的文章摘要缓存
+4. 读取当前用户：
    - `timezone`
    - `digest_language`
-3. 如果未显式传日期，则默认取该用户时区下的 `T-1`
-4. 计算该用户时区下该日期的完整自然日时间窗口
-5. 查询该用户有效订阅对应的文章
-6. 再用 `subscription.started_at` 过滤掉订阅前文章
-7. 对结果做 AI 总结
-8. 写入或更新当前用户该日期的 digest 快照
+5. 如果未显式传日期，则默认取该用户时区下的 `T-1`
+6. 计算该用户时区下该日期的完整自然日时间窗口
+7. 查询该用户有效订阅对应的文章
+8. 再用 `subscription.started_at` 过滤掉订阅前文章
+9. 优先复用文章摘要缓存；缓存缺失时保留 AI fallback
+10. 写入或更新当前用户该日期的 digest 快照
 
 ### 5.6 定时任务链路
 
@@ -524,7 +529,9 @@ erDiagram
    - `timezone`
    - `digest_time`
 3. 如果当前时刻命中该用户的发送时间：
+   - 调用 `executeDailyDigestJob`
    - 同步该用户当前有效订阅的 feeds
+   - 预生成目标日期缺失的摘要缓存
    - 生成该用户时区下前一完整自然日的 digest
 
 ## 6. 查询边界与约束
@@ -574,16 +581,18 @@ flowchart TD
     L -- 是 --> N[复用全局 feed]
     M --> O[建立或恢复 subscription]
     N --> O
-    O --> P[同步 feed]
-    P --> Q[生成当前用户 digest]
+    O --> P[执行 executeDailyDigestJob]
+    P --> Q[同步 feeds]
+    Q --> R0[预摘要缺失文章]
+    R0 --> Q0[生成当前用户 digest]
 
     I --> R[查询 digest]
     I --> S[更新 user_settings]
 
     T[定时任务] --> U[扫描用户]
-    U --> V[命中 digest_time]
-    V --> W[同步用户有效订阅]
-    W --> X[按用户时区生成 digest]
+    U --> V[创建或抢占 digest_jobs]
+    V --> W[执行 executeDailyDigestJob]
+    W --> X[同步 + 预摘要 + 生成 digest]
 ```
 
 ## 8. 当前实现状态
@@ -600,15 +609,18 @@ flowchart TD
 
 当前实现是：
 
-- 抓取任务独立周期运行，内容先入库
-- 到 `digestTime` 时再执行日报聚合和摘要生成
+- 抓取时内容先入库，RSS/Substack 优先使用 feed 自带正文，必要时才用 Jina fallback
+- 日报执行统一进入 `executeDailyDigestJob`
+- 执行时先同步当前用户有效订阅，再按用户语言和目标日期预生成缺失摘要
+- `generateDaily` 优先读 `articles.summary_zh` / `articles.summary_en`，缓存缺失时保留 AI fallback
+- 新增订阅、手动生成和定时任务都走同一条执行链路
 
 这是一个可接受的早期实现。
 
 后续更成熟的演进方向是：
 
 - 抓取继续提前运行
-- 摘要与 digest 预生成也提前完成
+- 如果真实日志显示 `summaryCacheMisses` 高或日报窗口 AI 峰值明显，再把摘要进一步前移到 feed 同步后的异步任务
 - 到 `digestTime` 时只做投递或展示
 
 这样可以更稳定地逼近用户期望的送达时间，尤其适用于：

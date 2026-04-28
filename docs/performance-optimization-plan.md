@@ -7,7 +7,7 @@
 ### 当前架构链路
 
 ```
-RSS 抓取 → Jina 提取正文 → AI 生成摘要 → 存入数据库 → 用户查看日报
+RSS 抓取 → 优先使用 RSS 正文，必要时 Jina fallback → 预摘要缓存 → 组装用户日报
 ```
 
 ### 外部 API 免费层级限制
@@ -17,7 +17,7 @@ RSS 抓取 → Jina 提取正文 → AI 生成摘要 → 存入数据库 → 用
 | **Jina Reader** | 1000 万 token（一次性） | 无 Key 20 RPM / 免费 Key 500 RPM；按输出 token 计数，一篇文章 ~10K token，1000 万 ≈ 1000 篇 |
 | **AI 模型** | 取决于供应商配置（`AI_MODEL` + `AI_BASE_URL`） | RPM / TPM / TPD 均有上限；输入 token 越多消耗越快 |
 
-### 当前问题
+### 优化前问题
 
 以 10 用户 × 30 篇/天 = 300 篇/天 为例：
 
@@ -86,7 +86,7 @@ async extractSyncItemContent(item, articleUrl): Promise<SyncItemContent> {
 
 ---
 
-### 第二步：AI 摘要优化 — 截断输入 + 同步时预生成
+### 第二步：AI 摘要优化 — 截断输入 + 日报前预摘要
 
 #### 2a. 输入截断
 
@@ -126,50 +126,44 @@ export async function summarizeArticle(markdown: string, language: "zh" | "en" =
 
 **预期效果**：AI 单次 token 从 ~4000 降至 ~1200，总 token/天从 120 万降至 **~36 万**（-70%）。
 
-#### 2b. 同步时预生成摘要
+#### 2b. 日报执行前预摘要
 
-**涉及文件**：`server/src/services/rss.ts`（`syncFeedInternal` 函数）
+**涉及文件**：`server/src/services/digest-execution.ts`、`server/src/services/presummarize.ts`
 
-**改动逻辑**：在存入文章后立即调用 AI 生成摘要并缓存，而不是等日报生成时批量调用。
+**当前实现**：日报执行入口统一走 `executeDailyDigestJob()`，先同步用户有效订阅，再按用户语言和目标日期执行 `presummarizeForUser()`，最后由 `generateDaily()` 组装日报。
 
 ```
-现在:
+早期:
   syncFeed → 存 article (无摘要)
-  generateDaily → 逐篇调 AI → 写 digest  (集中爆发)
+  generateDaily → 逐篇调 AI → 写 digest
 
-优化后:
-  syncFeed → 存 article → 调 AI → 缓存到 summary_zh/en  (分散全天)
-  generateDaily → 读缓存 → 写 digest  (0 次 AI 调用)
+当前:
+  executeDailyDigestJob
+    → syncUserFeeds
+    → presummarizeForUser (按用户语言补 articles.summary_zh/en)
+    → generateDaily (优先读缓存，缓存缺失时保留 AI fallback)
 ```
 
-**伪代码**（在 `syncFeedInternal` 的文章插入成功后添加）：
+**伪代码**：
 
 ```typescript
-// 文章存入成功后，立即预生成摘要
-if (contentMarkdown && contentMarkdown.length >= 50 && newCount > 0) {
-  try {
-    const summary = await summarizeArticle(contentMarkdown, "zh");
-    const summaryJson = JSON.stringify(summary);
-    await db.update(articles)
-      .set({ summaryZh: summaryJson })
-      .where(eq(articles.id, article.id));
-  } catch (e) {
-    // 摘要失败不影响同步，日报生成时有 fallback 机制
-    console.warn(`[rss] Pre-summary failed for ${articleUrl}:`, e);
-  }
+export async function executeDailyDigestJob(userId: string, targetDate?: string) {
+  await syncUserFeeds(userId);
+  await presummarizeForUser(userId, targetDate);
+  return generateDaily(userId, targetDate);
 }
 ```
 
-**预期效果**：
-- AI 调用从集中在日报生成时段 → **分散在全天各次 Feed 同步中**
-- 日报生成从 ~2 分钟 → **< 1 秒**（纯 DB 读取）
-- 永不出现短时间内大量 AI 调用触发 RPM 限制的问题
+**效果**：
+- 所有手动生成、定时生成、新增订阅后的初次生成都走同一条链路
+- `generateDaily()` 大多数情况下读摘要缓存并写 digest 快照
+- 缓存缺失时仍保留 AI fallback，优先保证用户能看到结果
 
 **注意事项**：
 - 已有 `articles.summaryZh` / `articles.summaryEn` 缓存字段，数据库无需改动
-- 已有摘要缓存读取逻辑（`digest.ts:201-215`），日报生成时会自动命中缓存
-- 预摘要失败不阻塞同步流程，日报生成时有 fallback 机制兜底
-- 预摘要语言暂用默认 `"zh"`，后续可根据用户设置优化
+- `presummarizeForUser()` 会读取用户的 `digest_language`，不是固定生成中文
+- `generateDaily()` 已增加 cache hit/miss/fallback 统计日志，便于观察真实命中率
+- 当前没有把 AI 摘要前移到每次 feed 同步后；除非真实日志显示日报窗口仍有明显 AI 峰值，否则暂不需要引入更复杂的异步预摘要编排
 
 ---
 
@@ -179,10 +173,10 @@ if (contentMarkdown && contentMarkdown.length >= 50 && newCount > 0) {
 
 **涉及文件**：`server/src/services/digest.ts`
 
-**问题**：所有用户的 `generateDaily` 排进同一个 Promise 链串行执行。UserB 必须等 UserA 完成才开始。
+**优化前问题**：所有用户的 `generateDaily` 排进同一个 Promise 链串行执行。UserB 必须等 UserA 完成才开始。
 
 ```typescript
-// 现在（digest.ts:17-23）— 全局串行
+// 优化前 — 全局串行
 let _dailyQueue: Promise<string | void> = Promise.resolve();
 export function generateDaily(userId, date) {
   const task = _dailyQueue.catch(() => {}).then(() => _generateDailyCore(userId, date));
@@ -216,10 +210,10 @@ export function generateDaily(userId: string, date?: string): Promise<string> {
 
 **涉及文件**：`server/src/services/digest-jobs.ts`
 
-**问题**：`runPendingDigestJobs` 中 claimed jobs 在 for 循环中串行执行。
+**优化前问题**：`runPendingDigestJobs` 中 claimed jobs 在 for 循环中串行执行。
 
 ```typescript
-// 现在（digest-jobs.ts:183）— 串行
+// 优化前 — 串行
 for (const job of claimed) {
   await executeDailyDigestJob(job.userId, job.targetDate);
 }
@@ -245,10 +239,10 @@ await Promise.all(
 
 **涉及文件**：`server/src/services/rss.ts`
 
-**问题**：`syncUserFeeds` 逐个 Feed 串行同步，每个 Feed 间还有 1 秒 sleep。
+**优化前问题**：`syncUserFeeds` 逐个 Feed 串行同步，每个 Feed 间还有 1 秒 sleep。
 
 ```typescript
-// 现在（rss.ts:111-128）— 串行 + sleep
+// 优化前 — 串行 + sleep
 for (const row of rows) {
   await syncFeed(row.feedId);
   await new Promise((r) => setTimeout(r, 1000));  // 额外等 1 秒
@@ -273,32 +267,34 @@ await Promise.all(
 
 ---
 
-## 优化效果汇总
+## 当前优化效果汇总
 
 以 10 用户 × 30 篇/天 = 300 篇/天 为基准：
 
-| 指标 | 优化前 | 优化后 | 变化 |
+| 指标 | 优化前 | 当前实现 | 变化 |
 |---|---|---|---|
 | Jina 调用/天 | 300 次 | ~30 次 | **-90%** |
 | Jina 免费额度 | ~3 天用完 | ~30+ 天 | **10 倍** |
-| AI 调用次数/天 | 300 次（集中在几分钟内） | 300 次（分散在全天） | 次数不变，**负载均匀** |
+| AI 调用次数/天 | 300 次（集中在 `generateDaily`） | 约 300 次（前置到 `presummarizeForUser`，缓存缺失时兜底） | 次数不变，生成入口更一致 |
 | AI 单次 token | ~4000 | ~1200 | **-70%** |
 | AI 总 token/天 | ~120 万 | ~36 万 | **-70%** |
-| 日报生成耗时 | ~2 分钟/用户，串行排队 | **< 1 秒/用户** | 质变 |
+| 日报生成耗时 | ~2 分钟/用户，串行排队 | 取决于预摘要命中率；命中缓存时接近纯 DB 写入 | 明显改善 |
 | 多用户并行 | 全局串行（200 用户 ~6.6h） | 用户级并行 | **解除天花板** |
 
 ---
 
-## 实施优先级
+## 实施状态
 
-| 优先级 | 优化项 | 涉及文件 | 改动量 | 效果 |
-|---|---|---|---|---|
-| **P0** | RSS 优先，Jina fallback | `substack-adapter.ts`, `rss-adapter.ts` | ~15 行 | Jina 调用 -90% |
-| **P0** | AI 输入截断 | `summarizer.ts` | ~3 行 | AI Token -70% |
-| **P1** | 同步时预生成摘要 | `rss.ts` | ~20 行 | 日报生成 <1s；AI 负载均匀 |
-| **P1** | 去全局锁，改用户级锁 | `digest.ts` | ~10 行 | 多用户可并行 |
-| **P2** | Job Runner 并发执行 | `digest-jobs.ts` | ~10 行 | Job 处理 3-5x 提速 |
-| **P2** | Feed 同步并行化 | `rss.ts` | ~10 行 | Feed 同步 5x 提速 |
+| 状态 | 优化项 | 涉及文件 | 说明 |
+|---|---|---|---|
+| 已完成 | RSS 优先，Jina fallback | `substack-adapter.ts`, `rss-adapter.ts` | RSS 内容不足 500 字符才调 Jina |
+| 已完成 | AI 输入截断 | `summarizer.ts` | 摘要输入截断到 1500 字符 |
+| 已完成 | 日报前预摘要 | `digest-execution.ts`, `presummarize.ts` | 按用户语言预生成摘要缓存，再组装 digest |
+| 已完成 | 统一生成入口 | `feeds.ts`, `source-feed-router.ts`, `podcast-feeds.ts`, `digests.ts`, `digest-jobs.ts` | 路由层不再直接绕过执行器调用 `generateDaily()` |
+| 已完成 | 去全局锁，改用户级锁 | `digest.ts` | 同一用户串行，不同用户可并行 |
+| 已完成 | Job Runner 并发执行 | `digest-jobs.ts` | `pLimit(3)` 并发执行 claimed jobs |
+| 已完成 | Feed 同步并行化 | `rss.ts` | `pLimit(5)` 并发同步，近期同步自动跳过 |
+| 观察后再定 | feed 同步后异步预摘要 | 待定 | 只有当日志显示 `summaryCacheMisses` 高或日报窗口 AI 峰值明显时再做 |
 
 ---
 
@@ -311,7 +307,7 @@ rss-parser 解析 Feed
   → 取 content:encoded (纯正文 HTML)
   → turndown 本地转 Markdown (0 次外部调用)
   → 截断到 1500 字符
-  → 调 AI 生成摘要 (同步时预生成)
+  → 日报执行前按用户语言预摘要
   → 缓存到 articles.summary_zh/en
 ```
 
@@ -324,7 +320,7 @@ rss-parser 解析 Feed
   → 内容 >= 500 字符? → 直接用 (0 次外部调用)
   → 内容 < 500 字符? → 调 Jina 抓取网页 (仅此时消耗 Jina 额度)
   → 截断到 1500 字符
-  → 调 AI 生成摘要 (同步时预生成)
+  → 日报执行前按用户语言预摘要
   → 缓存到 articles.summary_zh/en
 ```
 
@@ -357,4 +353,5 @@ rss-parser 解析 Feed
 1. **模型不变**：所有优化不涉及 `AI_MODEL` 和 `AI_BASE_URL` 配置，使用现有模型
 2. **数据库不变**：`articles.summary_zh/en` 缓存字段已存在，无需 schema 变更
 3. **向后兼容**：日报生成逻辑已有缓存读取和 fallback 机制，优化不影响现有功能
-4. **渐进实施**：P0 → P1 → P2 顺序实施，每步独立可验证，不存在依赖关系
+4. **不过度工程化**：当前产品阶段先保持 `web + scheduler + postgres`，根据真实日志再决定是否把摘要进一步前移或拆分 runner
+5. **关键观测指标**：关注 `summaryCacheHits`、`summaryCacheMisses`、`summaryGenerated`、`summaryFallbacks`，用真实数据决定下一步

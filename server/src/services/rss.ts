@@ -97,10 +97,11 @@ export async function syncAllFeeds(): Promise<void> {
 
 export async function syncUserFeeds(
   userId: string,
-  options?: { freshnessWindowMs?: number },
+  options?: { freshnessWindowMs?: number; executionId?: string },
 ): Promise<void> {
   const db = getDb();
   const freshnessWindowMs = options?.freshnessWindowMs ?? DEFAULT_RECENT_SYNC_WINDOW_MS;
+  const trace = options?.executionId ? ` executionId=${options.executionId}` : "";
   const rows = await db
     .select({
       feedId: subscriptions.feedId,
@@ -111,23 +112,24 @@ export async function syncUserFeeds(
     .innerJoin(feeds, eq(subscriptions.feedId, feeds.id))
     .where(and(eq(subscriptions.userId, userId), isNull(subscriptions.endedAt)));
 
-  console.log(`[rss] Starting sync job for user ${userId} with ${rows.length} feeds...`);
+  console.log(`[rss] Starting sync job${trace} user=${userId} feeds=${rows.length} freshnessWindowMs=${freshnessWindowMs}`);
 
   const syncLimit = pLimit(5);
+  const rowsToSync = rows.filter(row => !wasSyncedRecently(row.lastFetchedAt, freshnessWindowMs));
+  console.log(`[rss] User sync plan${trace} user=${userId} toSync=${rowsToSync.length} skippedRecent=${rows.length - rowsToSync.length}`);
   await Promise.all(
-    rows
-      .filter(row => !wasSyncedRecently(row.lastFetchedAt, freshnessWindowMs))
+    rowsToSync
       .map(row =>
         syncLimit(async () => {
           const feedStartedAt = Date.now();
           try {
-            await syncFeed(row.feedId);
+            const inserted = await syncFeed(row.feedId);
+            console.log(
+              `[rss] Finished user feed sync${trace} user=${userId} feed=${row.feedId} name=${row.feedName} inserted=${inserted} durationMs=${Date.now() - feedStartedAt}`,
+            );
           } catch (err) {
-            console.error(`[rss] Error syncing ${row.feedName} for user ${userId}:`, err);
+            console.error(`[rss] Error syncing${trace} user=${userId} feed=${row.feedId} name=${row.feedName}:`, err);
           }
-          console.log(
-            `[rss] Finished user feed sync user=${userId} feed=${row.feedId} name=${row.feedName} durationMs=${Date.now() - feedStartedAt}`,
-          );
         })
       )
   );
@@ -136,7 +138,7 @@ export async function syncUserFeeds(
   const skipped = rows.filter(row => wasSyncedRecently(row.lastFetchedAt, freshnessWindowMs));
   for (const row of skipped) {
     console.log(
-      `[rss] Skipping recent sync for ${row.feedName} (${row.feedId}); lastFetchedAt=${row.lastFetchedAt}`,
+      `[rss] Skipping recent sync${trace} user=${userId} feed=${row.feedId} name=${row.feedName} lastFetchedAt=${row.lastFetchedAt}`,
     );
   }
 }
