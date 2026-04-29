@@ -10,7 +10,12 @@ import { parseDigestSourceTypes } from "./user-settings.js";
 const DEFAULT_CONCURRENCY = 3;
 
 function isDigestDebugEnabled() {
-  return process.env.DIGEST_DEBUG_LOGS === "true" || process.env.DIGEST_DEBUG_LOGS === "1";
+  return (
+    process.env.DIGEST_DEBUG_LOGS === "true" ||
+    process.env.DIGEST_DEBUG_LOGS === "1" ||
+    process.env.DEBUG === "true" ||
+    process.env.DEBUG === "1"
+  );
 }
 
 function getSummaryConcurrency() {
@@ -218,6 +223,12 @@ async function generateWithId(
         url: article.url,
         publishedAt: article.publishedAt,
       };
+      if (debug) {
+        const cachedLength = language === "zh" ? (article.summaryZh?.length ?? 0) : (article.summaryEn?.length ?? 0);
+        console.log(
+          `[digest] Article summary input${trace} user=${userId} date=${dateLabel} article=${article.id} feed=${article.feedId} sourceType=${sourceType} publishedAt=${article.publishedAt} contentLength=${contentText.length} cachedSummaryLength=${cachedLength} url=${article.url}`,
+        );
+      }
 
       if (!contentText || contentText.length < 50) {
         const isYouTube = sourceType === "youtube";
@@ -245,13 +256,23 @@ async function generateWithId(
           if (cached.oneLiner && cached.keyInsights) {
             summaryCacheHits += 1;
             console.log(
-              `[digest] Summary cache hit${trace} article=${article.id} sourceType=${sourceType} language=${language} url=${article.url}`,
+              `[digest] Summary cache hit${trace} article=${article.id} sourceType=${sourceType} language=${language} insights=${Array.isArray(cached.keyInsights) ? cached.keyInsights.length : "unknown"} url=${article.url}`,
             );
             return { ...base, oneLiner: cached.oneLiner, keyInsights: cached.keyInsights };
           }
           summaryCacheInvalid += 1;
+          if (debug) {
+            console.warn(
+              `[digest] Summary cache invalid${trace} article=${article.id} sourceType=${sourceType} language=${language} reason=missing_fields url=${article.url}`,
+            );
+          }
         } catch {
           summaryCacheInvalid += 1;
+          if (debug) {
+            console.warn(
+              `[digest] Summary cache invalid${trace} article=${article.id} sourceType=${sourceType} language=${language} reason=json_parse_failed url=${article.url}`,
+            );
+          }
           // invalid cache, fall through to AI
         }
       }
@@ -268,7 +289,7 @@ async function generateWithId(
         });
         if (debug) {
           console.log(
-            `[digest] Summary generated${trace} article=${article.id} sourceType=${sourceType} language=${language} url=${article.url}`,
+            `[digest] Summary generated${trace} article=${article.id} sourceType=${sourceType} language=${language} insights=${summary.keyInsights.length} url=${article.url}`,
           );
         }
         return {
@@ -296,6 +317,16 @@ async function generateWithId(
     language === "zh" ? item.oneLiner === "暂时无法生成摘要。" : item.oneLiner === "Summary unavailable for now.",
   ).length;
   const emptyInsightsCount = items.filter((item) => item.keyInsights.length === 0).length;
+
+  if (debug) {
+    for (const item of items) {
+      const fallback =
+        language === "zh" ? item.oneLiner === "暂时无法生成摘要。" : item.oneLiner === "Summary unavailable for now.";
+      console.log(
+        `[digest] Item ready${trace} user=${userId} date=${dateLabel} article=${item.articleId} feed=${item.feedId} sourceType=${item.sourceType} publishedAt=${item.publishedAt} fallback=${fallback} insights=${item.keyInsights.length} oneLinerLength=${item.oneLiner.length} url=${item.url}`,
+      );
+    }
+  }
 
   const generationTime = new Date().toISOString();
 

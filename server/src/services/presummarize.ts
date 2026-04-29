@@ -16,14 +16,19 @@ import pLimit from "p-limit";
 import { getDb } from "../db/index.js";
 import { articles, subscriptions } from "../db/schema.js";
 import { getUserSettingsMap } from "./user-settings.js";
-import { summarizeArticle } from "./summarizer.js";
+import { classifyAiError, summarizeArticle } from "./summarizer.js";
 import { getDayRangeForTimeZone, getPreviousDateLabel, getTimeZoneDateLabel } from "../utils/timezone.js";
 
 const DEFAULT_CONCURRENCY = 3;
 const MIN_CONTENT_LENGTH = 50;
 
 function isDigestDebugEnabled() {
-  return process.env.DIGEST_DEBUG_LOGS === "true" || process.env.DIGEST_DEBUG_LOGS === "1";
+  return (
+    process.env.DIGEST_DEBUG_LOGS === "true" ||
+    process.env.DIGEST_DEBUG_LOGS === "1" ||
+    process.env.DEBUG === "true" ||
+    process.env.DEBUG === "1"
+  );
 }
 
 function getPresummarizeConcurrency() {
@@ -174,8 +179,9 @@ export async function presummarizeForUser(
   if (failed > 0) {
     results.forEach((r, i) => {
       if (r.status === "rejected") {
+        const article = articlesToProcess[i];
         console.warn(
-          `[presummarize] Failed${trace} articleId=${articlesToProcess[i].id} user=${userId} url=${articlesToProcess[i].url}:`,
+          `[presummarize] Failed${trace} article=${article.id} user=${userId} date=${dateLabel} language=${language} contentLength=${article.contentText?.length ?? 0} aiErrorCategory=${classifyAiError(r.reason)} url=${article.url}:`,
           r.reason instanceof Error ? r.reason.message : r.reason,
         );
       }
