@@ -138,25 +138,32 @@ function normalizeSummary(input: unknown): ArticleSummary {
   };
 }
 
+function getMaxInputChars() {
+  const raw = Number(process.env.AI_MAX_INPUT_CHARS ?? 0);
+  if (!Number.isFinite(raw) || raw < 0) return 0;
+  return Math.floor(raw);
+}
+
 export async function summarizeArticle(markdown: string, language: "zh" | "en" = "zh"): Promise<ArticleSummary> {
   const model = getModel();
   const promptConfig = PROMPTS[language] || PROMPTS.zh;
   const modelId = process.env.AI_MODEL || "gpt-4o-mini";
   const baseURL = process.env.AI_BASE_URL || "https://api.openai.com/v1";
 
-  // Truncate input to reduce token consumption — article openings carry the highest information density
-  const MAX_CONTENT_CHARS = 1500;
-  const truncated = markdown.length > MAX_CONTENT_CHARS ? markdown.slice(0, MAX_CONTENT_CHARS) : markdown;
+  const maxInputChars = getMaxInputChars();
+  const input = maxInputChars > 0 && markdown.length > maxInputChars
+    ? markdown.slice(0, maxInputChars)
+    : markdown;
 
   console.log(
-    `[summarizer] Starting AI summary language=${language} model=${modelId} baseURL=${baseURL} inputLength=${markdown.length} truncatedLength=${truncated.length}`,
+    `[summarizer] Starting AI summary language=${language} model=${modelId} baseURL=${baseURL} inputLength=${markdown.length} sentLength=${input.length} maxInputChars=${maxInputChars}`,
   );
 
   try {
     const { object } = await generateObject({
       model,
       system: promptConfig.system,
-      prompt: truncated,
+      prompt: input,
       schema: z.object({
         oneLiner: z.string().describe(promptConfig.schema.oneLiner),
         keyInsights: z.array(z.string()).length(3).describe(promptConfig.schema.keyInsights),
