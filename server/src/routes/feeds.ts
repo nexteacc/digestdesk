@@ -5,13 +5,11 @@ import { z } from "zod";
 import { getDb } from "../db/index.js";
 import { feeds, subscriptions } from "../db/schema.js";
 import { syncUserFeeds } from "../services/rss.js";
-import { executeDailyDigestJob } from "../services/digest-execution.js";
+import { queueInitialDigestForUser } from "../services/initial-digest-trigger.js";
 import type { Feed } from "../../../shared/types.js";
 import { getSubstackAdapter } from "../sources/factory.js";
 import { toAppError } from "../sources/app-error.js";
 import { getRequestUserId } from "../auth/user-context.js";
-import { getUserTimezone } from "../services/user-settings.js";
-import { getPreviousDateLabel, getTimeZoneDateLabel } from "../utils/timezone.js";
 
 const createFeedSchema = z.object({
   url: z.string().min(1, "请提供 url"),
@@ -38,19 +36,6 @@ const importFeedsSchema = z.object({
 
 export const feedsRouter = Router();
 const substackAdapter = getSubstackAdapter();
-
-async function triggerInitialDigestExecution(userId: string, logContext: string) {
-  const timezone = await getUserTimezone(userId);
-  const today = getTimeZoneDateLabel(new Date(), timezone);
-  const targetDate = getPreviousDateLabel(today);
-  console.log(`[${logContext}] Initial digest execution requested for user=${userId} date=${targetDate}`);
-  const digestId = await executeDailyDigestJob(userId, targetDate);
-  if (!digestId) {
-    console.log(`[${logContext}] Initial digest result empty for user=${userId} date=${targetDate}`);
-    return;
-  }
-  console.log(`[${logContext}] Initial digest generated for user=${userId} date=${targetDate} digestId=${digestId}`);
-}
 
 function toFeed(row: typeof feeds.$inferSelect): Feed {
   return {
@@ -126,7 +111,7 @@ feedsRouter.post("/", async (req, res) => {
           })
           .where(eq(subscriptions.id, existingSubscription.id));
 
-        void triggerInitialDigestExecution(userId, "feeds/create").catch((err) => {
+        void queueInitialDigestForUser(userId, { feedId: existing.id, logContext: "feeds/create" }).catch((err) => {
           console.error(`[feeds/create] Initial digest execution failed for reused feed=${existing.id}:`, err);
         });
 
@@ -142,7 +127,7 @@ feedsRouter.post("/", async (req, res) => {
         createdAt: new Date().toISOString(),
       });
 
-      void triggerInitialDigestExecution(userId, "feeds/create").catch((err) => {
+      void queueInitialDigestForUser(userId, { feedId: existing.id, logContext: "feeds/create" }).catch((err) => {
         console.error(`[feeds/create] Initial digest execution failed for existing feed=${existing.id}:`, err);
       });
 
@@ -177,7 +162,7 @@ feedsRouter.post("/", async (req, res) => {
 
     res.status(201).json(toFeed(feed));
 
-    void triggerInitialDigestExecution(userId, "feeds/create").catch((err) => {
+    void queueInitialDigestForUser(userId, { feedId: feed.id, logContext: "feeds/create" }).catch((err) => {
       console.error(`[feeds/create] Initial sync/digest failed for ${feed.name}:`, err);
     });
   } catch (err) {
@@ -322,7 +307,7 @@ feedsRouter.post("/import", async (req, res) => {
   if (created > 0) {
     (async () => {
       try {
-        await triggerInitialDigestExecution(userId, "feeds/import");
+        await queueInitialDigestForUser(userId, { logContext: "feeds/import" });
       } catch (e) {
         console.error(`[feeds/import] Initial digest execution failed:`, e);
       }

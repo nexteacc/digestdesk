@@ -41,7 +41,7 @@
 
 对应文件：
 
-- [`zbpack.web.json`](/Volumes/Sheng/AIcases/digestdesk/zbpack.web.json)
+- [`zbpack.web.json`](../zbpack.web.json)
 
 ### 3.2 Scheduler
 
@@ -52,7 +52,7 @@
 
 对应文件：
 
-- [`zbpack.scheduler.json`](/Volumes/Sheng/AIcases/digestdesk/zbpack.scheduler.json)
+- [`zbpack.scheduler.json`](../zbpack.scheduler.json)
 
 ## 4. 部署步骤
 

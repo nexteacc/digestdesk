@@ -7,9 +7,7 @@ import { feeds, subscriptions } from "../db/schema.js";
 import { toAppError } from "../sources/app-error.js";
 import type { SourceAdapter, SourceType } from "../sources/types.js";
 import { getRequestUserId } from "../auth/user-context.js";
-import { getUserTimezone } from "../services/user-settings.js";
-import { getPreviousDateLabel, getTimeZoneDateLabel } from "../utils/timezone.js";
-import { executeDailyDigestJob } from "../services/digest-execution.js";
+import { queueInitialDigestForUser } from "../services/initial-digest-trigger.js";
 
 interface SourceFeedRouterOptions {
   adapter: SourceAdapter;
@@ -26,21 +24,6 @@ function sanitizeUrl(url: string): string {
     .trim()
     .replace(/^`+|`+$/g, "")
     .replace(/[)\]:;.,]+$/g, "");
-}
-
-async function triggerInitialSyncAndDigest(userId: string, feedId: string, logPrefix: string) {
-  const timezone = await getUserTimezone(userId);
-  const today = getTimeZoneDateLabel(new Date(), timezone);
-  const targetDate = getPreviousDateLabel(today);
-  console.log(`${logPrefix} Initial digest execution requested for user=${userId} feed=${feedId} date=${targetDate}`);
-  const digestId = await executeDailyDigestJob(userId, targetDate);
-
-  if (!digestId) {
-    console.log(`${logPrefix} Initial digest result empty for user=${userId} feed=${feedId} date=${targetDate}`);
-    return;
-  }
-
-  console.log(`${logPrefix} Initial digest generated for user=${userId} feed=${feedId} date=${targetDate} digestId=${digestId}`);
 }
 
 export function createSourceFeedRouter(opts: SourceFeedRouterOptions): Router {
@@ -122,7 +105,10 @@ export function createSourceFeedRouter(opts: SourceFeedRouterOptions): Router {
             })
             .where(eq(subscriptions.id, existingSubscription.id));
 
-          void triggerInitialSyncAndDigest(userId, existing.id, logPrefix).catch((err) =>
+          void queueInitialDigestForUser(userId, {
+            feedId: existing.id,
+            logContext: logPrefix.replace(/^\[|\]$/g, ""),
+          }).catch((err) =>
             console.error(`${logPrefix} Initial sync/digest failed for reused subscription feed=${existing.id}:`, err),
           );
 
@@ -139,7 +125,10 @@ export function createSourceFeedRouter(opts: SourceFeedRouterOptions): Router {
           createdAt: now,
         });
 
-        void triggerInitialSyncAndDigest(userId, existing.id, logPrefix).catch((err) =>
+        void queueInitialDigestForUser(userId, {
+          feedId: existing.id,
+          logContext: logPrefix.replace(/^\[|\]$/g, ""),
+        }).catch((err) =>
           console.error(`${logPrefix} Initial sync/digest failed for newly linked existing feed=${existing.id}:`, err),
         );
 
@@ -171,7 +160,10 @@ export function createSourceFeedRouter(opts: SourceFeedRouterOptions): Router {
         });
       });
 
-      void triggerInitialSyncAndDigest(userId, id, logPrefix).catch((err) =>
+      void queueInitialDigestForUser(userId, {
+        feedId: id,
+        logContext: logPrefix.replace(/^\[|\]$/g, ""),
+      }).catch((err) =>
         console.error(`${logPrefix} Initial sync/digest failed for ${id}:`, err),
       );
 

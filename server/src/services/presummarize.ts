@@ -14,9 +14,9 @@
 import { and, eq, gte, inArray, isNull, lt } from "drizzle-orm";
 import pLimit from "p-limit";
 import { getDb } from "../db/index.js";
-import { articles, subscriptions } from "../db/schema.js";
-import { getUserSettingsMap } from "./user-settings.js";
-import { classifyAiError, summarizeArticle } from "./summarizer.js";
+import { articles, feeds, subscriptions } from "../db/schema.js";
+import { getUserSettingsMap, parseDigestSourceTypes } from "./user-settings.js";
+import { classifyAiError, getMaxInputChars, summarizeArticle } from "./summarizer.js";
 import { getDayRangeForTimeZone, getPreviousDateLabel, getTimeZoneDateLabel } from "../utils/timezone.js";
 
 const DEFAULT_CONCURRENCY = 3;
@@ -55,6 +55,7 @@ export async function presummarizeForUser(
   const settings = await getUserSettingsMap(userId);
   const language = (settings.digest_language as "zh" | "en") || "zh";
   const timezone = settings.timezone || "Asia/Shanghai";
+  const enabledSourceTypes = parseDigestSourceTypes(settings.digest_source_types);
 
   const todayLabel = getTimeZoneDateLabel(new Date(), timezone);
   const dateLabel = targetDate || getPreviousDateLabel(todayLabel);
@@ -62,8 +63,9 @@ export async function presummarizeForUser(
 
   // Find all feeds this user is subscribed to
   const subscribedFeeds = await db
-    .select({ feedId: subscriptions.feedId })
+    .select({ feedId: subscriptions.feedId, startedAt: subscriptions.startedAt, sourceType: feeds.sourceType })
     .from(subscriptions)
+    .innerJoin(feeds, eq(subscriptions.feedId, feeds.id))
     .where(and(eq(subscriptions.userId, userId), isNull(subscriptions.endedAt)));
 
   if (subscribedFeeds.length === 0) {
@@ -71,7 +73,16 @@ export async function presummarizeForUser(
     return;
   }
 
-  const feedIds = subscribedFeeds.map((r) => r.feedId);
+  const allowedFeeds = subscribedFeeds.filter((feed) => enabledSourceTypes.includes(feed.sourceType));
+  const feedIds = allowedFeeds.map((r) => r.feedId);
+  const subscriptionStartMap = new Map(allowedFeeds.map((feed) => [feed.feedId, feed.startedAt]));
+
+  if (feedIds.length === 0) {
+    console.log(
+      `[presummarize] Skip${trace} user=${userId} date=${dateLabel} reason=no_allowed_sources activeFeeds=${subscribedFeeds.length} enabledSources=${enabledSourceTypes.join(",")} durationMs=${Date.now() - startedAt}`,
+    );
+    return;
+  }
 
   // Fetch articles in the target date range for this user's feeds
   const articlesInRange = await db
@@ -97,9 +108,24 @@ export async function presummarizeForUser(
   let skippedShort = 0;
   let skippedCached = 0;
   let invalidCache = 0;
+  let skippedBeforeSubscription = 0;
+  let totalInputChars = 0;
+  let estimatedSentChars = 0;
+  let maxArticleInputChars = 0;
+  const maxInputChars = getMaxInputChars();
 
   // Keep only articles that need a summary: sufficient content + no valid cache
   const articlesToProcess = articlesInRange.filter((a) => {
+    const subscriptionStartedAt = subscriptionStartMap.get(a.feedId);
+    if (subscriptionStartedAt && a.publishedAt < subscriptionStartedAt) {
+      skippedBeforeSubscription += 1;
+      if (debug) {
+        console.log(
+          `[presummarize] Article skip${trace} user=${userId} date=${dateLabel} article=${a.id} feed=${a.feedId} publishedAt=${a.publishedAt} startedAt=${subscriptionStartedAt} reason=before_subscription url=${a.url}`,
+        );
+      }
+      return false;
+    }
     const contentLength = a.contentText?.length ?? 0;
     if (contentLength < MIN_CONTENT_LENGTH) {
       skippedShort += 1;
@@ -134,16 +160,19 @@ export async function presummarizeForUser(
         `[presummarize] Article queued${trace} user=${userId} date=${dateLabel} article=${a.id} feed=${a.feedId} publishedAt=${a.publishedAt} contentLength=${contentLength} language=${language} url=${a.url}`,
       );
     }
+    totalInputChars += contentLength;
+    estimatedSentChars += maxInputChars > 0 ? Math.min(contentLength, maxInputChars) : contentLength;
+    maxArticleInputChars = Math.max(maxArticleInputChars, contentLength);
     return true;
   });
 
   console.log(
-    `[presummarize] Plan${trace} user=${userId} date=${dateLabel} language=${language} timezone=${timezone} range=${startTime}..${endTime} feeds=${feedIds.length} articlesInRange=${articlesInRange.length} toProcess=${articlesToProcess.length} skippedShort=${skippedShort} skippedCached=${skippedCached} invalidCache=${invalidCache}`,
+    `[presummarize] Plan${trace} user=${userId} date=${dateLabel} language=${language} timezone=${timezone} range=${startTime}..${endTime} feeds=${feedIds.length}/${subscribedFeeds.length} enabledSources=${enabledSourceTypes.join(",")} articlesInRange=${articlesInRange.length} toProcess=${articlesToProcess.length} skippedBeforeSubscription=${skippedBeforeSubscription} skippedShort=${skippedShort} skippedCached=${skippedCached} invalidCache=${invalidCache} totalInputChars=${totalInputChars} estimatedSentChars=${estimatedSentChars} maxArticleInputChars=${maxArticleInputChars} maxInputChars=${maxInputChars}`,
   );
 
   if (articlesToProcess.length === 0) {
     console.log(
-      `[presummarize] Complete${trace} user=${userId} date=${dateLabel} language=${language} succeeded=0 failed=0 durationMs=${Date.now() - startedAt}`,
+      `[presummarize] Complete${trace} user=${userId} date=${dateLabel} language=${language} aiRequests=0 succeeded=0 failed=0 totalInputChars=0 estimatedSentChars=0 maxArticleInputChars=0 maxInputChars=${maxInputChars} durationMs=${Date.now() - startedAt}`,
     );
     return;
   }
@@ -189,6 +218,6 @@ export async function presummarizeForUser(
   }
 
   console.log(
-    `[presummarize] Complete${trace} user=${userId} date=${dateLabel} language=${language} succeeded=${succeeded} failed=${failed} durationMs=${Date.now() - startedAt}`,
+    `[presummarize] Complete${trace} user=${userId} date=${dateLabel} language=${language} aiRequests=${articlesToProcess.length} succeeded=${succeeded} failed=${failed} totalInputChars=${totalInputChars} estimatedSentChars=${estimatedSentChars} maxArticleInputChars=${maxArticleInputChars} maxInputChars=${maxInputChars} durationMs=${Date.now() - startedAt}`,
   );
 }

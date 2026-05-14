@@ -138,7 +138,7 @@ function normalizeSummary(input: unknown): ArticleSummary {
   };
 }
 
-function getMaxInputChars() {
+export function getMaxInputChars() {
   const raw = Number(process.env.AI_MAX_INPUT_CHARS ?? 0);
   if (!Number.isFinite(raw) || raw < 0) return 0;
   return Math.floor(raw);

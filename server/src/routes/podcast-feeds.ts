@@ -7,9 +7,7 @@ import { feeds, subscriptions } from "../db/schema.js";
 import { getPodcastAdapter } from "../sources/factory.js";
 import { getRequestUserId } from "../auth/user-context.js";
 import { searchPodcasts, verifyPodcastFeed } from "../services/podcast-discovery.js";
-import { executeDailyDigestJob } from "../services/digest-execution.js";
-import { getPreviousDateLabel, getTimeZoneDateLabel } from "../utils/timezone.js";
-import { getUserTimezone } from "../services/user-settings.js";
+import { queueInitialDigestForUser } from "../services/initial-digest-trigger.js";
 import { toAppError } from "../sources/app-error.js";
 
 const searchSchema = z.object({
@@ -30,21 +28,6 @@ function sanitizeUrl(url: string): string {
     .trim()
     .replace(/^`+|`+$/g, "")
     .replace(/[)\]:;.,]+$/g, "");
-}
-
-async function triggerInitialSyncAndDigest(userId: string, feedId: string) {
-  const timezone = await getUserTimezone(userId);
-  const today = getTimeZoneDateLabel(new Date(), timezone);
-  const targetDate = getPreviousDateLabel(today);
-  console.log(`[podcast] Initial digest execution requested for user=${userId} feed=${feedId} date=${targetDate}`);
-  const digestId = await executeDailyDigestJob(userId, targetDate);
-
-  if (!digestId) {
-    console.log(`[podcast] Initial digest result empty for user=${userId} feed=${feedId} date=${targetDate}`);
-    return;
-  }
-
-  console.log(`[podcast] Initial digest generated for user=${userId} feed=${feedId} date=${targetDate} digestId=${digestId}`);
 }
 
 export const podcastFeedsRouter = Router();
@@ -123,7 +106,7 @@ podcastFeedsRouter.post("/", async (req, res) => {
           .set({ startedAt: now, endedAt: null })
           .where(eq(subscriptions.id, existingSubscription.id));
 
-        void triggerInitialSyncAndDigest(userId, existing.id).catch((error) =>
+        void queueInitialDigestForUser(userId, { feedId: existing.id, logContext: "podcast" }).catch((error) =>
           console.error(`[podcast] Initial sync/digest failed for reused feed=${existing.id}:`, error),
         );
 
@@ -140,7 +123,7 @@ podcastFeedsRouter.post("/", async (req, res) => {
         createdAt: now,
       });
 
-      void triggerInitialSyncAndDigest(userId, existing.id).catch((error) =>
+      void queueInitialDigestForUser(userId, { feedId: existing.id, logContext: "podcast" }).catch((error) =>
         console.error(`[podcast] Initial sync/digest failed for existing feed=${existing.id}:`, error),
       );
 
@@ -172,7 +155,7 @@ podcastFeedsRouter.post("/", async (req, res) => {
       });
     });
 
-    void triggerInitialSyncAndDigest(userId, id).catch((error) =>
+    void queueInitialDigestForUser(userId, { feedId: id, logContext: "podcast" }).catch((error) =>
       console.error(`[podcast] Initial sync/digest failed for new feed=${id}:`, error),
     );
 

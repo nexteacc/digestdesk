@@ -1,29 +1,26 @@
+# AGENTS.md
 
+## Scope
+DigestDesk is a React/Vite + Express/Postgres reading workflow app. Keep this file for agent-only operating rules; use README and docs as the human-facing source of truth.
 
-## Project overview
-Digestdesk project workspace. Implement features and fixes as needed and deliver runnable results.
+## Commands
+Use pnpm: `pnpm dev`, `pnpm build`, `pnpm --filter substack-digest-server build`, `pnpm --filter substack-digest-server dev`, `pnpm --filter substack-digest-server dev:scheduler`, `pnpm lint`.
+No test script is defined. If tests are added, follow existing package scripts and document the command here.
 
-## Build and test commands
-Use pnpm as the package manager. Commands are defined in package.json at the repo root and in server/package.json.
+## Non-Obvious Rules
+- User-facing, manual, and scheduled digest generation must use `executeDailyDigestJob` so feed sync, pre-summarization, and digest assembly stay consistent.
+- Avoid new route-level direct calls to `generateDaily` unless intentionally bypassing sync and pre-summary behavior.
+- Scheduled work belongs to the `scheduler` service and `digest_jobs`; do not move cron-style dispatch back into the web service without an explicit architecture change.
 
-- Full build: `pnpm build`
-- Server-only build: `pnpm --filter substack-digest-server build`
-- Lint: `pnpm lint`
+## Docs Map
+- Human entry point: `README.md`
+- AI system context, invariants, data boundaries, API chains: `docs/context.md`
+- Deployment, scheduler, env vars: `docs/operations.md`
+- Project history, diagnostics, decisions, and follow-up checks: `docs/history.md`
 
-No test script is defined; follow existing scripts if tests are added.
-
-## Code style guidelines
-Follow existing code style, naming, and structure; prefer reusing existing libraries and tools.
-
-Digest generation should use the unified execution path (`executeDailyDigestJob`) for user-facing/manual/scheduled generation so feed sync, pre-summarization, and digest assembly stay consistent. Avoid adding new route-level direct calls to `generateDaily` unless intentionally bypassing sync and pre-summary behavior.
-
-
-## Security considerations
-Do not write or output secrets. Do not log or print sensitive data.
-
-## Extra instructions
-Read relevant file context before edits and avoid unnecessary new files.
-Before proposing or using external platforms, deployment features, third-party services, or developer tools, first verify the capability through explicit research or documentation lookup. Do not assume a platform feature exists or is available on the user's plan without checking first.
-
-## Dev environment tips
-Development environment is driven by repo configuration files (e.g., package.json scripts, tsconfig, vite config, and .env files). macOS is the local OS for this workspace.
+## Boundaries
+- Read relevant file context before edits and avoid unnecessary new files.
+- Before non-trivial changes, read the latest relevant section of `docs/history.md`.
+- Follow existing code style, naming, libraries, and structure.
+- Do not write, output, or log secrets.
+- Before proposing external platforms, deployment features, third-party services, or developer tools, verify the capability through explicit research or documentation lookup.

@@ -3,7 +3,7 @@ import { eq, and, gte, lt, inArray, isNull } from "drizzle-orm";
 import pLimit from "p-limit";
 import { getDb } from "../db/index.js";
 import { feeds, articles, digests, digestItems, subscriptions, userSettings } from "../db/schema.js";
-import { classifyAiError, summarizeArticle } from "./summarizer.js";
+import { classifyAiError, getMaxInputChars, summarizeArticle } from "./summarizer.js";
 import { getDayRangeForTimeZone, getPreviousDateLabel, getTimeZoneDateLabel } from "../utils/timezone.js";
 import { parseDigestSourceTypes } from "./user-settings.js";
 
@@ -194,6 +194,10 @@ async function generateWithId(
   let summaryGenerated = 0;
   let summaryTooShort = 0;
   let summaryFallbacks = 0;
+  let totalAiInputChars = 0;
+  let estimatedAiSentChars = 0;
+  let maxAiArticleInputChars = 0;
+  const maxInputChars = getMaxInputChars();
 
   type ItemResult = {
     articleId: string;
@@ -277,6 +281,9 @@ async function generateWithId(
         }
       }
       summaryCacheMisses += 1;
+      totalAiInputChars += contentText.length;
+      estimatedAiSentChars += maxInputChars > 0 ? Math.min(contentText.length, maxInputChars) : contentText.length;
+      maxAiArticleInputChars = Math.max(maxAiArticleInputChars, contentText.length);
 
       try {
         const summary = await summarizeArticle(contentText, language);
@@ -369,7 +376,7 @@ async function generateWithId(
   });
 
   console.log(
-    `[digest] Daily digest updated${trace} digestId=${digestId} user=${userId} date=${dateLabel} items=${items.length} summaryCacheHits=${summaryCacheHits} summaryCacheMisses=${summaryCacheMisses} summaryCacheInvalid=${summaryCacheInvalid} summaryGenerated=${summaryGenerated} summaryTooShort=${summaryTooShort} summaryFallbacks=${summaryFallbacks} fallbackCount=${fallbackCount} emptyInsightsCount=${emptyInsightsCount} durationMs=${Date.now() - startedAt}`,
+    `[digest] Daily digest updated${trace} digestId=${digestId} user=${userId} date=${dateLabel} items=${items.length} summaryCacheHits=${summaryCacheHits} summaryCacheMisses=${summaryCacheMisses} summaryCacheInvalid=${summaryCacheInvalid} summaryGenerated=${summaryGenerated} summaryTooShort=${summaryTooShort} summaryFallbacks=${summaryFallbacks} aiRequests=${summaryCacheMisses} totalAiInputChars=${totalAiInputChars} estimatedAiSentChars=${estimatedAiSentChars} maxAiArticleInputChars=${maxAiArticleInputChars} maxInputChars=${maxInputChars} fallbackCount=${fallbackCount} emptyInsightsCount=${emptyInsightsCount} durationMs=${Date.now() - startedAt}`,
   );
   return digestId;
 }
