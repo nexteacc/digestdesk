@@ -107,35 +107,142 @@ const ArticleSummarySchema = z.object({
 
 export type ArticleSummary = z.infer<typeof ArticleSummarySchema>;
 
+const SUMMARY_LIMITS = {
+  zh: {
+    oneLinerChars: 70,
+    keyInsightChars: 70,
+    minInsightChars: 10,
+  },
+  en: {
+    oneLinerChars: 120,
+    keyInsightChars: 140,
+    minInsightChars: 24,
+  },
+} as const;
+
 const PROMPTS = {
   zh: {
     system: `你是一名专业的中文编辑，为 DigestDesk 产品工作。
 任务要求：
 1. **语言统一**: 你的核心任务是阅读任何语言的文章，并始终以【简体中文】输出高质量的结构化摘要。
-2. **客观去噪**: 剔除客套话、情绪表达和背景铺垫，只保留核心信息。`,
+2. **客观去噪**: 剔除客套话、情绪表达和背景铺垫，只保留核心信息。
+3. **长度纪律**: 输出必须短，禁止把整段原文、列表或长句塞进任一字段。`,
     schema: {
       oneLiner: "用一个完整的、不超过30个字的短句，精准总结文章的核心结论。确保句子通顺、信息完整。",
-      keyInsights: "3个高价值的信息点。每个点必须包含具体的数据、方法或洞察。禁止废话。",
+      keyInsights: "正好3条关键洞察；每条不超过45个汉字；每条只表达一个具体数据、方法或结论。禁止长段落、原文堆砌、占位符和废话。",
     }
   },
   en: {
     system: `You are a professional editor working for DigestDesk.
 Task Requirements:
 1. **Language Consistency**: Your core task is to read articles in any language and always output high-quality structured summaries in 【English】.
-2. **Objective De-noising**: Remove pleasantries, emotional expressions, and background padding, keeping only the core information.`,
+2. **Objective De-noising**: Remove pleasantries, emotional expressions, and background padding, keeping only the core information.
+3. **Length Discipline**: Keep every field short. Never paste full paragraphs, long lists, or source fragments into any field.`,
     schema: {
       oneLiner: "A complete sentence (max 20 words) that accurately summarizes the core conclusion of the article.",
-      keyInsights: "3 high-value insight points. Each point must contain specific data, methods, or insights. No fluff.",
+      keyInsights: "Exactly 3 concise takeaways. Each item must be 8-24 words, contain one specific data point, method, or conclusion, and avoid placeholders or source-text dumping.",
     }
   }
 };
 
-function normalizeSummary(input: unknown): ArticleSummary {
+function compactSummaryText(value: string) {
+  return value
+    .replace(/\s+/g, " ")
+    .replace(/^\s*(?:[-•*·]|\d+[.)、]|bullet:)\s*/i, "")
+    .trim();
+}
+
+function isLowQualitySummaryText(value: string) {
+  const text = value.trim();
+  if (!text) return true;
+  if (!/[A-Za-z\u4e00-\u9fff]/.test(text)) return true;
+  if (/^the[.!?。！？….\s]*$/i.test(text)) return true;
+  if (/^\.{2,}$|^…+$/.test(text)) return true;
+  if (/(\?{3,}|？{3,})/.test(text)) return true;
+  if (/[.…]{2,}\s*$/.test(text) && text.replace(/[^\p{L}\p{N}]/gu, "").length < 12) return true;
+  return text.replace(/[^\p{L}\p{N}]/gu, "").length < 6;
+}
+
+function assertSummaryText(value: string, field: "oneLiner" | "keyInsight", language: "zh" | "en") {
+  const limits = SUMMARY_LIMITS[language] ?? SUMMARY_LIMITS.zh;
+  const maxChars = field === "oneLiner" ? limits.oneLinerChars : limits.keyInsightChars;
+  const minChars = field === "oneLiner" ? 6 : limits.minInsightChars;
+
+  if (isLowQualitySummaryText(value)) {
+    throw new Error(`low_quality_${field}`);
+  }
+  if (value.length < minChars) {
+    throw new Error(`too_short_${field}`);
+  }
+  if (value.length > maxChars) {
+    throw new Error(`too_long_${field}`);
+  }
+}
+
+function normalizeSummary(input: unknown, language: "zh" | "en" = "zh"): ArticleSummary {
   const parsed = ArticleSummarySchema.parse(input);
+  const oneLiner = compactSummaryText(parsed.oneLiner || "");
+  const keyInsights = parsed.keyInsights.map(compactSummaryText);
+
+  assertSummaryText(oneLiner, "oneLiner", language);
+  keyInsights.forEach((insight) => assertSummaryText(insight, "keyInsight", language));
+
   return {
-    oneLiner: parsed.oneLiner || "暂无摘要",
-    keyInsights: parsed.keyInsights,
+    oneLiner,
+    keyInsights,
   };
+}
+
+export function parseCachedArticleSummary(input: unknown, language: "zh" | "en" = "zh"): ArticleSummary | null {
+  try {
+    return normalizeSummary(input, language);
+  } catch {
+    return null;
+  }
+}
+
+function buildArticleSummaryGenerationSchema(language: "zh" | "en") {
+  const limits = SUMMARY_LIMITS[language] ?? SUMMARY_LIMITS.zh;
+  return z.object({
+    oneLiner: z
+      .string()
+      .min(6)
+      .max(limits.oneLinerChars)
+      .describe(PROMPTS[language].schema.oneLiner),
+    keyInsights: z
+      .array(
+        z
+          .string()
+          .min(limits.minInsightChars)
+          .max(limits.keyInsightChars)
+          .describe(PROMPTS[language].schema.keyInsights),
+      )
+      .length(3)
+      .describe(PROMPTS[language].schema.keyInsights),
+  });
+}
+
+function buildSummarySystemPrompt(language: "zh" | "en", retry: boolean) {
+  const promptConfig = PROMPTS[language] || PROMPTS.zh;
+  if (!retry) return promptConfig.system;
+  const retryInstructions = language === "en"
+    ? `Previous output failed length or quality validation. Regenerate and strictly follow:
+1. oneLiner must be a complete short sentence, with no ellipses, question-mark placeholders, or fragments.
+2. keyInsights must contain exactly 3 independent, specific, concise items.
+3. Do not paste long source paragraphs, table-of-contents text, list dumps, or meaningless characters.`
+    : `上一轮输出未通过长度或质量校验。请重新生成，必须满足：
+1. oneLiner 是完整短句，不要省略号、问号占位或残片。
+2. keyInsights 正好 3 条，每条独立、具体、短。
+3. 不要粘贴原文长段、目录、列表堆砌或无意义字符。`;
+
+  return `${promptConfig.system}
+
+${retryInstructions}`;
+}
+
+function shouldRetrySummaryGeneration(error: unknown) {
+  const category = classifyAiError(error);
+  return !["quota", "rate_limit", "auth", "timeout", "network"].includes(category);
 }
 
 export function getMaxInputChars() {
@@ -256,7 +363,6 @@ function buildMarkdownSummaryInput(markdown: string, maxChars: number): string {
 
 export async function summarizeArticle(markdown: string, language: "zh" | "en" = "zh"): Promise<ArticleSummary> {
   const model = getModel();
-  const promptConfig = PROMPTS[language] || PROMPTS.zh;
   const modelId = process.env.AI_MODEL || "gpt-4o-mini";
   const baseURL = process.env.AI_BASE_URL || "https://api.openai.com/v1";
 
@@ -267,21 +373,30 @@ export async function summarizeArticle(markdown: string, language: "zh" | "en" =
     `[summarizer] Starting AI summary language=${language} model=${modelId} baseURL=${baseURL} inputLength=${markdown.length} sentLength=${input.length} maxInputChars=${maxInputChars}`,
   );
 
-  try {
-    const { object } = await generateObject({
-      model,
-      system: promptConfig.system,
-      prompt: input,
-      schema: z.object({
-        oneLiner: z.string().describe(promptConfig.schema.oneLiner),
-        keyInsights: z.array(z.string()).length(3).describe(promptConfig.schema.keyInsights),
-      }),
-    });
-    const result = normalizeSummary(object);
-    console.log(`[summarizer] AI summary complete. One-liner: ${result.oneLiner.slice(0, 50)}...`);
-    return result;
-  } catch (err) {
-    console.error("[summarizer] AI summary failed:", summarizeErrorMeta(err));
-    throw err;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const { object } = await generateObject({
+        model,
+        system: buildSummarySystemPrompt(language, attempt > 1),
+        prompt: input,
+        schema: buildArticleSummaryGenerationSchema(language),
+      });
+      const result = normalizeSummary(object, language);
+      console.log(
+        `[summarizer] AI summary complete attempt=${attempt}. One-liner: ${result.oneLiner.slice(0, 50)}...`,
+      );
+      return result;
+    } catch (err) {
+      lastError = err;
+      const meta = summarizeErrorMeta(err);
+      if (attempt < 2 && shouldRetrySummaryGeneration(err)) {
+        console.warn("[summarizer] AI summary failed validation; retrying once:", meta);
+        continue;
+      }
+      console.error("[summarizer] AI summary failed:", meta);
+      throw err;
+    }
   }
+  throw lastError;
 }

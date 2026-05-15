@@ -16,7 +16,7 @@ import pLimit from "p-limit";
 import { getDb } from "../db/index.js";
 import { articles, feeds, subscriptions } from "../db/schema.js";
 import { getUserSettingsMap, parseDigestSourceTypes } from "./user-settings.js";
-import { classifyAiError, getMaxInputChars, summarizeArticle } from "./summarizer.js";
+import { classifyAiError, getMaxInputChars, parseCachedArticleSummary, summarizeArticle } from "./summarizer.js";
 import { getDayRangeForTimeZone, getPreviousDateLabel, getTimeZoneDateLabel } from "../utils/timezone.js";
 
 const DEFAULT_CONCURRENCY = 3;
@@ -139,8 +139,8 @@ export async function presummarizeForUser(
     const cached = language === "zh" ? a.summaryZh : a.summaryEn;
     if (cached) {
       try {
-        const parsed = JSON.parse(cached);
-        if (parsed.oneLiner && parsed.keyInsights) {
+        const parsed = parseCachedArticleSummary(JSON.parse(cached), language);
+        if (parsed) {
           skippedCached += 1;
           if (debug) {
             console.log(

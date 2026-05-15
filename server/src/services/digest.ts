@@ -3,7 +3,7 @@ import { eq, and, gte, lt, inArray, isNull } from "drizzle-orm";
 import pLimit from "p-limit";
 import { getDb } from "../db/index.js";
 import { feeds, articles, digests, digestItems, subscriptions, userSettings } from "../db/schema.js";
-import { classifyAiError, getMaxInputChars, summarizeArticle } from "./summarizer.js";
+import { classifyAiError, getMaxInputChars, parseCachedArticleSummary, summarizeArticle } from "./summarizer.js";
 import { getDayRangeForTimeZone, getPreviousDateLabel, getTimeZoneDateLabel } from "../utils/timezone.js";
 import { parseDigestSourceTypes } from "./user-settings.js";
 
@@ -256,8 +256,8 @@ async function generateWithId(
       const cachedField = language === "zh" ? article.summaryZh : article.summaryEn;
       if (cachedField) {
         try {
-          const cached = JSON.parse(cachedField);
-          if (cached.oneLiner && cached.keyInsights) {
+          const cached = parseCachedArticleSummary(JSON.parse(cachedField), language);
+          if (cached) {
             summaryCacheHits += 1;
             console.log(
               `[digest] Summary cache hit${trace} article=${article.id} sourceType=${sourceType} language=${language} insights=${Array.isArray(cached.keyInsights) ? cached.keyInsights.length : "unknown"} url=${article.url}`,
@@ -267,7 +267,7 @@ async function generateWithId(
           summaryCacheInvalid += 1;
           if (debug) {
             console.warn(
-              `[digest] Summary cache invalid${trace} article=${article.id} sourceType=${sourceType} language=${language} reason=missing_fields url=${article.url}`,
+              `[digest] Summary cache invalid${trace} article=${article.id} sourceType=${sourceType} language=${language} reason=failed_quality_or_length_validation url=${article.url}`,
             );
           }
         } catch {
