@@ -144,6 +144,116 @@ export function getMaxInputChars() {
   return Math.floor(raw);
 }
 
+type MarkdownBlock = {
+  index: number;
+  text: string;
+  score: number;
+};
+
+const HIGH_SIGNAL_RE =
+  /(conclusion|takeaway|summary|tl;dr|why it matters|key point|in short|bottom line|结论|要点|总结|关键|影响|数据|建议|原因|重点)/i;
+const LOW_SIGNAL_RE =
+  /(subscribe|unsubscribe|leave a comment|share this|read more|sponsor|sponsored|advertisement|copyright|all rights reserved|推荐阅读|相关阅读|点击阅读|加入会员|订阅|退订|广告|赞助)/i;
+const DATA_RE = /(\d[\d,.]*\s?%|\$[\d,.]+|€[\d,.]+|¥[\d,.]+|[\d,.]+\s?(million|billion|万|亿|k|m|bn)\b|\b20\d{2}\b)/i;
+
+function splitMarkdownBlocks(markdown: string): string[] {
+  return markdown
+    .replace(/\r\n/g, "\n")
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+}
+
+function scoreMarkdownBlock(block: string, index: number, total: number): number {
+  const firstLine = block.split("\n", 1)[0] ?? "";
+  let score = 0;
+
+  if (/^#{1,6}\s+\S/.test(firstLine)) score += 8;
+  if (/^\s*(?:[-*+]\s+|\d+[.)]\s+)/m.test(block)) score += 5;
+  if (HIGH_SIGNAL_RE.test(block)) score += 5;
+  if (DATA_RE.test(block)) score += 4;
+  if (/^>\s+/.test(firstLine)) score += 2;
+  if (block.length >= 180 && block.length <= 1200) score += 1;
+
+  const relativePosition = total <= 1 ? 0 : index / (total - 1);
+  if (relativePosition <= 0.18) score += 3;
+  if (relativePosition >= 0.82) score += 3;
+  if (/```/.test(block)) score -= 3;
+  if (LOW_SIGNAL_RE.test(block)) score -= 8;
+
+  return score;
+}
+
+function addBlock(
+  selected: Map<number, string>,
+  block: MarkdownBlock,
+  used: { value: number },
+  maxChars: number,
+) {
+  if (selected.has(block.index)) return;
+  const separatorLength = selected.size === 0 ? 0 : 2;
+  const nextLength = used.value + separatorLength + block.text.length;
+  if (nextLength > maxChars) return;
+  selected.set(block.index, block.text);
+  used.value = nextLength;
+}
+
+function buildMarkdownSummaryInput(markdown: string, maxChars: number): string {
+  if (maxChars <= 0 || markdown.length <= maxChars) return markdown;
+  if (maxChars < 2000) return markdown.slice(0, maxChars);
+
+  const blocks = splitMarkdownBlocks(markdown);
+  if (blocks.length <= 1) return markdown.slice(0, maxChars);
+
+  const scored = blocks.map((text, index) => ({
+    index,
+    text,
+    score: scoreMarkdownBlock(text, index, blocks.length),
+  }));
+
+  const selected = new Map<number, string>();
+  const used = { value: 0 };
+  const headBudget = Math.floor(maxChars * 0.38);
+  const tailBudget = Math.floor(maxChars * 0.24);
+
+  for (const block of scored) {
+    if (used.value >= headBudget) break;
+    if (block.score < -2) continue;
+    addBlock(selected, block, used, maxChars);
+  }
+
+  const tailUsed = { value: 0 };
+  for (const block of [...scored].reverse()) {
+    if (tailUsed.value >= tailBudget) break;
+    if (block.score < -2) continue;
+    const before = used.value;
+    addBlock(selected, block, used, maxChars);
+    if (used.value !== before) {
+      tailUsed.value += (tailUsed.value === 0 ? 0 : 2) + block.text.length;
+    }
+  }
+
+  for (const block of scored.filter((block) => /^#{1,6}\s+\S/.test(block.text.split("\n", 1)[0] ?? ""))) {
+    addBlock(selected, block, used, maxChars);
+  }
+
+  const remainingByScore = scored
+    .filter((block) => !selected.has(block.index) && block.score > 0)
+    .sort((a, b) => b.score - a.score || a.index - b.index);
+
+  for (const block of remainingByScore) {
+    addBlock(selected, block, used, maxChars);
+    if (used.value >= maxChars * 0.98) break;
+  }
+
+  const result = [...selected.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([, text]) => text)
+    .join("\n\n");
+
+  return result.length > 0 ? result : markdown.slice(0, maxChars);
+}
+
 export async function summarizeArticle(markdown: string, language: "zh" | "en" = "zh"): Promise<ArticleSummary> {
   const model = getModel();
   const promptConfig = PROMPTS[language] || PROMPTS.zh;
@@ -151,9 +261,7 @@ export async function summarizeArticle(markdown: string, language: "zh" | "en" =
   const baseURL = process.env.AI_BASE_URL || "https://api.openai.com/v1";
 
   const maxInputChars = getMaxInputChars();
-  const input = maxInputChars > 0 && markdown.length > maxInputChars
-    ? markdown.slice(0, maxInputChars)
-    : markdown;
+  const input = buildMarkdownSummaryInput(markdown, maxInputChars);
 
   console.log(
     `[summarizer] Starting AI summary language=${language} model=${modelId} baseURL=${baseURL} inputLength=${markdown.length} sentLength=${input.length} maxInputChars=${maxInputChars}`,
