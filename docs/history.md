@@ -483,6 +483,127 @@ AI_MAX_INPUT_CHARS=200000
 - 对长文抽样检查摘要是否仍能覆盖结论和关键数据。
 - 如果质量不足，优先调整 block 打分和预算比例，而不是直接把上限恢复到 200000。
 
+### 2026-05-16 跟踪清单
+
+上线 `AI_MAX_INPUT_CHARS=12000` 与 Markdown 结构化输入压缩后，下一次评估按以下顺序检查。
+
+1. 确认运行时配置：
+
+```text
+web       AI_MAX_INPUT_CHARS=12000
+scheduler AI_MAX_INPUT_CHARS=12000
+```
+
+重点确认 `scheduler`，因为定时日报主要由 scheduler 执行。
+
+2. 对比 OpenRouter 1 Day 成本：
+
+| 指标 | 2026-05-15 基线 | 2026-05-16 观察 |
+|---|---:|---:|
+| Requests | 249 | 待填 |
+| Tokens | 1.31M | 待填 |
+| Spend | $0.191 | 待填 |
+| tokens / request | ~5,261 | 待填 |
+| tokens / unique article | ~6,453 | 待填 |
+| cost / unique article | ~$0.00094 | 待填 |
+
+3. 对比生产库实际处理规模：
+
+```sql
+-- 按 target date 查成功/跳过/失败 job
+select target_date, status, count(*)
+from digest_jobs
+where target_date >= '2026-05-15'
+group by target_date, status
+order by target_date desc, status;
+
+-- 按 digest date 查 item 数
+select d.date,
+       count(distinct d.id) as digests,
+       count(di.id) as items
+from digests d
+left join digest_items di on di.digest_id = d.id
+where d.date >= '2026-05-15'
+group by d.date
+order by d.date desc;
+```
+
+4. 看日志指标：
+
+```text
+[summarizer] inputLength=... sentLength=... maxInputChars=...
+[presummarize] aiRequests=... estimatedSentChars=...
+[digest] summaryCacheHits=... summaryCacheMisses=... aiRequests=...
+```
+
+预期：
+
+- `sentLength` 不超过 12000。
+- `estimatedSentChars / unique article` 明显低于 2026-05-15。
+- `digest aiRequests` 仍应接近 0，说明日报组装主要命中缓存。
+
+5. 抽样检查摘要质量：
+
+- RSS 长文是否保留核心结论。
+- Substack 长文是否保留关键数据、列表和结尾观点。
+- `oneLiner` 是否具体，不只是泛泛描述。
+- `keyInsights` 是否仍有数据、方法或洞察。
+- 中文/英文输出语言是否正确。
+
+判断：
+
+- 成本明显下降且摘要质量可接受：保持 `AI_MAX_INPUT_CHARS=12000`。
+- 成本下降但长文摘要明显变差：先调 block 打分和预算比例，再考虑上调到 `16000`。
+- 成本没有明显下降：检查运行时变量是否未生效、OpenRouter 统计窗口是否混入其他请求。
+- Requests 异常升高：继续排查重复触发、fallback、手动刷新和失败重试。
+
+### 2026-05-16 晚间实现：并发预摘要去重与请求数对账日志
+
+基于 2026-05-15 日报对账，确认好消息：
+
+- 单用户看到的 42 篇日报内容已完整生成，没有摘要缺失。
+- OpenRouter token 从 2026-05-14 基线的约 1.31M 降到约 877K，说明 `AI_MAX_INPUT_CHARS=12000` 与 Markdown 结构化压缩已生效。
+
+进一步查 scheduler runtime logs 后，定位到 requests 偏高的两个主要来源：
+
+- 两个中文用户的 2026-05-15 job 在 `2026-05-16T01:05:00Z` 同时启动，分别生成 42 和 45 篇，且两份日报有 32 篇文章重叠。此前 `presummarizeForUser()` 按用户独立执行，可能在缓存写入前并发总结同一篇 `article + language`。
+- 部分模型输出未通过结构化 schema 校验，触发 `summarizeArticle()` 内部第二次尝试；日志中可见 `AI summary failed validation; retrying once`、`attempt=2`、`No object generated: response did not match schema`。
+
+本次改动：
+
+- `presummarize.ts` 增加进程内 `articleId + language` in-flight 去重锁。并发任务遇到同一文章同一语言时等待首个任务完成，再重新读取缓存；如果缓存有效则不再调用 AI。
+- `summarizer.ts` 增加 `onAttempt` 回调，用于统计每篇摘要实际模型请求次数。
+- `presummarize.ts` 完成日志新增 `articlesToProcess`、`modelRequests`、`retryRequests`、`dedupedWaits`、`cacheHitsAfterWait`。
+- `digest.ts` fallback 摘要路径也把 `aiRequests` 改成实际模型请求数，并新增 `modelRequests`、`retryRequests`，避免把文章数误当 OpenRouter 请求数。
+
+验证：
+
+```text
+pnpm --filter substack-digest-server build
+pnpm lint
+```
+
+2026-05-17 检查重点：
+
+1. OpenRouter Activity：
+   - Requests 是否更接近全系统 `article + language` 唯一摘要数。
+   - Tokens 是否继续低于 2026-05-14 的 1.31M 基线。
+   - Spend 是否随 requests 回落。
+
+2. scheduler 日志：
+
+```text
+[presummarize] Complete ... articlesToProcess=... aiRequests=... modelRequests=... retryRequests=... dedupedWaits=... cacheHitsAfterWait=...
+[digest] Daily digest updated ... summaryCacheHits=... summaryCacheMisses=... aiRequests=... retryRequests=...
+```
+
+预期：
+
+- 有重叠用户并发时，`dedupedWaits` 和 `cacheHitsAfterWait` 应大于 0。
+- `modelRequests - articlesToProcess` 主要应由 `retryRequests` 解释。
+- `digest aiRequests` 仍应接近 0，说明日报组装阶段基本命中缓存。
+- 如果 `modelRequests` 仍明显高于 `articlesToProcess + retryRequests`，再考虑数据库级 `article + language` 锁，覆盖 web 与 scheduler 跨进程并发。
+
 ---
 
 ### 四种数据源的完整链路

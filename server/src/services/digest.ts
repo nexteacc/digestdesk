@@ -197,6 +197,8 @@ async function generateWithId(
   let totalAiInputChars = 0;
   let estimatedAiSentChars = 0;
   let maxAiArticleInputChars = 0;
+  let modelRequests = 0;
+  let retryRequests = 0;
   const maxInputChars = getMaxInputChars();
 
   type ItemResult = {
@@ -286,7 +288,14 @@ async function generateWithId(
       maxAiArticleInputChars = Math.max(maxAiArticleInputChars, contentText.length);
 
       try {
-        const summary = await summarizeArticle(contentText, language);
+        let articleModelRequests = 0;
+        const summary = await summarizeArticle(contentText, language, {
+          onAttempt: (attempt) => {
+            articleModelRequests += 1;
+            modelRequests += 1;
+            if (attempt > 1) retryRequests += 1;
+          },
+        });
         summaryGenerated += 1;
         // Cache the summary
         const summaryJson = JSON.stringify({ oneLiner: summary.oneLiner, keyInsights: summary.keyInsights });
@@ -296,7 +305,7 @@ async function generateWithId(
         });
         if (debug) {
           console.log(
-            `[digest] Summary generated${trace} article=${article.id} sourceType=${sourceType} language=${language} insights=${summary.keyInsights.length} url=${article.url}`,
+            `[digest] Summary generated${trace} article=${article.id} sourceType=${sourceType} language=${language} insights=${summary.keyInsights.length} modelRequests=${articleModelRequests} url=${article.url}`,
           );
         }
         return {
@@ -376,7 +385,7 @@ async function generateWithId(
   });
 
   console.log(
-    `[digest] Daily digest updated${trace} digestId=${digestId} user=${userId} date=${dateLabel} items=${items.length} summaryCacheHits=${summaryCacheHits} summaryCacheMisses=${summaryCacheMisses} summaryCacheInvalid=${summaryCacheInvalid} summaryGenerated=${summaryGenerated} summaryTooShort=${summaryTooShort} summaryFallbacks=${summaryFallbacks} aiRequests=${summaryCacheMisses} totalAiInputChars=${totalAiInputChars} estimatedAiSentChars=${estimatedAiSentChars} maxAiArticleInputChars=${maxAiArticleInputChars} maxInputChars=${maxInputChars} fallbackCount=${fallbackCount} emptyInsightsCount=${emptyInsightsCount} durationMs=${Date.now() - startedAt}`,
+    `[digest] Daily digest updated${trace} digestId=${digestId} user=${userId} date=${dateLabel} items=${items.length} summaryCacheHits=${summaryCacheHits} summaryCacheMisses=${summaryCacheMisses} summaryCacheInvalid=${summaryCacheInvalid} summaryGenerated=${summaryGenerated} summaryTooShort=${summaryTooShort} summaryFallbacks=${summaryFallbacks} aiRequests=${modelRequests} modelRequests=${modelRequests} retryRequests=${retryRequests} totalAiInputChars=${totalAiInputChars} estimatedAiSentChars=${estimatedAiSentChars} maxAiArticleInputChars=${maxAiArticleInputChars} maxInputChars=${maxInputChars} fallbackCount=${fallbackCount} emptyInsightsCount=${emptyInsightsCount} durationMs=${Date.now() - startedAt}`,
   );
   return digestId;
 }

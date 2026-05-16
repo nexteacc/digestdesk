@@ -361,7 +361,11 @@ function buildMarkdownSummaryInput(markdown: string, maxChars: number): string {
   return result.length > 0 ? result : markdown.slice(0, maxChars);
 }
 
-export async function summarizeArticle(markdown: string, language: "zh" | "en" = "zh"): Promise<ArticleSummary> {
+export async function summarizeArticle(
+  markdown: string,
+  language: "zh" | "en" = "zh",
+  options?: { onAttempt?: (attempt: number) => void },
+): Promise<ArticleSummary> {
   const model = getModel();
   const modelId = process.env.AI_MODEL || "gpt-4o-mini";
   const baseURL = process.env.AI_BASE_URL || "https://api.openai.com/v1";
@@ -376,6 +380,7 @@ export async function summarizeArticle(markdown: string, language: "zh" | "en" =
   let lastError: unknown;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
+      options?.onAttempt?.(attempt);
       const { object } = await generateObject({
         model,
         system: buildSummarySystemPrompt(language, attempt > 1),

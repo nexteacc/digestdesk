@@ -21,6 +21,7 @@ import { getDayRangeForTimeZone, getPreviousDateLabel, getTimeZoneDateLabel } fr
 
 const DEFAULT_CONCURRENCY = 3;
 const MIN_CONTENT_LENGTH = 50;
+const inFlightSummaryWrites = new Map<string, Promise<void>>();
 
 function isDigestDebugEnabled() {
   return (
@@ -34,6 +35,79 @@ function isDigestDebugEnabled() {
 function getPresummarizeConcurrency() {
   const raw = Number(process.env.AI_SUMMARY_CONCURRENCY ?? DEFAULT_CONCURRENCY);
   return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : DEFAULT_CONCURRENCY;
+}
+
+async function readCachedSummary(
+  articleId: string,
+  language: "zh" | "en",
+): Promise<boolean> {
+  const db = getDb();
+  const [row] = await db
+    .select({
+      summaryZh: articles.summaryZh,
+      summaryEn: articles.summaryEn,
+    })
+    .from(articles)
+    .where(eq(articles.id, articleId));
+
+  const cached = language === "zh" ? row?.summaryZh : row?.summaryEn;
+  if (!cached) return false;
+  try {
+    return Boolean(parseCachedArticleSummary(JSON.parse(cached), language));
+  } catch {
+    return false;
+  }
+}
+
+async function summarizeAndCacheArticle(
+  article: {
+    id: string;
+    contentText: string | null;
+  },
+  language: "zh" | "en",
+  updateField: "summaryZh" | "summaryEn",
+  options?: { onAttempt?: (attempt: number) => void },
+): Promise<{ attempts: number; dedupedWait: boolean; cacheHitAfterWait: boolean }> {
+  const key = `${language}:${article.id}`;
+  let dedupedWait = false;
+
+  while (true) {
+    const existing = inFlightSummaryWrites.get(key);
+    if (existing) {
+      dedupedWait = true;
+      await existing.catch(() => undefined);
+      if (await readCachedSummary(article.id, language)) {
+        return { attempts: 0, dedupedWait, cacheHitAfterWait: true };
+      }
+      continue;
+    }
+
+    const db = getDb();
+    let attempts = 0;
+    const work = (async () => {
+      const summary = await summarizeArticle(article.contentText!, language, {
+        onAttempt: (attempt) => {
+          attempts += 1;
+          options?.onAttempt?.(attempt);
+        },
+      });
+      const summaryJson = JSON.stringify({ oneLiner: summary.oneLiner, keyInsights: summary.keyInsights });
+      await db
+        .update(articles)
+        .set({ [updateField]: summaryJson })
+        .where(eq(articles.id, article.id));
+    })();
+
+    inFlightSummaryWrites.set(key, work);
+    try {
+      await work;
+      return { attempts, dedupedWait, cacheHitAfterWait: false };
+    } finally {
+      if (inFlightSummaryWrites.get(key) === work) {
+        inFlightSummaryWrites.delete(key);
+      }
+    }
+  }
 }
 
 /**
@@ -112,6 +186,10 @@ export async function presummarizeForUser(
   let totalInputChars = 0;
   let estimatedSentChars = 0;
   let maxArticleInputChars = 0;
+  let modelRequests = 0;
+  let retryRequests = 0;
+  let dedupedWaits = 0;
+  let cacheHitsAfterWait = 0;
   const maxInputChars = getMaxInputChars();
 
   // Keep only articles that need a summary: sufficient content + no valid cache
@@ -172,7 +250,7 @@ export async function presummarizeForUser(
 
   if (articlesToProcess.length === 0) {
     console.log(
-      `[presummarize] Complete${trace} user=${userId} date=${dateLabel} language=${language} aiRequests=0 succeeded=0 failed=0 totalInputChars=0 estimatedSentChars=0 maxArticleInputChars=0 maxInputChars=${maxInputChars} durationMs=${Date.now() - startedAt}`,
+      `[presummarize] Complete${trace} user=${userId} date=${dateLabel} language=${language} articlesToProcess=0 aiRequests=0 modelRequests=0 retryRequests=0 dedupedWaits=0 cacheHitsAfterWait=0 succeeded=0 failed=0 totalInputChars=0 estimatedSentChars=0 maxArticleInputChars=0 maxInputChars=${maxInputChars} durationMs=${Date.now() - startedAt}`,
     );
     return;
   }
@@ -187,15 +265,17 @@ export async function presummarizeForUser(
   const results = await Promise.allSettled(
     articlesToProcess.map((article) =>
       limit(async () => {
-        const summary = await summarizeArticle(article.contentText!, language);
-        const summaryJson = JSON.stringify({ oneLiner: summary.oneLiner, keyInsights: summary.keyInsights });
-        await db
-          .update(articles)
-          .set({ [updateField]: summaryJson })
-          .where(eq(articles.id, article.id));
+        const result = await summarizeAndCacheArticle(article, language, updateField, {
+          onAttempt: (attempt) => {
+            modelRequests += 1;
+            if (attempt > 1) retryRequests += 1;
+          },
+        });
+        if (result.dedupedWait) dedupedWaits += 1;
+        if (result.cacheHitAfterWait) cacheHitsAfterWait += 1;
         if (debug) {
           console.log(
-            `[presummarize] Article summarized${trace} user=${userId} date=${dateLabel} article=${article.id} language=${language} url=${article.url}`,
+            `[presummarize] Article summarized${trace} user=${userId} date=${dateLabel} article=${article.id} language=${language} modelRequests=${result.attempts} dedupedWait=${result.dedupedWait} cacheHitAfterWait=${result.cacheHitAfterWait} url=${article.url}`,
           );
         }
       }),
@@ -218,6 +298,6 @@ export async function presummarizeForUser(
   }
 
   console.log(
-    `[presummarize] Complete${trace} user=${userId} date=${dateLabel} language=${language} aiRequests=${articlesToProcess.length} succeeded=${succeeded} failed=${failed} totalInputChars=${totalInputChars} estimatedSentChars=${estimatedSentChars} maxArticleInputChars=${maxArticleInputChars} maxInputChars=${maxInputChars} durationMs=${Date.now() - startedAt}`,
+    `[presummarize] Complete${trace} user=${userId} date=${dateLabel} language=${language} articlesToProcess=${articlesToProcess.length} aiRequests=${modelRequests} modelRequests=${modelRequests} retryRequests=${retryRequests} dedupedWaits=${dedupedWaits} cacheHitsAfterWait=${cacheHitsAfterWait} succeeded=${succeeded} failed=${failed} totalInputChars=${totalInputChars} estimatedSentChars=${estimatedSentChars} maxArticleInputChars=${maxArticleInputChars} maxInputChars=${maxInputChars} durationMs=${Date.now() - startedAt}`,
   );
 }
