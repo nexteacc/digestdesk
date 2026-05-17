@@ -859,3 +859,20 @@ OpenRouter 的 1 Day 是账号全局统计窗口，不是单个 digest。
 ### 后续
 
 已有坏数据仍存在于 `articles.summary_zh` 和 `digest_items` 快照中；需要清理缓存或 force regenerate 才会反映新规则。
+
+### 追加决策：默认 OSS，校验失败重试 Qwen
+
+生产默认模型继续使用 OpenRouter 上的 `openai/gpt-oss-120b` 控制成本。`summarizer.ts` 增加 `AI_RETRY_MODEL`：
+
+- 第一次尝试使用 `AI_MODEL`
+- 只有结构化输出、长度、质量校验类错误才进入第二次尝试
+- 第二次尝试使用 `AI_RETRY_MODEL`
+- 未配置 `AI_RETRY_MODEL` 且 `AI_BASE_URL` 是 OpenRouter 时，默认重试模型为 `qwen/qwen3.5-flash-02-23`
+
+明天观察重点：
+
+- `[summarizer] Starting AI summary ... model=... retryModel=...`
+- `[summarizer] AI summary complete attempt=2 model=qwen/qwen3.5-flash-02-23`
+- `retryRequests` 是否集中在少数文章
+- Qwen 是否能救回 OSS 的 schema/长度/质量失败
+- `summaryFallbacks` 是否仍接近 0

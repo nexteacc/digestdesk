@@ -67,6 +67,7 @@
      - `DATABASE_URL` 或 `POSTGRES_CONNECTION_STRING` / `POSTGRES_URI`
      - `AI_API_KEY`
      - `AI_MODEL`
+     - `AI_RETRY_MODEL`（可选；摘要校验失败时的第二次尝试模型）
      - `AI_BASE_URL`
      - `CF_SEARCH_PROXY_URL`
      - `CF_SEARCH_PROXY_TOKEN`
@@ -80,6 +81,7 @@
      - `DATABASE_URL` 或 `POSTGRES_CONNECTION_STRING` / `POSTGRES_URI`
      - `AI_API_KEY`
      - `AI_MODEL`
+     - `AI_RETRY_MODEL`（可选；摘要校验失败时的第二次尝试模型）
      - `AI_BASE_URL`
      - `JINA_RPM`
      - `JINA_MAX_CONCURRENCY`

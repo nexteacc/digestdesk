@@ -2,7 +2,9 @@ import { generateObject, type LanguageModel } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { z } from "zod";
 
-let _cachedModel: LanguageModel | null = null;
+const _cachedModels = new Map<string, LanguageModel>();
+const DEFAULT_MODEL = "gpt-4o-mini";
+const DEFAULT_OPENROUTER_RETRY_MODEL = "qwen/qwen3.5-flash-02-23";
 
 export type AiErrorCategory =
   | "quota"
@@ -72,11 +74,12 @@ function summarizeErrorMeta(error: unknown) {
   };
 }
 
-function getModel() {
-  if (_cachedModel) return _cachedModel;
-  const modelId = process.env.AI_MODEL || "gpt-4o-mini";
+function getModel(modelId: string) {
   const baseURL = process.env.AI_BASE_URL || "https://api.openai.com/v1";
   const apiKey = process.env.AI_API_KEY;
+  const cacheKey = `${baseURL}:${modelId}`;
+  const cached = _cachedModels.get(cacheKey);
+  if (cached) return cached;
 
   if (!apiKey) {
     throw new Error("请设置 AI_API_KEY 环境变量");
@@ -91,8 +94,22 @@ function getModel() {
     },
   });
 
-  _cachedModel = provider.chatModel(modelId);
-  return _cachedModel;
+  const model = provider.chatModel(modelId);
+  _cachedModels.set(cacheKey, model);
+  return model;
+}
+
+function getPrimaryModelId() {
+  return process.env.AI_MODEL || DEFAULT_MODEL;
+}
+
+function getRetryModelId(primaryModelId: string, baseURL: string) {
+  const configured = process.env.AI_RETRY_MODEL?.trim();
+  if (configured) return configured;
+  if (baseURL.includes("openrouter.ai") && primaryModelId !== DEFAULT_OPENROUTER_RETRY_MODEL) {
+    return DEFAULT_OPENROUTER_RETRY_MODEL;
+  }
+  return primaryModelId;
 }
 
 const ArticleSummarySchema = z.object({
@@ -367,19 +384,22 @@ export async function summarizeArticle(
   language: "zh" | "en" = "zh",
   options?: { onAttempt?: (attempt: number) => void },
 ): Promise<ArticleSummary> {
-  const model = getModel();
-  const modelId = process.env.AI_MODEL || "gpt-4o-mini";
   const baseURL = process.env.AI_BASE_URL || "https://api.openai.com/v1";
+  const primaryModelId = getPrimaryModelId();
+  const retryModelId = getRetryModelId(primaryModelId, baseURL);
 
   const maxInputChars = getMaxInputChars();
   const input = buildMarkdownSummaryInput(markdown, maxInputChars);
 
   console.log(
-    `[summarizer] Starting AI summary language=${language} model=${modelId} baseURL=${baseURL} inputLength=${markdown.length} sentLength=${input.length} maxInputChars=${maxInputChars}`,
+    `[summarizer] Starting AI summary language=${language} model=${primaryModelId} retryModel=${retryModelId} baseURL=${baseURL} inputLength=${markdown.length} sentLength=${input.length} maxInputChars=${maxInputChars}`,
   );
 
   let lastError: unknown;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const attemptModelId = attempt === 1 ? primaryModelId : retryModelId;
+    const model = getModel(attemptModelId);
+
     try {
       options?.onAttempt?.(attempt);
       const { object } = await generateObject({
@@ -390,17 +410,21 @@ export async function summarizeArticle(
       });
       const result = normalizeSummary(object, language);
       console.log(
-        `[summarizer] AI summary complete attempt=${attempt}. One-liner: ${result.oneLiner.slice(0, 50)}...`,
+        `[summarizer] AI summary complete attempt=${attempt} model=${attemptModelId}. One-liner: ${result.oneLiner.slice(0, 50)}...`,
       );
       return result;
     } catch (err) {
       lastError = err;
       const meta = summarizeErrorMeta(err);
       if (attempt < 2 && shouldRetrySummaryGeneration(err)) {
-        console.warn("[summarizer] AI summary failed validation; retrying once:", meta);
+        console.warn("[summarizer] AI summary failed validation; retrying once:", {
+          ...meta,
+          model: attemptModelId,
+          retryModel: retryModelId,
+        });
         continue;
       }
-      console.error("[summarizer] AI summary failed:", meta);
+      console.error("[summarizer] AI summary failed:", { ...meta, model: attemptModelId });
       throw err;
     }
   }
