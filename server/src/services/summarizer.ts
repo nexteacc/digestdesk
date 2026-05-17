@@ -98,7 +98,7 @@ function getModel() {
 const ArticleSummarySchema = z.object({
   oneLiner: z
     .string()
-    .describe("用一个完整的、不超过30个字的短句，精准总结文章的核心结论。"),
+    .describe("用一个完整的、不超过60个字符的短句，精准总结文章的核心结论。"),
   keyInsights: z
     .array(z.string())
     .length(3)
@@ -109,8 +109,8 @@ export type ArticleSummary = z.infer<typeof ArticleSummarySchema>;
 
 const SUMMARY_LIMITS = {
   zh: {
-    oneLinerChars: 70,
-    keyInsightChars: 70,
+    oneLinerChars: 60,
+    keyInsightChars: 76,
     minInsightChars: 10,
   },
   en: {
@@ -126,10 +126,11 @@ const PROMPTS = {
 任务要求：
 1. **语言统一**: 你的核心任务是阅读任何语言的文章，并始终以【简体中文】输出高质量的结构化摘要。
 2. **客观去噪**: 剔除客套话、情绪表达和背景铺垫，只保留核心信息。
-3. **长度纪律**: 输出必须短，禁止把整段原文、列表或长句塞进任一字段。`,
+3. **长度纪律**: 输出必须短，禁止把整段原文、列表或长句塞进任一字段。
+4. **信息分配**: oneLiner 只写一个核心结论；数字、比例、金额、日期等细节优先放入 keyInsights，不要塞进 oneLiner。`,
     schema: {
-      oneLiner: "用一个完整的、不超过30个字的短句，精准总结文章的核心结论。确保句子通顺、信息完整。",
-      keyInsights: "正好3条关键洞察；每条不超过45个汉字；每条只表达一个具体数据、方法或结论。禁止长段落、原文堆砌、占位符和废话。",
+      oneLiner: "用一个完整的、不超过60个字符（含数字和标点）的短句，精准总结文章的核心结论。只表达一个结论，确保句子通顺、信息完整。",
+      keyInsights: "正好3条关键洞察；每条不超过76个字符（含数字和标点）；每条只表达一个具体数据、方法或结论。禁止长段落、原文堆砌、占位符和废话。",
     }
   },
   en: {

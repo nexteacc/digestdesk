@@ -818,3 +818,44 @@ OpenRouter 的 1 Day 是账号全局统计窗口，不是单个 digest。
 - fallback item 明显增多。
 
 下一步若仍异常，再考虑数据库级 `article + language` 摘要锁，覆盖 web 与 scheduler 跨进程并发。
+
+---
+
+## 2026-05-17: 中文摘要输出长度与版式约束对齐
+
+### 现象
+
+生产库中 `Institutional Adoption Report Q1 2026` 的中文摘要出现残句：
+
+- `digest_items.one_liner` 与 `articles.summary_zh.oneLiner` 完全一致
+- 两者长度均为 70
+- 第一条 `keyInsights` 也长度为 70，并停在不完整表达
+
+这说明问题不是前端或 API 读取截断，而是模型生成了长度合规但语义未闭合的摘要，随后被缓存并快照化。
+
+### 判断
+
+此前 prompt 写的是中文 `oneLiner` 不超过 30 字、`keyInsights` 每条不超过 45 个汉字，但 schema 实际允许：
+
+- `oneLinerChars = 70`
+- `keyInsightChars = 70`
+
+在 structured output 下，模型更容易贴近 schema 最大值输出；长度校验只能保证字段不超过上限，不能保证句子完整。
+
+### 决策
+
+根据全屏 digest 卡片版式估算：
+
+- 一句话总结区域每行约 46 个中文字符，两行约 90-95 个字符
+- 关键洞察每行约 55-65 个中文字符，两行约 110-130 个字符
+
+为了避免字段贴近视觉极限并减少数字堆砌，生成硬约束统一为：
+
+- 中文 `oneLiner`: 60 个字符（含数字和标点）
+- 中文 `keyInsight`: 76 个字符（含数字和标点）
+
+同步修改 prompt，要求 `oneLiner` 只表达一个核心结论，数字、比例、金额、日期等细节优先放入 `keyInsights`。
+
+### 后续
+
+已有坏数据仍存在于 `articles.summary_zh` 和 `digest_items` 快照中；需要清理缓存或 force regenerate 才会反映新规则。
