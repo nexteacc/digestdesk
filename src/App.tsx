@@ -12,6 +12,7 @@ import { ZenModeProvider } from "@/hooks/useZenMode";
 import { ensureCurrentUser } from "@/lib/api";
 import {
   loadDailyDigestPage,
+  loadAdminPage,
   loadNotFoundPage,
   loadPodcastFeedsPage,
   loadPrivacyPolicyPage,
@@ -24,6 +25,7 @@ import {
 } from "@/lib/route-preload";
 
 const DailyDigest = lazy(loadDailyDigestPage);
+const AdminPage = lazy(loadAdminPage);
 const SubscriptionsPage = lazy(loadSubscriptionsPage);
 const RssFeedsPage = lazy(loadRssFeedsPage);
 const YouTubeFeedsPage = lazy(loadYouTubeFeedsPage);
@@ -87,6 +89,7 @@ const ROUTE_TITLES: Record<string, [string, string]> = {
   "/youtube": ["YouTube 频道", "YouTube Channels"],
   "/podcasts": ["Podcast 节目", "Podcast Shows"],
   "/settings": ["偏好设置", "Settings"],
+  "/admin": ["内部管理", "Admin"],
 };
 
 function RouteAnnouncer() {
@@ -161,6 +164,7 @@ function AppRouter() {
             <Suspense fallback={<RouteFallback />}>
               <Switch>
                 <Route path="/" component={PublicHome} />
+                <Route path="/admin" component={PublicHome} />
                 <Route component={NotFound} />
               </Switch>
             </Suspense>
@@ -248,6 +252,7 @@ function AuthenticatedApp() {
             <Route path="/youtube" component={YouTubeFeedsPage} />
             <Route path="/podcasts" component={PodcastFeedsPage} />
             <Route path="/settings" component={SettingsPage} />
+            <Route path="/admin" component={AdminPage} />
             <Route component={NotFound} />
           </Switch>
         </Suspense>

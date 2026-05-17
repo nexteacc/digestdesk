@@ -91,6 +91,34 @@ export const userSettings = pgTable(
   }),
 );
 
+export const userEntitlements = pgTable("user_entitlements", {
+  userId: text("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  accountPlan: text("account_plan", { enum: ["free", "test", "admin"] }).notNull().default("free"),
+  subscriptionLimitOverride: integer("subscription_limit_override"),
+  accessStatus: text("access_status", { enum: ["active", "revoked"] }).notNull().default("active"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  updatedBy: text("updated_by"),
+});
+
+export const userInvites = pgTable(
+  "user_invites",
+  {
+    id: text("id").primaryKey(),
+    email: text("email").notNull(),
+    accountPlan: text("account_plan", { enum: ["free", "test", "admin"] }).notNull().default("test"),
+    subscriptionLimitOverride: integer("subscription_limit_override"),
+    status: text("status", { enum: ["invited", "claimed", "revoked"] }).notNull().default("invited"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    createdBy: text("created_by"),
+    claimedUserId: text("claimed_user_id").references(() => users.id, { onDelete: "set null" }),
+  },
+  (table) => ({
+    emailIdx: index("idx_user_invites_email").on(table.email),
+  }),
+);
+
 export const digestJobs = pgTable(
   "digest_jobs",
   {

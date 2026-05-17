@@ -206,6 +206,53 @@ export async function initDb() {
   `;
 
   await queryClient`
+    CREATE TABLE IF NOT EXISTS user_entitlements (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      account_plan TEXT NOT NULL DEFAULT 'free' CHECK(account_plan IN ('free', 'test', 'admin')),
+      subscription_limit_override INTEGER,
+      access_status TEXT NOT NULL DEFAULT 'active' CHECK(access_status IN ('active', 'revoked')),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      updated_by TEXT
+    );
+  `;
+
+  await queryClient`
+    ALTER TABLE user_entitlements ADD COLUMN IF NOT EXISTS subscription_limit_override INTEGER;
+  `;
+
+  await queryClient`
+    ALTER TABLE user_entitlements ADD COLUMN IF NOT EXISTS access_status TEXT NOT NULL DEFAULT 'active';
+  `;
+
+  await queryClient`
+    ALTER TABLE user_entitlements ADD COLUMN IF NOT EXISTS updated_by TEXT;
+  `;
+
+  await queryClient`
+    CREATE TABLE IF NOT EXISTS user_invites (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL,
+      account_plan TEXT NOT NULL DEFAULT 'test' CHECK(account_plan IN ('free', 'test', 'admin')),
+      subscription_limit_override INTEGER,
+      status TEXT NOT NULL DEFAULT 'invited' CHECK(status IN ('invited', 'claimed', 'revoked')),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      created_by TEXT,
+      claimed_user_id TEXT REFERENCES users(id) ON DELETE SET NULL
+    );
+  `;
+
+  await queryClient`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_user_invites_email_unique
+    ON user_invites(email);
+  `;
+
+  await queryClient`
+    CREATE INDEX IF NOT EXISTS idx_user_invites_email ON user_invites(email);
+  `;
+
+  await queryClient`
     ALTER TABLE digests ADD COLUMN IF NOT EXISTS user_id TEXT;
   `;
 

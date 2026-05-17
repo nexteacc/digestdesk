@@ -8,6 +8,7 @@ import { toAppError } from "../sources/app-error.js";
 import type { SourceAdapter, SourceType } from "../sources/types.js";
 import { getRequestUserId } from "../auth/user-context.js";
 import { queueInitialDigestForUser } from "../services/initial-digest-trigger.js";
+import { assertCanAddSubscriptions, sendEntitlementError } from "../services/entitlements.js";
 
 interface SourceFeedRouterOptions {
   adapter: SourceAdapter;
@@ -97,6 +98,7 @@ export function createSourceFeedRouter(opts: SourceFeedRouterOptions): Router {
           }
 
           const now = new Date().toISOString();
+          await assertCanAddSubscriptions(userId, 1);
           await db
             .update(subscriptions)
             .set({
@@ -117,6 +119,7 @@ export function createSourceFeedRouter(opts: SourceFeedRouterOptions): Router {
         }
 
         const now = new Date().toISOString();
+        await assertCanAddSubscriptions(userId, 1);
         await db.insert(subscriptions).values({
           id: nanoid(),
           userId,
@@ -138,6 +141,7 @@ export function createSourceFeedRouter(opts: SourceFeedRouterOptions): Router {
 
       const now = new Date().toISOString();
       const id = nanoid();
+      await assertCanAddSubscriptions(userId, 1);
 
       await db.transaction(async (tx) => {
         await tx.insert(feeds).values({
@@ -169,6 +173,7 @@ export function createSourceFeedRouter(opts: SourceFeedRouterOptions): Router {
 
       res.json({ id, success: true });
     } catch (err) {
+      if (sendEntitlementError(res, err)) return;
       const appError = toAppError(err);
       console.error(`${logPrefix} Error adding feed:`, appError.message);
       res.status(appError.status).json({ error: appError.message, errorZh: appError.messageZh, code: appError.code });

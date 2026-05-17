@@ -288,3 +288,87 @@ export function fetchDigest(id: string): Promise<Digest> {
 export function fetchDigestOverview(): Promise<DigestOverview> {
   return request("/digests/overview");
 }
+
+// --- Admin ---
+
+export type AdminPlan = "free" | "test" | "admin";
+export type AdminAccessStatus = "active" | "revoked";
+export type AdminInviteStatus = "invited" | "claimed" | "revoked";
+
+export type AdminUser = {
+  id: string;
+  email: string;
+  name: string | null;
+  avatarUrl: string | null;
+  createdAt: string;
+  lastLoginAt: string;
+  accountPlan: AdminPlan;
+  accessStatus: AdminAccessStatus;
+  subscriptionLimitOverride: number | null;
+  subscriptionLimit: number | null;
+  activeSubscriptions: number;
+  digestCount: number;
+  lastDigestAt: string | null;
+};
+
+export type AdminInvite = {
+  id: string;
+  email: string;
+  accountPlan: AdminPlan;
+  subscriptionLimitOverride: number | null;
+  status: AdminInviteStatus;
+  createdAt: string;
+  updatedAt: string;
+  claimedUserId: string | null;
+};
+
+export function fetchAdminMe(): Promise<{
+  isAdmin: true;
+  user: { id: string; email: string; name: string | null; avatarUrl: string | null };
+  plans: Record<AdminPlan, number | null>;
+}> {
+  return request("/admin/me");
+}
+
+export async function fetchAdminUsers(): Promise<AdminUser[]> {
+  const data = await request<{ users: AdminUser[] }>("/admin/users");
+  return data.users;
+}
+
+export function updateAdminUserEntitlement(
+  userId: string,
+  data: {
+    accountPlan: AdminPlan;
+    subscriptionLimitOverride?: number | null;
+    accessStatus?: AdminAccessStatus;
+  },
+): Promise<{ entitlement: unknown }> {
+  return request(`/admin/users/${userId}/entitlements`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function fetchAdminInvites(): Promise<AdminInvite[]> {
+  const data = await request<{ invites: AdminInvite[] }>("/admin/invites");
+  return data.invites;
+}
+
+export async function createAdminInvite(data: {
+  email: string;
+  accountPlan: AdminPlan;
+  subscriptionLimitOverride?: number | null;
+}): Promise<AdminInvite> {
+  const result = await request<{ invite: AdminInvite }>("/admin/invites", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return result.invite;
+}
+
+export async function revokeAdminInvite(id: string): Promise<AdminInvite> {
+  const result = await request<{ invite: AdminInvite }>(`/admin/invites/${id}/revoke`, {
+    method: "PATCH",
+  });
+  return result.invite;
+}

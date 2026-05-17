@@ -663,3 +663,158 @@ rss-parser 解析 Feed
 3. **向后兼容**：日报生成逻辑已有缓存读取和 fallback 机制，优化不影响现有功能
 4. **不过度工程化**：当前产品阶段先保持 `web + scheduler + postgres`，根据真实日志再决定是否把摘要进一步前移或拆分 runner
 5. **关键观测指标**：关注 `summaryCacheHits`、`summaryCacheMisses`、`summaryGenerated`、`summaryFallbacks`，用真实数据决定下一步
+
+## 2026-05-17: OpenRouter 1 Day 调用量与多用户日报对账
+
+### 背景
+
+OpenRouter Activity 显示 1 Day 窗口内：
+
+- Requests: 248
+- `gpt-oss-120b`: 239 requests / 754K tokens
+- `GPT-5.4 Nano`: 9 requests / 4.45K tokens
+- Total tokens: 758K
+- Spend: $0.129
+
+前端当前截图中显示某个用户的 `2026-05-16` 日报为 28 篇文章，因此第一眼看起来像是“28 篇触发了 239 次 AI 调用”。
+
+### 数据库核对结论
+
+通过生产库只读查询确认：截图中的 28 篇日报不是 239 次请求的唯一来源。
+
+`digests.date = 2026-05-16` 当天共有：
+
+- 成功 daily digest: 5 份
+- digest item rows: 208
+- 去重文章: 170
+- 可摘要文章: 170
+- digest jobs: 5 个 `succeeded`，3 个 `skipped`
+- 所有 job 的 `attempt_count` 都是 1，没有看到 job 级重试风暴
+
+按来源拆分：
+
+| source_type | item rows | unique articles | cached articles | notes |
+|---|---:|---:|---:|---|
+| rss | 169 | 144 | 19 zh cached | 当天主要请求来源 |
+| substack | 35 | 22 | 22 zh cached | 缓存正常 |
+| podcast | 2 | 2 | 0 zh cached | 数量很小 |
+| youtube | 2 | 2 | 1 zh cached | 数量很小 |
+
+截图中那份 28 篇日报：
+
+- digest id: `ypvNKtlichL_xX5nK6h5m`
+- generated_at: `2026-05-17T01:08:49.342Z`
+- items: 28
+- distinct articles: 28
+- summarizable articles: 28
+- `summary_zh` present: 28
+- AI fallback items: 0
+
+因此这份 28 篇日报本身表现正常，组装阶段应主要读缓存。
+
+### 1 Day 窗口解释
+
+OpenRouter 的 1 Day 是账号全局统计窗口，不是单个 digest。
+
+按 `generated_at` 近 24 小时窗口看：
+
+- digest count: 6
+- item rows: 253
+- unique articles: 214
+- unique `summary_zh` cached articles: 86
+- unique `summary_en` cached articles: 126
+- fallback item rows: 2
+
+这和 OpenRouter 的 `gpt-oss-120b` 239 requests 基本可解释：
+
+```
+214 unique articles needing summary
+  + schema validation retries
+  + OpenRouter 1 Day 窗口边界差异
+  + 少量手动触发/其他请求
+≈ 239 model requests
+```
+
+其中最大贡献来自另一份 128 篇的 `2026-05-16` digest：
+
+- digest id: `AUZocuP478T75SJaaNhK-`
+- generated_at: `2026-05-16T22:55:00.752Z`
+- items: 128
+- `summary_en` present: 126
+- fallback items: 2
+- average content chars: 16443.6
+- max content chars: 60810
+
+### 当前判断
+
+这次测试日的 OpenRouter 数据属于合理范围，不像重复触发失控：
+
+- 请求数和 24 小时窗口内的去重文章数接近。
+- job 没有反复失败重试。
+- 28 篇截图日报本身缓存完整。
+- 128 篇大 digest 会自然拉高 1 Day 全局 requests。
+- 当前更像“测试日多用户、多 digest、导入和 scheduled job 混合”的正常消耗。
+
+### 2026-05-18 测试重点
+
+明天重点验证稳态，而不是只看 OpenRouter 总数。
+
+#### 1. OpenRouter Activity
+
+记录 1 Day 窗口：
+
+- Requests
+- Tokens
+- Spend
+- 按模型拆分的 requests/tokens
+
+预期：
+
+- 如果没有大批量导入或手动重算，requests 应接近当天新增的 `article + language` 唯一摘要数。
+- 如果用户之间文章重叠，缓存命中后 requests 应明显低于 digest item rows。
+- Tokens 应继续明显低于 2026-05-14 的 1.31M 基线。
+
+#### 2. 数据库对账
+
+对 `target_date = 2026-05-17` 查询：
+
+- daily digest 数量
+- digest item rows
+- 去重文章数
+- `summary_zh` / `summary_en` 缓存数量
+- fallback item 数量
+- `digest_jobs` 各状态和 `attempt_count`
+
+预期：
+
+- `succeeded` job 数量应等于实际需要生成日报的用户数。
+- `skipped` 只应来自没有可用内容的用户。
+- `attempt_count` 应大多为 1。
+- fallback item 数量应接近 0。
+
+#### 3. Scheduler 日志
+
+重点看：
+
+```text
+[presummarize] Complete ... articlesToProcess=... modelRequests=... retryRequests=... dedupedWaits=... cacheHitsAfterWait=...
+[digest] Daily digest updated ... summaryCacheHits=... summaryCacheMisses=... aiRequests=... retryRequests=...
+```
+
+预期：
+
+- `digest` 阶段的 `summaryCacheMisses` 和 `aiRequests` 应接近 0。
+- `modelRequests - articlesToProcess` 应主要由 `retryRequests` 解释。
+- 如果多个用户并发共享文章，`dedupedWaits` 或 `cacheHitsAfterWait` 应能解释省下来的重复请求。
+
+#### 4. 异常触发条件
+
+如果出现以下情况，需要继续排查：
+
+- OpenRouter requests 明显大于 `unique articles + retryRequests`。
+- 同一 `user + targetDate` 出现多次 `executeDailyDigestJob`。
+- `digest` 阶段仍有大量 `summaryCacheMisses`。
+- `attempt_count > 1` 的 job 增多。
+- fallback item 明显增多。
+
+下一步若仍异常，再考虑数据库级 `article + language` 摘要锁，覆盖 web 与 scheduler 跨进程并发。

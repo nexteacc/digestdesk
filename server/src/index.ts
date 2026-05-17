@@ -13,6 +13,7 @@ import { youtubeFeedsRouter } from "./routes/youtube-feeds.js";
 import { podcastFeedsRouter } from "./routes/podcast-feeds.js";
 import { settingsRouter } from "./routes/settings.js";
 import { authRouter } from "./routes/auth.js";
+import { adminRouter } from "./routes/admin.js";
 import { resolveUser } from "./middleware/resolve-user.js";
 import { initDb } from "./db/index.js";
 
@@ -51,6 +52,7 @@ let ready = false;
 let initError: string | null = null;
 
 app.use("/api/auth", requireAuth(), authRouter);
+app.use("/api/admin", requireAuth(), adminRouter);
 app.use("/api/feeds", requireAuth(), resolveUser, feedsRouter);
 app.use("/api/digests", requireAuth(), resolveUser, digestsRouter);
 app.use("/api/substack", requireAuth(), resolveUser, substackRouter);

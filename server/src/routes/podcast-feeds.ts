@@ -9,6 +9,7 @@ import { getRequestUserId } from "../auth/user-context.js";
 import { searchPodcasts, verifyPodcastFeed } from "../services/podcast-discovery.js";
 import { queueInitialDigestForUser } from "../services/initial-digest-trigger.js";
 import { toAppError } from "../sources/app-error.js";
+import { assertCanAddSubscriptions, sendEntitlementError } from "../services/entitlements.js";
 
 const searchSchema = z.object({
   query: z.string().trim().min(1, "请输入播客节目名"),
@@ -101,6 +102,7 @@ podcastFeedsRouter.post("/", async (req, res) => {
         }
 
         const now = new Date().toISOString();
+        await assertCanAddSubscriptions(userId, 1);
         await db
           .update(subscriptions)
           .set({ startedAt: now, endedAt: null })
@@ -115,6 +117,7 @@ podcastFeedsRouter.post("/", async (req, res) => {
       }
 
       const now = new Date().toISOString();
+      await assertCanAddSubscriptions(userId, 1);
       await db.insert(subscriptions).values({
         id: nanoid(),
         userId,
@@ -133,6 +136,7 @@ podcastFeedsRouter.post("/", async (req, res) => {
 
     const now = new Date().toISOString();
     const id = nanoid();
+    await assertCanAddSubscriptions(userId, 1);
 
     await db.transaction(async (tx) => {
       await tx.insert(feeds).values({
@@ -161,6 +165,7 @@ podcastFeedsRouter.post("/", async (req, res) => {
 
     res.status(201).json({ id, success: true });
   } catch (error) {
+    if (sendEntitlementError(res, error)) return;
     const appError = toAppError(error);
     console.error("[podcast/create] Error:", appError.message);
     res.status(appError.status).json({ error: appError.message, errorZh: appError.messageZh, code: appError.code });

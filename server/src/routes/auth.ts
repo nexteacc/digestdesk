@@ -4,6 +4,7 @@ import { nanoid } from "nanoid";
 import { and, eq, isNull, lt } from "drizzle-orm";
 import { getDb, readLegacySettings } from "../db/index.js";
 import { users, feeds, subscriptions, userSettings } from "../db/schema.js";
+import { claimInviteForUser, getUserEntitlement, isAdminEmail } from "../services/entitlements.js";
 
 export const authRouter = Router();
 
@@ -59,6 +60,16 @@ authRouter.get("/me", async (req, res) => {
     const now = new Date().toISOString();
     await db.update(users).set({ lastLoginAt: now }).where(eq(users.id, existing.id));
     await repairLegacyFirstUserSubscriptions(existing.id, existing.createdAt);
+    await claimInviteForUser(existing.id, existing.email);
+    const entitlement = await getUserEntitlement(existing.id);
+    if (entitlement.accessStatus === "revoked" && !isAdminEmail(existing.email)) {
+      res.status(403).json({
+        error: "Account access has been revoked.",
+        errorZh: "该账号已被停用",
+        code: "ACCOUNT_ACCESS_REVOKED",
+      });
+      return;
+    }
     res.json({ ...existing, lastLoginAt: now });
     return;
   }
@@ -114,6 +125,8 @@ authRouter.get("/me", async (req, res) => {
       ).onConflictDoNothing();
     }
   });
+
+  await claimInviteForUser(userId, newUser.email);
 
   res.json(newUser);
 });

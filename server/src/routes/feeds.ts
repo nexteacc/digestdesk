@@ -10,6 +10,7 @@ import type { Feed } from "../../../shared/types.js";
 import { getSubstackAdapter } from "../sources/factory.js";
 import { toAppError } from "../sources/app-error.js";
 import { getRequestUserId } from "../auth/user-context.js";
+import { assertCanAddSubscriptions, sendEntitlementError } from "../services/entitlements.js";
 
 const createFeedSchema = z.object({
   url: z.string().min(1, "请提供 url"),
@@ -103,6 +104,7 @@ feedsRouter.post("/", async (req, res) => {
           return;
         }
 
+        await assertCanAddSubscriptions(userId, 1);
         await db
           .update(subscriptions)
           .set({
@@ -119,6 +121,7 @@ feedsRouter.post("/", async (req, res) => {
         return;
       }
 
+      await assertCanAddSubscriptions(userId, 1);
       await db.insert(subscriptions).values({
         id: nanoid(),
         userId,
@@ -136,6 +139,7 @@ feedsRouter.post("/", async (req, res) => {
     }
 
     const now = new Date().toISOString();
+    await assertCanAddSubscriptions(userId, 1);
     const feed = {
       id: nanoid(),
       name: draft.name,
@@ -166,6 +170,7 @@ feedsRouter.post("/", async (req, res) => {
       console.error(`[feeds/create] Initial sync/digest failed for ${feed.name}:`, err);
     });
   } catch (err) {
+    if (sendEntitlementError(res, err)) return;
     const appError = toAppError(err);
     console.error("[feeds/create] Error:", appError.message);
     res.status(appError.status).json({ error: appError.message, errorZh: appError.messageZh, code: appError.code });
@@ -224,6 +229,7 @@ feedsRouter.post("/import", async (req, res) => {
   const now = new Date().toISOString();
   let created = 0;
   let skipped = 0;
+  const candidates = new Map<string, { publicationUrl: string; feedUrl: string }>();
 
   for (const item of items) {
     if (!item.url) {
@@ -244,6 +250,56 @@ feedsRouter.post("/import", async (req, res) => {
       feedUrl = `${publicationUrl}/feed`;
     } catch {
       skipped++;
+      continue;
+    }
+
+    candidates.set(feedUrl, { publicationUrl, feedUrl });
+  }
+
+  const candidateFeedUrls = Array.from(candidates.keys());
+  if (candidateFeedUrls.length > 0) {
+    const existingFeedRows = await db
+      .select({ id: feeds.id, feedUrl: feeds.feedUrl })
+      .from(feeds)
+      .where(inArray(feeds.feedUrl, candidateFeedUrls));
+    const existingFeedIds = existingFeedRows.map((feed) => feed.id);
+    const activeExistingRows = existingFeedIds.length > 0
+      ? await db
+          .select({ feedId: subscriptions.feedId })
+          .from(subscriptions)
+          .where(and(eq(subscriptions.userId, userId), isNull(subscriptions.endedAt), inArray(subscriptions.feedId, existingFeedIds)))
+      : [];
+    const activeExistingFeedIds = new Set(activeExistingRows.map((row) => row.feedId));
+    const additionsNeeded = candidateFeedUrls.filter((feedUrl) => {
+      const existingFeed = existingFeedRows.find((feed) => feed.feedUrl === feedUrl);
+      return !existingFeed || !activeExistingFeedIds.has(existingFeed.id);
+    }).length;
+
+    try {
+      await assertCanAddSubscriptions(userId, additionsNeeded);
+    } catch (error) {
+      if (sendEntitlementError(res, error)) return;
+      throw error;
+    }
+  }
+
+  for (const item of items) {
+    if (!item.url) {
+      continue;
+    }
+
+    let normalizedUrl = item.url.trim();
+    if (!/^https?:\/\//i.test(normalizedUrl)) {
+      normalizedUrl = `https://${normalizedUrl}`;
+    }
+
+    let publicationUrl: string;
+    let feedUrl: string;
+    try {
+      const parsedUrl = new URL(normalizedUrl);
+      publicationUrl = parsedUrl.origin;
+      feedUrl = `${publicationUrl}/feed`;
+    } catch {
       continue;
     }
 

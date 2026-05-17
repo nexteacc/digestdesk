@@ -73,6 +73,7 @@
      - `JINA_RPM`
      - `JINA_MAX_CONCURRENCY`
      - `APP_URL`
+     - `ADMIN_EMAILS`
      - `VITE_ENABLE_GOOGLE_YOUTUBE_IMPORT`
      - `ENABLE_GOOGLE_YOUTUBE_IMPORT`
    - `scheduler`:
@@ -94,6 +95,8 @@
 
 - 主站先上线时，将 `VITE_ENABLE_GOOGLE_YOUTUBE_IMPORT=false`
 - 同时将 `ENABLE_GOOGLE_YOUTUBE_IMPORT=false`
+- `ADMIN_EMAILS` 只配置在 `web` 服务，例如 `founder@example.com,ops@example.com`
+- `/admin` 页面复用 Clerk 登录；后端只允许 `ADMIN_EMAILS` 中的邮箱访问 `/api/admin`
 - 这样可以先发布 Digest / RSS / Substack / 手动添加 YouTube 频道能力
 - 等 Google 完成 YouTube 敏感 scope 审核后，再把这两个变量切到 `true`
 
