@@ -115,7 +115,7 @@ function getRetryModelId(primaryModelId: string, baseURL: string) {
 const ArticleSummarySchema = z.object({
   oneLiner: z
     .string()
-    .describe("用一个完整的、不超过60个字符的短句，精准总结文章的核心结论。"),
+    .describe("一个完整、通顺的短句，精准总结文章的核心结论。"),
   keyInsights: z
     .array(z.string())
     .length(3)
@@ -126,39 +126,42 @@ export type ArticleSummary = z.infer<typeof ArticleSummarySchema>;
 
 const SUMMARY_LIMITS = {
   zh: {
-    oneLinerChars: 60,
-    keyInsightChars: 76,
+    oneLinerMaxChars: 90,
+    keyInsightMaxChars: 130,
     minInsightChars: 10,
   },
   en: {
-    oneLinerChars: 120,
-    keyInsightChars: 140,
+    oneLinerMaxChars: 160,
+    keyInsightMaxChars: 220,
     minInsightChars: 24,
   },
 } as const;
 
 const PROMPTS = {
   zh: {
-    system: `你是一名专业的中文编辑，为 DigestDesk 产品工作。
-任务要求：
-1. **语言统一**: 你的核心任务是阅读任何语言的文章，并始终以【简体中文】输出高质量的结构化摘要。
-2. **客观去噪**: 剔除客套话、情绪表达和背景铺垫，只保留核心信息。
-3. **长度纪律**: 输出必须短，禁止把整段原文、列表或长句塞进任一字段。
-4. **信息分配**: oneLiner 只写一个核心结论；数字、比例、金额、日期等细节优先放入 keyInsights，不要塞进 oneLiner。`,
+    system: `你是 DigestDesk 的中文日报编辑。阅读任意语言的文章，输出简体中文摘要。
+
+写作要求：
+- 保留核心结论和重要事实，去掉广告、寒暄、目录、链接和背景噪音。
+- oneLiner 写一个核心结论，目标 35-70 个中文字符。
+- keyInsights 写 3 条要点，每条只写一个事实、数据、方法或结论，目标 55-90 个中文字符。
+- 宁可少写细节，也要写完整、通顺、自然的句子。`,
     schema: {
-      oneLiner: "用一个完整的、不超过60个字符（含数字和标点）的短句，精准总结文章的核心结论。只表达一个结论，确保句子通顺、信息完整。",
-      keyInsights: "正好3条关键洞察；每条不超过76个字符（含数字和标点）；每条只表达一个具体数据、方法或结论。禁止长段落、原文堆砌、占位符和废话。",
+      oneLiner: "一个完整、通顺的中文短句，只表达一个核心结论。",
+      keyInsights: "正好 3 条。每条是完整、通顺的中文句子，只表达一个具体事实、数据、方法或结论。",
     }
   },
   en: {
-    system: `You are a professional editor working for DigestDesk.
-Task Requirements:
-1. **Language Consistency**: Your core task is to read articles in any language and always output high-quality structured summaries in 【English】.
-2. **Objective De-noising**: Remove pleasantries, emotional expressions, and background padding, keeping only the core information.
-3. **Length Discipline**: Keep every field short. Never paste full paragraphs, long lists, or source fragments into any field.`,
+    system: `You are an editor for DigestDesk. Read articles in any language and output concise English summaries.
+
+Writing rules:
+- Keep the core conclusion and important facts; remove ads, links, boilerplate, and background noise.
+- oneLiner: one core conclusion, target 14-30 words.
+- keyInsights: exactly 3 takeaways, one fact, data point, method, or conclusion each, target 18-40 words.
+- Prefer a shorter complete sentence over a longer unfinished one.`,
     schema: {
-      oneLiner: "A complete sentence (max 20 words) that accurately summarizes the core conclusion of the article.",
-      keyInsights: "Exactly 3 concise takeaways. Each item must be 8-24 words, contain one specific data point, method, or conclusion, and avoid placeholders or source-text dumping.",
+      oneLiner: "One complete, natural English sentence expressing the core conclusion.",
+      keyInsights: "Exactly 3 complete, natural English sentences. Each expresses one concrete fact, data point, method, or conclusion.",
     }
   }
 };
@@ -183,7 +186,7 @@ function isLowQualitySummaryText(value: string) {
 
 function assertSummaryText(value: string, field: "oneLiner" | "keyInsight", language: "zh" | "en") {
   const limits = SUMMARY_LIMITS[language] ?? SUMMARY_LIMITS.zh;
-  const maxChars = field === "oneLiner" ? limits.oneLinerChars : limits.keyInsightChars;
+  const maxChars = field === "oneLiner" ? limits.oneLinerMaxChars : limits.keyInsightMaxChars;
   const minChars = field === "oneLiner" ? 6 : limits.minInsightChars;
 
   if (isLowQualitySummaryText(value)) {
@@ -225,14 +228,12 @@ function buildArticleSummaryGenerationSchema(language: "zh" | "en") {
     oneLiner: z
       .string()
       .min(6)
-      .max(limits.oneLinerChars)
       .describe(PROMPTS[language].schema.oneLiner),
     keyInsights: z
       .array(
         z
           .string()
           .min(limits.minInsightChars)
-          .max(limits.keyInsightChars)
           .describe(PROMPTS[language].schema.keyInsights),
       )
       .length(3)
@@ -249,9 +250,9 @@ function buildSummarySystemPrompt(language: "zh" | "en", retry: boolean) {
 2. keyInsights must contain exactly 3 independent, specific, concise items.
 3. Do not paste long source paragraphs, table-of-contents text, list dumps, or meaningless characters.`
     : `上一轮输出未通过长度或质量校验。请重新生成，必须满足：
-1. oneLiner 是完整短句，不要省略号、问号占位或残片。
-2. keyInsights 正好 3 条，每条独立、具体、短。
-3. 不要粘贴原文长段、目录、列表堆砌或无意义字符。`;
+1. oneLiner 是完整、通顺的中文短句，只写一个核心结论。
+2. keyInsights 正好 3 条，每条独立、具体、完整。
+3. 宁可少写细节，也不要写半句话、原文长段、目录或列表堆砌。`;
 
   return `${promptConfig.system}
 

@@ -876,3 +876,114 @@ OpenRouter 的 1 Day 是账号全局统计窗口，不是单个 digest。
 - `retryRequests` 是否集中在少数文章
 - Qwen 是否能救回 OSS 的 schema/长度/质量失败
 - `summaryFallbacks` 是否仍接近 0
+
+### 2026-05-18 摘要成本与质量复盘
+
+#### Summary
+
+本次复盘验证昨天摘要链路优化后的两个结果：
+
+1. 成本线：OpenRouter requests / tokens / spend 是否从 2026-05-14 的异常高位回落。
+2. 质量线：中文 `oneLiner` 和 `keyInsights` 是否仍出现长度合规但语义未闭合的残句。
+
+#### Impact
+
+成本影响明显改善：
+
+- requests 从早期约 520 降到 125，下降约 76%
+- tokens 从早期约 1.31M 降到 522K，下降约 60%
+- 1 Day spend 为 `$0.095`
+
+质量影响仍存在：
+
+- 部分中文摘要进入 `articles.summary_zh` 和 `digest_items` 后仍是残句
+- 这些摘要会被缓存和日报快照复用，代码修复不会自动修正旧数据
+
+#### Detection & Evidence
+
+模型供应商 1 Day 窗口截图：
+
+- Spend: `$0.095`
+- Requests: `125`
+- Tokens: `522K`
+- Model: `gpt-oss-120b`
+
+生产库按 Asia/Ho_Chi_Minh 今日窗口查询：
+
+- digest count: 5
+- digest item rows: 137
+- unique articles: 104
+- succeeded jobs: 5
+- skipped jobs: 3
+- failed jobs: 0
+- fallback items: 6
+
+质量复查，对 `digests.date = 2026-05-17`：
+
+- 中文 item 共 72 条
+- `one_liner` 正好 60 字符：21 条
+- 其中 19 条不是闭合标点结尾，存在明显残句
+- `keyInsights` 共 216 条
+- key insight 正好 76 字符：46 条
+- 其中 43 条不是闭合标点结尾
+
+#### Timeline
+
+- 2026-05-17: 对齐中文摘要 prompt/schema 到 60/76，并加入 OSS 失败后 Qwen retry
+- 2026-05-18: scheduler 生成 `digests.date = 2026-05-17` 的日报
+- 2026-05-18: 数据库复查确认成本下降，但 60/76 边界残句仍存在
+
+#### Root Cause & Contributing Factors
+
+质量问题仍存在：
+
+- schema 的字段 `max` 让模型贴着 structured output 的 `maxLength` 边界生成
+- 模型在边界处停止，导致“长度合规但语义未闭合”的摘要入库
+- Qwen fallback 没有触发，因为这些输出通过了 schema 长度校验
+
+促成因素：
+
+- prompt 目标长度与 schema 硬边界混用
+- 当前校验只能识别长度、空值和明显低质量文本，不能可靠判断中文句子是否自然闭合
+- 摘要缓存和 digest 快照会放大坏输出
+
+#### Mitigation / Changes
+
+已完成或正在提交的修复方向：
+
+- prompt 使用简洁任务型写法，不再列语法黑名单
+- 中文 `oneLiner` 目标范围改为 35-70 个中文字符
+- 中文 `keyInsights` 目标范围改为 55-90 个中文字符
+- 英文 `oneLiner` 目标范围改为 14-30 words，英文 `keyInsights` 目标范围改为 18-40 words
+- schema 取消字段 `max`，只保留结构和最小长度
+- 后处理保留宽松异常上限：中文 `oneLiner > 90`、`keyInsight > 130` 才判失败
+
+#### Follow-up Actions
+
+| Action | Owner | Status | Notes |
+|---|---|---|---|
+| 观察新 prompt + no schema max 后的中文残句率 | AI agent | Pending | 看 `one_liner` 是否仍大量贴近 90 或出现残句 |
+| 观察 token / requests 是否保持低位 | AI agent | Pending | 供应商 1 Day 窗口 + 数据库 unique articles 交叉验证 |
+| 评估是否需要清理旧 `summary_zh/en` 缓存 | AI agent + user | Pending | 只在旧坏摘要继续影响页面时处理 |
+| 评估是否需要摘要 meta/version | AI agent + user | Deferred | 只有持续排查困难时再加，避免过度工程化 |
+
+#### Next Review
+
+- 新生成摘要是否还出现大量“正好等于异常上限”的文本
+- `oneLiner` 是否仍出现明显残句
+- `keyInsights` 是否仍出现半句或隐藏字符
+- `retryRequests` 与 `summaryFallbacks` 是否保持合理
+- OpenRouter requests 是否继续接近当天 `unique article + language` 摘要数
+
+#### Review Template
+
+后续每日摘要链路复盘按 SRE / incident review 的长期实践结构记录：
+
+1. Summary：本次复盘验证什么，结论是什么。
+2. Impact：对用户、成本、质量、稳定性的影响。
+3. Detection & Evidence：供应商指标、数据库、日志、截图等事实证据。
+4. Timeline：关键事件和变更顺序。
+5. Root Cause & Contributing Factors：根因和促成因素。
+6. Mitigation / Changes：已经采取的缓解和修复。
+7. Follow-up Actions：行动项、owner、状态、备注。
+8. Next Review：下一轮要看的指标和触发条件。
