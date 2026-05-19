@@ -4,7 +4,7 @@
 DigestDesk is a React/Vite + Express/Postgres reading workflow app. Keep this file for agent-only operating rules; use README and docs as the human-facing source of truth.
 
 ## Commands
-Use pnpm: `pnpm dev`, `pnpm build`, `pnpm --filter substack-digest-server build`, `pnpm --filter substack-digest-server dev`, `pnpm --filter substack-digest-server dev:scheduler`, `pnpm lint`.
+Use pnpm: `pnpm dev`, `pnpm build`, `pnpm --filter substack-digest-server build`, `pnpm --filter substack-digest-server dev`, `pnpm --filter substack-digest-server dev:scheduler`, `pnpm --filter substack-digest-server smoke:structured-output`, `pnpm lint`.
 No test script is defined. If tests are added, follow existing package scripts and document the command here.
 
 ## Non-Obvious Rules

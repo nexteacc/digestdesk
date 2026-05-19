@@ -12,6 +12,7 @@
     "build": "rm -rf dist && tsc -p tsconfig.build.json && mv dist/server/src/* dist/ && rm -rf dist/server dist/shared",
     "start": "node dist/index.js",
     "start:scheduler": "node dist/scheduler.js",
+    "smoke:structured-output": "tsx src/scripts/smoke-structured-output.ts",
     "job:dispatch-digests": "node dist/jobs/dispatch-digest-jobs.js",
     "job:run-digest-jobs": "node dist/jobs/run-digest-jobs.js"
   },

@@ -6,6 +6,27 @@ const _cachedModels = new Map<string, LanguageModel>();
 const DEFAULT_MODEL = "gpt-4o-mini";
 const DEFAULT_OPENROUTER_RETRY_MODEL = "qwen/qwen3.5-flash-02-23";
 
+type ModelPromptProfile = "editorial" | "strict-json";
+
+type ModelAdapter = {
+  promptProfile: ModelPromptProfile;
+};
+
+const MODEL_ADAPTERS: Record<string, ModelAdapter> = {
+  "openai/gpt-oss-120b": {
+    promptProfile: "editorial",
+  },
+  "qwen/qwen3.5-flash-02-23": {
+    promptProfile: "strict-json",
+  },
+};
+
+const DEFAULT_MODEL_ADAPTER: ModelAdapter = {
+  promptProfile: "editorial",
+};
+
+const STRUCTURED_OUTPUT_PROTOCOL_PROMPT = `Return only valid JSON matching the provided schema. Do not include markdown, prose outside JSON, comments, or trailing text.`;
+
 export type AiErrorCategory =
   | "quota"
   | "rate_limit"
@@ -89,6 +110,22 @@ function getModel(modelId: string) {
     name: "ai-provider",
     baseURL,
     supportsStructuredOutputs: true,
+    transformRequestBody: (body) => {
+      if (!baseURL.includes("openrouter.ai")) return body;
+      const requestBody = body as Record<string, unknown>;
+      const providerConfig =
+        requestBody.provider && typeof requestBody.provider === "object" && !Array.isArray(requestBody.provider)
+          ? (requestBody.provider as Record<string, unknown>)
+          : {};
+
+      return {
+        ...requestBody,
+        provider: {
+          ...providerConfig,
+          require_parameters: true,
+        },
+      };
+    },
     headers: {
       Authorization: `Bearer ${apiKey}`,
     },
@@ -110,6 +147,10 @@ function getRetryModelId(primaryModelId: string, baseURL: string) {
     return DEFAULT_OPENROUTER_RETRY_MODEL;
   }
   return primaryModelId;
+}
+
+function getModelAdapter(modelId: string) {
+  return MODEL_ADAPTERS[modelId] ?? DEFAULT_MODEL_ADAPTER;
 }
 
 const ArticleSummarySchema = z.object({
@@ -241,7 +282,7 @@ function buildArticleSummaryGenerationSchema(language: "zh" | "en") {
   });
 }
 
-function buildSummarySystemPrompt(language: "zh" | "en", retry: boolean) {
+function buildEditorialSummarySystemPrompt(language: "zh" | "en", retry: boolean) {
   const promptConfig = PROMPTS[language] || PROMPTS.zh;
   if (!retry) return promptConfig.system;
   const retryInstructions = language === "en"
@@ -257,6 +298,39 @@ function buildSummarySystemPrompt(language: "zh" | "en", retry: boolean) {
   return `${promptConfig.system}
 
 ${retryInstructions}`;
+}
+
+function buildStrictJsonSummarySystemPrompt(language: "zh" | "en") {
+  if (language === "en") {
+    return `You are a strict JSON generator for DigestDesk article summaries.
+
+Task rules:
+1. Output one complete English oneLiner sentence, 14-30 words.
+2. Output keyInsights as exactly 3 complete English sentences.
+3. Each key insight must contain one specific fact, data point, method, or conclusion.
+4. Never use ellipses, placeholders, fragments, headings, markdown, or source text dumps.
+5. Required JSON object shape: {"oneLiner": string, "keyInsights": [string, string, string]}.`;
+  }
+
+  return `你是 DigestDesk 文章摘要的严格 JSON 生成器。
+
+任务规则：
+1. oneLiner 输出一个完整、通顺的简体中文短句，只写一个核心结论。
+2. keyInsights 正好 3 条，每条都是完整、具体、通顺的简体中文句子。
+3. 每条 key insight 只表达一个事实、数据、方法或结论。
+4. 不要使用省略号、占位符、半句话、标题、markdown 或原文长段。
+5. 必须输出这个 JSON 对象形状：{"oneLiner": string, "keyInsights": [string, string, string]}。`;
+}
+
+function buildSummarySystemPrompt(language: "zh" | "en", adapter: ModelAdapter, retry: boolean) {
+  const taskPrompt =
+    adapter.promptProfile === "strict-json"
+      ? buildStrictJsonSummarySystemPrompt(language)
+      : buildEditorialSummarySystemPrompt(language, retry);
+
+  return `${taskPrompt}
+
+${STRUCTURED_OUTPUT_PROTOCOL_PROMPT}`;
 }
 
 function shouldRetrySummaryGeneration(error: unknown) {
@@ -399,13 +473,14 @@ export async function summarizeArticle(
   let lastError: unknown;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     const attemptModelId = attempt === 1 ? primaryModelId : retryModelId;
+    const adapter = getModelAdapter(attemptModelId);
     const model = getModel(attemptModelId);
 
     try {
       options?.onAttempt?.(attempt);
       const { object } = await generateObject({
         model,
-        system: buildSummarySystemPrompt(language, attempt > 1),
+        system: buildSummarySystemPrompt(language, adapter, attempt > 1),
         prompt: input,
         schema: buildArticleSummaryGenerationSchema(language),
       });

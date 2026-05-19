@@ -987,3 +987,78 @@ OpenRouter 的 1 Day 是账号全局统计窗口，不是单个 digest。
 6. Mitigation / Changes：已经采取的缓解和修复。
 7. Follow-up Actions：行动项、owner、状态、备注。
 8. Next Review：下一轮要看的指标和触发条件。
+
+---
+
+## 2026-05-19: OpenRouter structured-output adapter for retry summaries
+
+### Summary
+
+2026-05-18 日报出现 16 条摘要 fallback。Zeabur scheduler 日志确认调度和 `digest_jobs` 正常，失败集中在摘要生成：主模型输出未过 schema/质量校验后，retry 模型 `qwen/qwen3.5-flash-02-23` 经 OpenRouter/Alibaba 返回 `messages must contain the word 'json'`，导致 retry 没有真正兜住。
+
+### Evidence
+
+- `digest_jobs` 对 `target_date = 2026-05-18`：5 succeeded、4 skipped、0 failed，所有 `attempt_count = 1`。
+- `digests.date = 2026-05-18`：5 份 daily digest、154 条 items、122 篇 unique articles、16 条 fallback/empty insights。
+- scheduler 日志显示 fallback 前一跳常见错误：
+  - 主模型：`too_long_oneLiner`、`No object generated: response did not match schema`
+  - retry 模型：OpenRouter/Alibaba `response_format` JSON 协议错误
+
+### Root Cause
+
+模型路由只区分了 primary/retry model id，没有显式建模 OpenRouter structured-output 协议：
+
+- Qwen/Alibaba 在 `response_format=json_object/json_schema` 路径下要求 messages 显式包含 `json`。
+- `openai/gpt-oss-120b` 有多个 OpenRouter provider endpoint，不是每个 endpoint 都支持 `response_format` / `structured_outputs`。
+- retry prompt 复用编辑型摘要思路，不是 Qwen 专用 strict JSON prompt。
+
+### Mitigation / Changes
+
+- `summarizer.ts` 新增 `MODEL_ADAPTERS`，把模型任务 prompt profile 与模型 ID 绑定：
+  - `openai/gpt-oss-120b` -> `editorial`
+  - `qwen/qwen3.5-flash-02-23` -> `strict-json`
+- OpenRouter provider adapter 统一注入 `provider.require_parameters = true`，避免路由到不支持结构化参数的 provider。
+- 所有 structured-output 摘要调用统一追加协议层 prompt：只返回匹配 schema 的 valid JSON，不输出 markdown 或 JSON 外文本。
+- Qwen retry 使用独立 strict JSON prompt，明确对象形状和字段约束，不再依赖 primary prompt 的编辑型表达。
+- 新增 `pnpm --filter substack-digest-server smoke:structured-output`，强制 primary 失败后验证 Qwen retry 能返回合法 structured output。
+
+### Verification
+
+- OpenRouter raw API smoke：
+  - `openai/gpt-oss-120b` + `json_schema strict` + `provider.require_parameters=true` 成功。
+  - `qwen/qwen3.5-flash-02-23` + `json_schema strict` + `provider.require_parameters=true` + JSON protocol prompt 成功。
+- SDK smoke：
+  - Qwen 不含 `json` protocol prompt 时复现生产错误。
+  - Qwen strict JSON prompt 通过 `generateObject`。
+  - 强制 primary failure 后 retry 到 Qwen 成功。
+- 本地验证：
+  - `pnpm --filter substack-digest-server build`
+  - `pnpm lint`
+- 决策：部署后不把手动运行 `smoke:structured-output` 作为用户侧必做步骤；该命令保留给 agent/运维排查使用。生产验收以次日 scheduler 日志和数据库对账为准。
+
+### Discussion Record
+
+本次讨论确认：
+
+- 问题定位已经清楚：日报任务本身正常，失败发生在摘要 retry structured-output 路径。
+- 主模型偶发 schema/质量失败属于可接受的正常波动，retry 接管是合理设计。
+- 真正缺口是 retry 模型 Qwen/Alibaba 与 OpenRouter structured-output 协议未对齐，导致兜底没有生效。
+- 修复不能只改 prompt 文案；需要把模型差异、OpenRouter provider routing、JSON 协议要求分层建模。
+- `MODEL_ADAPTERS` 用于表达模型能力差异：primary 走编辑型 prompt，retry 走 strict JSON prompt。
+- `provider.require_parameters=true` 用于约束 OpenRouter 不把 structured-output 请求路由到不支持参数的 endpoint。
+- 明天重点不是看 `retryRequests` 是否为 0；retry 存在是正常的。重点看 retry 后是否还 fallback，以及是否还出现 JSON protocol error。
+
+### Next Review
+
+- 2026-05-20 看 `scheduler` 的 `[digest] Daily digest updated`：`summaryFallbacks` 应下降，`retryRequests` 不应再对应 OpenRouter/Alibaba JSON protocol 错误。
+- 若仍有 fallback，按错误类别拆分为 schema/quality、provider invalid_request、rate limit、network，而不是只看总 fallback 数。
+- 数据库对账 `digests.date = 2026-05-19`：
+  - daily digest 数
+  - digest item rows
+  - unique articles
+  - fallback/empty insights items
+  - `digest_jobs` succeeded/skipped/failed/attempt_count
+- 日志检查：
+  - 不应再出现 `messages must contain the word 'json'`
+  - `summaryFallbacks` / `fallbackCount` 应低于 2026-05-18 的 16 条
+  - `retryRequests` 可以存在，但应能产出 `summaryGenerated` 或 cache，而不是集中转成 fallback
