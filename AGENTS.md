@@ -12,6 +12,12 @@ No test script is defined. If tests are added, follow existing package scripts a
 - Avoid new route-level direct calls to `generateDaily` unless intentionally bypassing sync and pre-summary behavior.
 - Scheduled work belongs to the `scheduler` service and `digest_jobs`; do not move cron-style dispatch back into the web service without an explicit architecture change.
 
+## Commit Messages
+- For non-trivial fixes, write a commit body, not only a subject line.
+- Include the user-visible symptom, root cause, key implementation decision, and verification commands/results.
+- For AI/model/provider changes, explicitly mention the model/provider behavior being adapted and the follow-up monitoring signal.
+- Keep the subject concise, then use 3-6 body bullets when the change affects scheduling, digest generation, model routing, deployment, or monitoring.
+
 ## Docs Map
 - Human entry point: `README.md`
 - AI system context, invariants, data boundaries, API chains: `docs/context.md`
