@@ -30,3 +30,8 @@ No test script is defined. If tests are added, follow existing package scripts a
 - Follow existing code style, naming, libraries, and structure.
 - Do not write, output, or log secrets.
 - Before proposing external platforms, deployment features, third-party services, or developer tools, verify the capability through explicit research or documentation lookup.
+
+## Change Safety
+- For behavior-changing fixes, identify the behavior contract before editing and search for adjacent paths that may still enforce or assume the old behavior: validation, schemas/types, retries/fallbacks, cache/persistence, logs/metrics, and relevant docs/history.
+- For AI/model/prompt/output changes, verify that prompt instructions, structured-output schema, post-validation, retry/fallback behavior, cache reuse, and failure observability still agree. Treat relevant incidents in `docs/history.md` as risks to verify, not only background to read.
+- Keep fixes proportional. Report which adjacent paths were checked and which were intentionally left unchanged.

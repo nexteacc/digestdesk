@@ -1062,3 +1062,186 @@ OpenRouter 的 1 Day 是账号全局统计窗口，不是单个 digest。
   - 不应再出现 `messages must contain the word 'json'`
   - `summaryFallbacks` / `fallbackCount` 应低于 2026-05-18 的 16 条
   - `retryRequests` 可以存在，但应能产出 `summaryGenerated` 或 cache，而不是集中转成 fallback
+
+---
+
+## 2026-05-20: Production log review for 2026-05-19 digest run
+
+### Summary
+
+按 2026-05-19 的 Next Review 对 Zeabur `scheduler` runtime logs 和生产库做复盘。`target_date = 2026-05-19` 的日报运行正常：调度、执行、摘要 retry 兜底和 digest 落库均符合预期。2026-05-19 修复的 OpenRouter/Qwen structured-output JSON 协议问题未再复现。
+
+### Impact
+
+- 用户侧：5 份 daily digest 正常生成；4 个无内容任务被正确跳过。
+- 稳定性：无 `pending` / `running` / `failed` 积压。
+- 摘要质量：0 条 fallback，0 条 empty insights。
+- 成本：多数 digest assembly 命中摘要缓存；仅少量新增文章触发 AI 摘要。
+
+### Detection & Evidence
+
+生产库对账 `target_date = 2026-05-19`：
+
+- `digest_jobs`：5 succeeded、4 skipped、0 failed，所有 `attempt_count = 1`。
+- `digests.date = 2026-05-19`：5 份 daily digest。
+- `digest_items`：195 条 items、154 篇 unique articles。
+- fallback/empty insights：0 / 0。
+- 当前 backlog：无 pending、running、failed。
+
+scheduler 日志要点：
+
+- 成功 digest 的 `[digest] Daily digest updated` 均为 `summaryFallbacks=0`、`fallbackCount=0`、`emptyInsightsCount=0`。
+- 未见 `messages must contain the word 'json'`。
+- 有 2 次 primary `openai/gpt-oss-120b` 因 `too_long_oneLiner` 触发 retry；retry 到 `qwen/qwen3.5-flash-02-23` 后成功产出摘要，没有转成 fallback。
+- 一轮 Slashdot 用户新增 11 篇文章，`presummarize` 11/11 成功，`retryRequests=0`。
+
+### Timeline
+
+- 2026-05-19T22:05Z：Asia/Bangkok 05:00 用户开始执行 `targetDate=2026-05-19`。
+- 2026-05-19T22:22Z：该用户生成 69 条 items；3 条 cache miss 在 digest assembly 中补摘要，2 次 retry 成功，0 fallback。
+- 2026-05-20T00:00Z：Asia/Shanghai 08:00 批次 dispatch 创建 6 个 `targetDate=2026-05-19` jobs。
+- 2026-05-20T00:00Z：Slashdot 用户生成 12 条 items；新增 11 篇预摘要全部成功。
+- 2026-05-20T00:05Z：runner 处理 5 个 job，1 succeeded、4 skipped empty digest。
+- 2026-05-20T01:08Z：Asia/Bangkok 08:00 两个用户完成，runner 汇总 `claimed=2 succeeded=2 skipped=0 failed=0`。
+
+### Root Cause & Contributing Factors
+
+本次没有生产事故。前一日的 retry structured-output 协议问题已被模型 adapter、strict JSON prompt 和 `provider.require_parameters=true` 缓解。
+
+仍观察到两个正常波动/噪音：
+
+- `openai/gpt-oss-120b` 仍可能生成过长 `oneLiner`，但 Qwen retry 已能兜住。
+- 一个 YouTube feed fallback 返回 404，表现为 feed sync 噪音；对应 digest 仍成功，未影响日报生成。
+
+### Mitigation / Changes
+
+本次未做代码改动。结论是继续保留现有摘要 retry adapter 和 scheduler 架构。
+
+### Follow-up Actions
+
+| Action | Owner | Status | Notes |
+|---|---|---|---|
+| 继续观察 retry 后 fallback 是否为 0 | AI agent | Pending | 重点不是 retryRequests 是否为 0，而是 retry 是否成功兜底 |
+| 观察 YouTube feed 404 是否反复出现 | AI agent | Pending | 若同一 feed 连续失败，再判断是否需要修正 feed URL 或频道解析 |
+| 观察 primary `too_long_oneLiner` 频率 | AI agent | Pending | 若频率升高，再调 prompt 或后处理阈值 |
+
+### Next Review
+
+- 继续看 `target_date = 2026-05-20` 的 `digest_jobs` succeeded/skipped/failed 分布。
+- 对账 fallback/empty insights 是否保持 0。
+- 若出现 fallback，按 schema/quality、provider invalid_request、rate limit、network 分类，而不是只看总数。
+- 留意是否再次出现 OpenRouter/Alibaba JSON protocol error。
+
+---
+
+## 2026-05-22: Production log review for 2026-05-21 English summary length drift
+
+### Summary
+
+按 2026-05-20 的 Next Review 检查 Zeabur `scheduler` runtime logs，并用用户提供的 OpenRouter Activity 1 Day 截图对账 `target_date = 2026-05-21` 的日报运行。调度和 job 执行总体正常，OpenRouter 214 requests 的量级可由多批用户预摘要、少量 digest assembly 补摘要和 retry 解释；本轮异常集中在一个英文摘要批次，`too_long_oneLiner` 在 primary 与 Qwen retry 后仍有残留，最终出现 2 条 digest fallback。
+
+### Impact
+
+- 稳定性：今天可见的 scheduler 批次均完成，后续 runner candidate scans 回到 0，未见 job 级失败风暴或 due-job 积压。
+- 成本：OpenRouter 1 Day 显示 214 requests、822K tokens、`$0.131`；其中 `gpt-oss-120b` 176 requests、Qwen3.5-Flash 38 requests，retry 占比值得继续观察。
+- 摘要质量：05:00 Asia/Bangkok 英文批次预摘要先失败 5 篇，digest assembly 补摘要后仍有 2 篇 fallback。
+- 用户侧：成功 digest 仍生成，但英文批次的 fallback 会显示 `Summary unavailable for now.`。
+
+### Detection & Evidence
+
+OpenRouter 1 Day 截图：
+
+- Spend: `$0.131`
+- Requests: `214`
+- Tokens: `822K`
+- `gpt-oss-120b`: 176 requests、590K tokens、`$0.09`
+- `Qwen3.5-Flash`: 38 requests、232K tokens、`$0.04`
+
+scheduler 日志对账：
+
+- 2026-05-21T22:00Z 的 Asia/Bangkok 05:00 英文 job 被创建，最终 succeeded。
+- 该英文 job 的 `[presummarize] Complete`：
+  - `articlesToProcess=67`
+  - `modelRequests=89`
+  - `retryRequests=22`
+  - `succeeded=62`
+  - `failed=5`
+- 该英文 digest 的 `[digest] Daily digest updated`：
+  - `items=67`
+  - `summaryCacheHits=62`
+  - `summaryCacheMisses=5`
+  - `modelRequests=9`
+  - `retryRequests=4`
+  - `summaryGenerated=3`
+  - `summaryFallbacks=2`
+  - `fallbackCount=2`
+  - `emptyInsightsCount=2`
+- 失败样本集中在英文 `too_long_oneLiner`，包括 `presummarize` 失败后由 digest assembly 再补跑仍 fallback 的文章。
+- 未见先前的 OpenRouter/Alibaba `messages must contain the word 'json'` 协议错误；Qwen retry 仍有多条 `attempt=2` 成功日志。
+- 2026-05-22T00:09Z 的 Asia/Shanghai 批次 runner 汇总为 `claimed=5 succeeded=1 skipped=4 failed=0`；成功 digest 32 个 items，digest assembly 阶段 `modelRequests=0`、`summaryFallbacks=0`。
+- 2026-05-22T01:11Z 的 Asia/Bangkok 08:00 批次 runner 汇总为 `claimed=2 succeeded=2 skipped=0 failed=0`；其中一份 digest 52 个 items 且全部 cache hit，另一份 digest 有 1 条 YouTube `content_too_short` empty insight，但无 fallback。
+
+### Timeline
+
+- 2026-05-21T22:00Z：scheduler dispatch 创建 Asia/Bangkok 05:00 英文 `targetDate=2026-05-21` job。
+- 2026-05-21T22:26Z：英文预摘要结束，67 篇文章产生 89 次模型请求和 22 次 retry，5 篇因 `too_long_oneLiner` 失败。
+- 2026-05-21T22:28Z：英文 digest assembly 对 5 个 cache miss 补摘要，最终 3 篇生成摘要、2 篇 fallback，job succeeded。
+- 2026-05-22T00:09Z：Asia/Shanghai 08:00 批次处理完成，1 个 digest succeeded、4 个 empty digest skipped。
+- 2026-05-22T01:09Z 至 01:11Z：Asia/Bangkok 08:00 两个 digest 完成，runner 汇总 2 succeeded。
+- 2026-05-22T03:15Z 至 03:40Z：dispatch 继续看到已有 jobs，runner candidate scans 为 0。
+
+### Root Cause & Contributing Factors
+
+根因是英文摘要长度契约漂移：
+
+- 英文 prompt 的目标长度已经按 words 表达：`oneLiner` 目标 `14-30 words`。
+- `summarizer.ts` 后处理仍按旧字符上限拒绝英文 `oneLiner > 160 chars`。
+- 正常的 25-30 word 英文完整句子在包含人名、公司名、金额或长术语时可超过 160 chars，因此会满足 prompt 目标却被 validator 判成 `too_long_oneLiner`。
+- retry 仍经过同一 post-validation，所以 primary 与 Qwen retry 都可能被旧字符上限误杀。
+
+促成因素：
+
+- 前序复盘已经要求关注 prompt/schema/post-validation 边界，但本次才发现英文 prompt 单位切到 words 后，validator 的旧字符约束仍残留。
+- 原日志只暴露 `too_long_oneLiner`，没有记录失败输出的 chars、words、limit 和 limit unit，导致先看到的是模型 retry/fallback 现象，而不是程序验收口径冲突。
+
+### Mitigation / Changes
+
+本轮本地改动：
+
+- 英文 post-validation 改为按 word 异常上限拦截：
+  - `oneLiner > 45 words`
+  - `keyInsight > 60 words`
+- 英文 retry prompt 与 Qwen strict JSON prompt 明确重申 word 目标：
+  - `oneLiner` 目标 `14-30 words`
+  - `keyInsights` 每条目标 `18-40 words`
+- 摘要校验失败日志增加最小诊断元数据：`field`、`language`、`chars`、`words`、`limit`、`limitUnit`。
+- 数值事实 spot check 后，摘要 prompt 增加金额/数量级/指标类型准确性约束；中文 prompt 收成短任务规格，并给出 `$124m -> 1.24 亿美元` 的换算例子。
+- `AGENTS.md` 增加 behavior-changing fixes 与 AI output changes 的 change-safety 规则，要求把 `docs/history.md` 中的相关事故当作本次变更风险来验证。
+
+### Verification
+
+- 本地构建与 lint：
+  - `pnpm --filter substack-digest-server build`
+  - `pnpm lint`
+- 本地 validator 定向检查：
+  - 29 words / 190 chars 的英文 `oneLiner` 现在可通过。
+  - 54 words / 427 chars 的英文 `oneLiner` 仍会被异常上限拒绝。
+
+### Follow-up Actions
+
+| Action | Owner | Status | Notes |
+|---|---|---|---|
+| 部署英文 word-based validator 和诊断日志 | AI agent + user | Pending | 部署前今天的生产日志仍反映旧 160-char 校验 |
+| 复查下一轮英文摘要 fallback | AI agent | Pending | 重点看 `summaryFallbacks` 是否从本轮英文批次的 2 条回落 |
+| 复查 `validation` 元数据 | AI agent | Pending | 若仍有 `too_long_oneLiner`，确认是否实际超过 45 words，而不是字符误判 |
+| 继续看 retry 成功率 | AI agent | Pending | retry 可以存在，但应产出 summary/cache，不应集中转成 fallback |
+| spot check 新生成的数值密集摘要 | AI agent | Pending | prompt 约束只影响新生成摘要；已缓存摘要和 digest 快照不会因 prompt 改动自动修正 |
+
+### Next Review
+
+- 部署后检查下一轮 scheduler runtime logs；重点看英文批次的 `[presummarize] Complete`、`[digest] Daily digest updated`、`[summarizer] AI summary failed`。
+- 若仍有英文 `too_long_oneLiner`，按新日志里的 `words`、`limit`、`limitUnit` 判断是真过长，还是转成其他 schema/quality 失败。
+- 对账 OpenRouter 1 Day 的 requests/tokens/spend 与 `modelRequests`、`retryRequests`，确认 retry 下降来自误判减少，而不是摘要漏生成。
+- 抽查新生成的金额/百分比/数量摘要；若旧错误摘要仍在页面可见，再决定是否定向重生成对应缓存和 digest 快照。
+- 继续确认未复现 OpenRouter/Alibaba JSON protocol error。
+- 单独观察 YouTube `content_too_short` 是否只是无 transcript 噪音；不要把它和英文 validator fallback 混为同一问题。

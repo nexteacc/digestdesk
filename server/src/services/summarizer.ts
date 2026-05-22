@@ -36,6 +36,36 @@ export type AiErrorCategory =
   | "invalid_request"
   | "unknown";
 
+class SummaryValidationError extends Error {
+  field: "oneLiner" | "keyInsight";
+  language: "zh" | "en";
+  chars: number;
+  words: number | null;
+  limit: number | null;
+  limitUnit: "chars" | "words" | null;
+
+  constructor(
+    message: string,
+    options: {
+      field: "oneLiner" | "keyInsight";
+      language: "zh" | "en";
+      chars: number;
+      words: number | null;
+      limit?: number;
+      limitUnit?: "chars" | "words";
+    },
+  ) {
+    super(message);
+    this.name = "SummaryValidationError";
+    this.field = options.field;
+    this.language = options.language;
+    this.chars = options.chars;
+    this.words = options.words;
+    this.limit = options.limit ?? null;
+    this.limitUnit = options.limitUnit ?? null;
+  }
+}
+
 export function classifyAiError(error: unknown): AiErrorCategory {
   const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
 
@@ -92,6 +122,17 @@ function summarizeErrorMeta(error: unknown) {
         ? { name: err.cause.name, message: err.cause.message }
         : err?.cause ?? null,
     responseBody: typeof err?.responseBody === "string" ? err.responseBody.slice(0, 500) : null,
+    validation:
+      error instanceof SummaryValidationError
+        ? {
+            field: error.field,
+            language: error.language,
+            chars: error.chars,
+            words: error.words,
+            limit: error.limit,
+            limitUnit: error.limitUnit,
+          }
+        : null,
   };
 }
 
@@ -172,24 +213,23 @@ const SUMMARY_LIMITS = {
     minInsightChars: 10,
   },
   en: {
-    oneLinerMaxChars: 160,
-    keyInsightMaxChars: 220,
+    oneLinerMaxWords: 45,
+    keyInsightMaxWords: 60,
     minInsightChars: 24,
   },
 } as const;
 
 const PROMPTS = {
   zh: {
-    system: `你是 DigestDesk 的中文日报编辑。阅读任意语言的文章，输出简体中文摘要。
+    system: `你是 DigestDesk 的中文日报编辑。将输入文章总结为简体中文。
 
-写作要求：
-- 保留核心结论和重要事实，去掉广告、寒暄、目录、链接和背景噪音。
-- oneLiner 写一个核心结论，目标 35-70 个中文字符。
-- keyInsights 写 3 条要点，每条只写一个事实、数据、方法或结论，目标 55-90 个中文字符。
-- 宁可少写细节，也要写完整、通顺、自然的句子。`,
+要求：
+- oneLiner：1 条核心结论，35-70 个中文字符。
+- keyInsights：3 条信息点，每条只写 1 个事实、数据、方法或结论，55-90 个中文字符。
+- 数值事实准确；英文金额按中文习惯换算（如 $124m -> 1.24 亿美元），数量级和指标类型准确。`,
     schema: {
-      oneLiner: "一个完整、通顺的中文短句，只表达一个核心结论。",
-      keyInsights: "正好 3 条。每条是完整、通顺的中文句子，只表达一个具体事实、数据、方法或结论。",
+      oneLiner: "1 条中文核心结论。",
+      keyInsights: "3 条中文信息点，每条 1 个事实、数据、方法或结论。",
     }
   },
   en: {
@@ -197,6 +237,7 @@ const PROMPTS = {
 
 Writing rules:
 - Keep the core conclusion and important facts; remove ads, links, boilerplate, and background noise.
+- Preserve amounts, percentages, dates, quantities, units, and order of magnitude; do not confuse funding, revenue, valuation, cost, or spend; omit uncertain numeric details instead of guessing.
 - oneLiner: one core conclusion, target 14-30 words.
 - keyInsights: exactly 3 takeaways, one fact, data point, method, or conclusion each, target 18-40 words.
 - Prefer a shorter complete sentence over a longer unfinished one.`,
@@ -225,19 +266,51 @@ function isLowQualitySummaryText(value: string) {
   return text.replace(/[^\p{L}\p{N}]/gu, "").length < 6;
 }
 
+function countSummaryWords(value: string) {
+  const text = value.trim();
+  return text ? text.split(/\s+/).length : 0;
+}
+
 function assertSummaryText(value: string, field: "oneLiner" | "keyInsight", language: "zh" | "en") {
   const limits = SUMMARY_LIMITS[language] ?? SUMMARY_LIMITS.zh;
-  const maxChars = field === "oneLiner" ? limits.oneLinerMaxChars : limits.keyInsightMaxChars;
   const minChars = field === "oneLiner" ? 6 : limits.minInsightChars;
+  const words = language === "en" ? countSummaryWords(value) : null;
+  const validationMeta = {
+    field,
+    language,
+    chars: value.length,
+    words,
+  };
 
   if (isLowQualitySummaryText(value)) {
-    throw new Error(`low_quality_${field}`);
+    throw new SummaryValidationError(`low_quality_${field}`, validationMeta);
   }
   if (value.length < minChars) {
-    throw new Error(`too_short_${field}`);
+    throw new SummaryValidationError(`too_short_${field}`, {
+      ...validationMeta,
+      limit: minChars,
+      limitUnit: "chars",
+    });
   }
+  if (language === "en") {
+    const maxWords = field === "oneLiner" ? SUMMARY_LIMITS.en.oneLinerMaxWords : SUMMARY_LIMITS.en.keyInsightMaxWords;
+    if (words !== null && words > maxWords) {
+      throw new SummaryValidationError(`too_long_${field}`, {
+        ...validationMeta,
+        limit: maxWords,
+        limitUnit: "words",
+      });
+    }
+    return;
+  }
+
+  const maxChars = field === "oneLiner" ? SUMMARY_LIMITS.zh.oneLinerMaxChars : SUMMARY_LIMITS.zh.keyInsightMaxChars;
   if (value.length > maxChars) {
-    throw new Error(`too_long_${field}`);
+    throw new SummaryValidationError(`too_long_${field}`, {
+      ...validationMeta,
+      limit: maxChars,
+      limitUnit: "chars",
+    });
   }
 }
 
@@ -287,13 +360,12 @@ function buildEditorialSummarySystemPrompt(language: "zh" | "en", retry: boolean
   if (!retry) return promptConfig.system;
   const retryInstructions = language === "en"
     ? `Previous output failed length or quality validation. Regenerate and strictly follow:
-1. oneLiner must be a complete short sentence, with no ellipses, question-mark placeholders, or fragments.
-2. keyInsights must contain exactly 3 independent, specific, concise items.
+1. oneLiner must be one complete short sentence, target 14-30 words, with no ellipses, question-mark placeholders, or fragments.
+2. keyInsights must contain exactly 3 independent, specific, concise items, target 18-40 words each.
 3. Do not paste long source paragraphs, table-of-contents text, list dumps, or meaningless characters.`
-    : `上一轮输出未通过长度或质量校验。请重新生成，必须满足：
-1. oneLiner 是完整、通顺的中文短句，只写一个核心结论。
-2. keyInsights 正好 3 条，每条独立、具体、完整。
-3. 宁可少写细节，也不要写半句话、原文长段、目录或列表堆砌。`;
+    : `上一轮输出未通过校验。请重新生成：
+1. oneLiner：1 条中文核心结论。
+2. keyInsights：3 条中文信息点，每条 1 个事实、数据、方法或结论。`;
 
   return `${promptConfig.system}
 
@@ -306,20 +378,20 @@ function buildStrictJsonSummarySystemPrompt(language: "zh" | "en") {
 
 Task rules:
 1. Output one complete English oneLiner sentence, 14-30 words.
-2. Output keyInsights as exactly 3 complete English sentences.
-3. Each key insight must contain one specific fact, data point, method, or conclusion.
-4. Never use ellipses, placeholders, fragments, headings, markdown, or source text dumps.
-5. Required JSON object shape: {"oneLiner": string, "keyInsights": [string, string, string]}.`;
+2. Output keyInsights as exactly 3 complete English sentences, 18-40 words each.
+3. Preserve amounts, percentages, dates, quantities, units, and order of magnitude; do not confuse funding, revenue, valuation, cost, or spend; omit uncertain numeric details instead of guessing.
+4. Each key insight must contain one specific fact, data point, method, or conclusion.
+5. Never use ellipses, placeholders, fragments, headings, markdown, or source text dumps.
+6. Required JSON object shape: {"oneLiner": string, "keyInsights": [string, string, string]}.`;
   }
 
   return `你是 DigestDesk 文章摘要的严格 JSON 生成器。
 
 任务规则：
-1. oneLiner 输出一个完整、通顺的简体中文短句，只写一个核心结论。
-2. keyInsights 正好 3 条，每条都是完整、具体、通顺的简体中文句子。
-3. 每条 key insight 只表达一个事实、数据、方法或结论。
-4. 不要使用省略号、占位符、半句话、标题、markdown 或原文长段。
-5. 必须输出这个 JSON 对象形状：{"oneLiner": string, "keyInsights": [string, string, string]}。`;
+1. oneLiner：1 条核心结论，35-70 个中文字符。
+2. keyInsights：3 条信息点，每条只写 1 个事实、数据、方法或结论，55-90 个中文字符。
+3. 数值事实准确；英文金额按中文习惯换算（如 $124m -> 1.24 亿美元），数量级和指标类型准确。
+4. 输出 JSON 对象：{"oneLiner": string, "keyInsights": [string, string, string]}。`;
 }
 
 function buildSummarySystemPrompt(language: "zh" | "en", adapter: ModelAdapter, retry: boolean) {
