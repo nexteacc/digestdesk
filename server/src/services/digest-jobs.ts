@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, lte } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import pLimit from "p-limit";
 import { getDb } from "../db/index.js";
-import { digestJobs, userSettings, users } from "../db/schema.js";
+import { digestJobs, userEntitlements, userSettings, users } from "../db/schema.js";
 import {
   getPreviousDateLabel,
   getScheduledTimeForDate,
@@ -10,6 +10,7 @@ import {
   shiftDateLabel,
 } from "../utils/timezone.js";
 import { executeDailyDigestJob } from "./digest-execution.js";
+import { getUserEntitlement } from "./entitlements.js";
 
 const JOB_TYPE = "daily_digest" as const;
 const DISPATCH_BACKFILL_DAYS = 3;
@@ -24,11 +25,19 @@ function getRunnerId() {
 
 export async function dispatchDigestJobs(now = new Date()) {
   const db = getDb();
-  const allUsers = await db.select({ id: users.id }).from(users);
+  const allUsers = await db
+    .select({ id: users.id, accessStatus: userEntitlements.accessStatus })
+    .from(users)
+    .leftJoin(userEntitlements, eq(userEntitlements.userId, users.id));
   let created = 0;
   let existing = 0;
 
   for (const user of allUsers) {
+    if (user.accessStatus === "revoked") {
+      console.log(`[digest-jobs] Dispatch skip revoked user=${user.id}`);
+      continue;
+    }
+
     const rows = await db
       .select({ key: userSettings.key, value: userSettings.value })
       .from(userSettings)
@@ -186,13 +195,21 @@ export async function runPendingDigestJobs(options?: { limit?: number; now?: Dat
     claimed.map(job =>
       jobLimit(async () => {
         const jobStartedAt = Date.now();
+        const entitlement = await getUserEntitlement(job.userId);
+        if (entitlement.accessStatus === "revoked") {
+          console.log(
+            `[digest-jobs] Job skipped before execution jobId=${job.id} user=${job.userId} targetDate=${job.targetDate} reason=access_revoked durationMs=${Date.now() - jobStartedAt}`,
+          );
+          return { digestId: null, skipReason: "access_revoked" as const };
+        }
+
         const digestId = await executeDailyDigestJob(job.userId, job.targetDate);
         console.log(
           digestId
             ? `[digest-jobs] Job done jobId=${job.id} user=${job.userId} targetDate=${job.targetDate} digestId=${digestId} durationMs=${Date.now() - jobStartedAt}`
             : `[digest-jobs] Job done (empty) jobId=${job.id} user=${job.userId} targetDate=${job.targetDate} durationMs=${Date.now() - jobStartedAt}`,
         );
-        return digestId;
+        return { digestId, skipReason: digestId ? null : "empty_digest" as const };
       }),
     ),
   );
@@ -201,7 +218,7 @@ export async function runPendingDigestJobs(options?: { limit?: number; now?: Dat
     const result = jobResults[i];
     const job = claimed[i];
     if (result.status === "fulfilled") {
-      const digestId = result.value;
+      const { digestId, skipReason } = result.value;
       await db
         .update(digestJobs)
         .set({
@@ -218,7 +235,7 @@ export async function runPendingDigestJobs(options?: { limit?: number; now?: Dat
         console.log(`[digest-jobs] Job succeeded jobId=${job.id} user=${job.userId} targetDate=${job.targetDate} digestId=${digestId}`);
       } else {
         summary.skipped += 1;
-        console.log(`[digest-jobs] Job skipped jobId=${job.id} user=${job.userId} targetDate=${job.targetDate} reason=empty_digest`);
+        console.log(`[digest-jobs] Job skipped jobId=${job.id} user=${job.userId} targetDate=${job.targetDate} reason=${skipReason ?? "empty_digest"}`);
       }
     } else {
       const message = result.reason instanceof Error ? result.reason.message : String(result.reason);

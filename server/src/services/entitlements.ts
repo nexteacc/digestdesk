@@ -212,6 +212,11 @@ export async function upsertUserEntitlement(input: {
 export async function claimInviteForUser(userId: string, email: string) {
   const db = getDb();
   const normalized = normalizeEmail(email);
+  const entitlement = await ensureUserEntitlement(userId);
+  if (entitlement.accessStatus === "revoked" && !isAdminEmail(email)) {
+    return null;
+  }
+
   const [invite] = await db
     .select()
     .from(userInvites)
@@ -219,7 +224,6 @@ export async function claimInviteForUser(userId: string, email: string) {
     .orderBy(desc(userInvites.createdAt));
 
   if (!invite || invite.status !== "invited") {
-    await ensureUserEntitlement(userId);
     return null;
   }
 

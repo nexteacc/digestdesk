@@ -7,12 +7,10 @@ import {
   CircleAlert,
   Gauge,
   Loader2,
-  MailPlus,
   MoreVertical,
   Search,
   ShieldCheck,
   SlidersHorizontal,
-  UserPlus,
   UserRoundCog,
   Users,
 } from "lucide-react";
@@ -28,7 +26,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -48,6 +45,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -58,8 +56,10 @@ import {
 } from "@/components/ui/table";
 import { useI18n } from "@/contexts/I18nContext";
 import * as api from "@/lib/api";
-import type { AdminAccessStatus, AdminInvite, AdminPlan, AdminUser } from "@/lib/api";
+import type { AdminAccessStatus, AdminOperationsDay, AdminOperationsSummary, AdminPlan, AdminUser } from "@/lib/api";
 import { cn } from "@/lib/utils";
+
+type UserStatusFilter = "active" | "revoked" | "all";
 
 const PLAN_META: Record<AdminPlan, { label: string; limit: number | null; className: string }> = {
   free: {
@@ -96,9 +96,9 @@ function limitText(limit: number | null, text: (zh: string, en: string) => strin
 }
 
 function planLabel(plan: AdminPlan, text: (zh: string, en: string) => string) {
-  if (plan === "free") return text("免费", "Free");
+  if (plan === "free") return text("基础", "Basic");
   if (plan === "test") return text("内测", "Test");
-  return text("管理员", "Admin");
+  return text("不限额", "Unlimited");
 }
 
 function statusLabel(status: AdminAccessStatus, text: (zh: string, en: string) => string) {
@@ -135,6 +135,41 @@ function AdminMetric({
   );
 }
 
+function jobStatusTone(status: string) {
+  if (status === "failed") return "border-destructive/20 bg-destructive/8 text-destructive";
+  if (status === "running") return "border-primary/25 bg-primary/8 text-primary";
+  if (status === "pending") return "border-foreground/20 bg-foreground/8 text-foreground";
+  return "border-border bg-secondary text-foreground";
+}
+
+function previousOperationsDay(summary: AdminOperationsSummary | null): AdminOperationsDay | null {
+  if (!summary || summary.days.length === 0) return null;
+  return summary.days.at(-2) ?? summary.days.at(-1) ?? null;
+}
+
+function operationHealth(day: AdminOperationsDay) {
+  if (day.jobs.failed > 0) return "failed";
+  if (day.jobs.pending + day.jobs.running > 0) return "pending";
+  if (day.jobs.succeeded > 0) return "healthy";
+  return "quiet";
+}
+
+function operationHealthLabel(day: AdminOperationsDay, text: (zh: string, en: string) => string) {
+  const health = operationHealth(day);
+  if (health === "failed") return text("有失败", "Failed");
+  if (health === "pending") return text("待处理", "Pending");
+  if (health === "healthy") return text("正常", "Healthy");
+  return text("无任务", "No jobs");
+}
+
+function operationHealthClass(day: AdminOperationsDay) {
+  const health = operationHealth(day);
+  if (health === "failed") return "border-destructive/25 bg-destructive/8 text-destructive";
+  if (health === "pending") return "border-primary/25 bg-primary/8 text-primary";
+  if (health === "healthy") return "border-green-700/20 bg-green-700/8 text-green-700";
+  return "border-border bg-secondary text-muted-foreground";
+}
+
 function quotaTone(user: AdminUser) {
   if (user.subscriptionLimit === null) return "text-muted-foreground";
   const ratio = user.activeSubscriptions / user.subscriptionLimit;
@@ -159,7 +194,6 @@ function UserRow({
   onToggleStatus: (userId: string) => void;
 }) {
   const { text } = useI18n();
-  const planMeta = PLAN_META[user.accountPlan];
   const quotaPercent =
     user.subscriptionLimit === null
       ? 100
@@ -185,13 +219,13 @@ function UserRow({
           onValueChange={(value) => onPlanChange(user.id, value as AdminPlan)}
           disabled={busy}
         >
-          <SelectTrigger className="h-8 w-[112px] bg-background">
+          <SelectTrigger className="h-9 w-[120px] bg-background">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="free">{text("免费", "Free")}</SelectItem>
+            <SelectItem value="free">{text("基础", "Basic")}</SelectItem>
             <SelectItem value="test">{text("内测", "Test")}</SelectItem>
-            <SelectItem value="admin">{text("管理员", "Admin")}</SelectItem>
+            <SelectItem value="admin">{text("不限额", "Unlimited")}</SelectItem>
           </SelectContent>
         </Select>
       </TableCell>
@@ -223,11 +257,6 @@ function UserRow({
         </div>
       </TableCell>
       <TableCell className="px-3 py-4">
-        <Badge variant="outline" className={cn("rounded-sm", planMeta.className)}>
-          {planLabel(user.accountPlan, text)}
-        </Badge>
-      </TableCell>
-      <TableCell className="px-3 py-4">
         <div className="text-sm">{user.digestCount}</div>
         <div className="text-xs text-muted-foreground">{formatDate(user.lastDigestAt, text)}</div>
       </TableCell>
@@ -256,12 +285,12 @@ function UserRow({
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuItem onClick={() => onAdjustLimit(user)}>
               <SlidersHorizontal className="h-4 w-4" />
-              {text("调整额度", "Adjust limit")}
+              {text("调整订阅额度", "Adjust feed limit")}
             </DropdownMenuItem>
             {user.subscriptionLimitOverride ? (
               <DropdownMenuItem onClick={() => onClearOverride(user.id)}>
                 <Gauge className="h-4 w-4" />
-                {text("取消覆盖额度", "Clear override")}
+                {text("恢复默认额度", "Use default limit")}
               </DropdownMenuItem>
             ) : null}
             <DropdownMenuSeparator />
@@ -282,18 +311,16 @@ function UserRow({
 export default function AdminPage() {
   const { text } = useI18n();
   const [users, setUsers] = useState<AdminUser[]>([]);
-  const [invites, setInvites] = useState<AdminInvite[]>([]);
+  const [operations, setOperations] = useState<AdminOperationsSummary | null>(null);
   const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<UserStatusFilter>("active");
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
-  const [inviteBusy, setInviteBusy] = useState(false);
-  const [inviteOpen, setInviteOpen] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [invitePlan, setInvitePlan] = useState<AdminPlan>("test");
   const [limitDialogOpen, setLimitDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [limitValue, setLimitValue] = useState<number[]>([300]);
+  const [userToRevoke, setUserToRevoke] = useState<AdminUser | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -301,13 +328,13 @@ export default function AdminPage() {
     async function loadAdmin() {
       try {
         await api.fetchAdminMe();
-        const [nextUsers, nextInvites] = await Promise.all([
+        const [nextUsers, nextOperations] = await Promise.all([
           api.fetchAdminUsers(),
-          api.fetchAdminInvites(),
+          api.fetchAdminOperationsSummary(7),
         ]);
         if (!mounted) return;
         setUsers(nextUsers);
-        setInvites(nextInvites);
+        setOperations(nextOperations);
       } catch (error) {
         if (!mounted) return;
         if (error instanceof api.ApiError && error.status === 403) {
@@ -328,18 +355,21 @@ export default function AdminPage() {
 
   const filteredUsers = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return users;
-    return users.filter((user) =>
-      `${displayName(user)} ${user.email} ${user.accountPlan}`.toLowerCase().includes(q),
-    );
-  }, [query, users]);
+    return users.filter((user) => {
+      if (statusFilter !== "all" && user.accessStatus !== statusFilter) return false;
+      if (!q) return true;
+      return `${displayName(user)} ${user.email} ${user.accountPlan}`.toLowerCase().includes(q);
+    });
+  }, [query, statusFilter, users]);
 
   const activeUsers = users.filter((user) => user.accessStatus === "active").length;
-  const totalSubscriptions = users.reduce((sum, user) => sum + user.activeSubscriptions, 0);
-  const nearLimitUsers = users.filter(
+  const activeUserRows = users.filter((user) => user.accessStatus === "active");
+  const totalSubscriptions = activeUserRows.reduce((sum, user) => sum + user.activeSubscriptions, 0);
+  const nearLimitUsers = activeUserRows.filter(
     (user) => user.subscriptionLimit !== null && user.activeSubscriptions / user.subscriptionLimit >= 0.85,
   ).length;
-  const digestCount = users.reduce((sum, user) => sum + user.digestCount, 0);
+  const digestCount = activeUserRows.reduce((sum, user) => sum + user.digestCount, 0);
+  const yesterdayOperations = previousOperationsDay(operations);
 
   async function persistUser(
     userId: string,
@@ -385,11 +415,28 @@ export default function AdminPage() {
   }
 
   function onToggleStatus(userId: string) {
-    persistUser(userId, (user) => ({
+    const user = users.find((item) => item.id === userId);
+    if (!user) return;
+    if (user.accessStatus === "active") {
+      setUserToRevoke(user);
+      return;
+    }
+
+    void persistUser(userId, (current) => ({
+      accountPlan: current.accountPlan,
+      subscriptionLimitOverride: current.subscriptionLimitOverride,
+      accessStatus: "active",
+    }));
+  }
+
+  async function onConfirmRevoke() {
+    if (!userToRevoke) return;
+    await persistUser(userToRevoke.id, (user) => ({
       accountPlan: user.accountPlan,
       subscriptionLimitOverride: user.subscriptionLimitOverride,
-      accessStatus: user.accessStatus === "active" ? "revoked" : "active",
+      accessStatus: "revoked",
     }));
+    setUserToRevoke(null);
   }
 
   function onAdjustLimit(user: AdminUser) {
@@ -415,41 +462,6 @@ export default function AdminPage() {
     }));
     setLimitDialogOpen(false);
     setSelectedUser(null);
-  }
-
-  async function onSendInvite() {
-    const email = inviteEmail.trim().toLowerCase();
-    if (!email) {
-      toast.error(text("请输入邮箱", "Enter an email address"));
-      return;
-    }
-    setInviteBusy(true);
-    try {
-      const invite = await api.createAdminInvite({
-        email,
-        accountPlan: invitePlan,
-        subscriptionLimitOverride: null,
-      });
-      setInvites((current) => [invite, ...current.filter((item) => item.id !== invite.id)]);
-      setInviteEmail("");
-      setInvitePlan("test");
-      setInviteOpen(false);
-      toast.success(text("邀请已保存", "Invite saved"));
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : text("邀请失败", "Invite failed"));
-    } finally {
-      setInviteBusy(false);
-    }
-  }
-
-  async function onRevokeInvite(inviteId: string) {
-    try {
-      const invite = await api.revokeAdminInvite(inviteId);
-      setInvites((current) => current.map((item) => (item.id === invite.id ? invite : item)));
-      toast.success(text("邀请已撤销", "Invite revoked"));
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : text("撤销失败", "Revoke failed"));
-    }
   }
 
   if (loading) {
@@ -494,95 +506,44 @@ export default function AdminPage() {
               {text("内部管理", "Internal Admin")}
             </div>
             <h2 className="mt-2 text-3xl font-semibold leading-tight md:text-4xl">
-              {text("用户与额度", "Users & Limits")}
+              {text("Admin", "Admin")}
             </h2>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className="rounded-sm border-primary/30 bg-primary/8 text-primary">
-              {text("后端权限校验已启用", "Server authorization enabled")}
-            </Badge>
-            <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
-              <DialogTrigger asChild>
-                <Button className="gap-2">
-                  <UserPlus className="h-4 w-4" />
-                  {text("邀请内测用户", "Invite tester")}
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="bg-card">
-                <DialogHeader>
-                  <DialogTitle>{text("邀请内测用户", "Invite tester")}</DialogTitle>
-                  <DialogDescription>
-                    {text(
-                      "用户用这个邮箱首次登录后，会自动获得预设等级。",
-                      "When this email signs in, the preset plan is claimed automatically.",
-                    )}
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 py-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="invite-email">{text("邮箱", "Email")}</Label>
-                    <Input
-                      id="invite-email"
-                      type="email"
-                      value={inviteEmail}
-                      onChange={(event) => setInviteEmail(event.target.value)}
-                      placeholder="reader@example.com"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>{text("预设等级", "Preset plan")}</Label>
-                    <Select value={invitePlan} onValueChange={(value) => setInvitePlan(value as AdminPlan)}>
-                      <SelectTrigger className="w-full bg-background">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="free">{text("免费", "Free")}</SelectItem>
-                        <SelectItem value="test">{text("内测", "Test")}</SelectItem>
-                        <SelectItem value="admin">{text("管理员", "Admin")}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setInviteOpen(false)} disabled={inviteBusy}>
-                    {text("取消", "Cancel")}
-                  </Button>
-                  <Button onClick={onSendInvite} disabled={inviteBusy}>
-                    {inviteBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <MailPlus className="h-4 w-4" />}
-                    {text("添加邀请", "Add invite")}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
           </div>
         </div>
         <Separator />
       </div>
 
+      <Tabs defaultValue="users" className="gap-6">
+        <TabsList className="rounded-md">
+          <TabsTrigger value="users">{text("用户与额度", "Users & Limits")}</TabsTrigger>
+          <TabsTrigger value="operations">{text("运行状态", "Operations")}</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="users" className="space-y-7">
       <div className="grid gap-5 md:grid-cols-4">
         <AdminMetric
           icon={<Users className="h-4 w-4" />}
-          label={text("用户", "Users")}
+          label={text("可用账号", "Active accounts")}
           value={`${activeUsers}/${users.length}`}
           detail={text("可用账号 / 全部账号", "Active accounts / total")}
         />
         <AdminMetric
           icon={<Gauge className="h-4 w-4" />}
-          label={text("订阅源", "Feeds")}
+          label={text("活跃订阅源", "Active feeds")}
           value={String(totalSubscriptions)}
-          detail={text("当前 active subscriptions", "Current active subscriptions")}
+          detail={text("可用账号正在接收的订阅源", "Feeds on active accounts")}
         />
         <AdminMetric
           icon={<CircleAlert className="h-4 w-4" />}
-          label={text("接近上限", "Near limit")}
+          label={text("接近额度上限", "Near quota")}
           value={String(nearLimitUsers)}
           detail={text("额度使用率超过 85%", "Quota usage over 85%")}
         />
         <AdminMetric
           icon={<Activity className="h-4 w-4" />}
-          label={text("日报", "Digests")}
+          label={text("累计日报", "Total digests")}
           value={String(digestCount)}
-          detail={text("用户累计日报", "User digest count")}
+          detail={text("可用账号已生成的日报", "Generated for active accounts")}
         />
       </div>
 
@@ -595,30 +556,41 @@ export default function AdminPage() {
             </div>
             <div className="mt-1 text-xs text-muted-foreground">
               {text(
-                "切换用户等级、管理订阅额度、停用访问权限。",
-                "Change plans, manage feed limits, and revoke access.",
+                "管理用户可用状态和订阅源额度。",
+                "Manage account status and feed limits.",
               )}
             </div>
           </div>
-          <div className="relative w-full md:w-[320px]">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={text("搜索姓名、邮箱或等级", "Search name, email, or plan")}
-              className="pl-9"
-            />
+          <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row">
+            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as UserStatusFilter)}>
+              <SelectTrigger className="h-10 w-full bg-background md:w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">{text("可用用户", "Active")}</SelectItem>
+                <SelectItem value="revoked">{text("已停用", "Revoked")}</SelectItem>
+                <SelectItem value="all">{text("全部用户", "All users")}</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="relative w-full md:w-[320px]">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={text("搜索姓名、邮箱或等级", "Search name, email, or plan")}
+                className="pl-9"
+              />
+            </div>
           </div>
         </div>
 
-        <Table className="min-w-[980px] border-collapse text-left">
+        <Table className="min-w-[880px] border-collapse text-left">
           <TableHeader className="border-t border-border bg-secondary/45 text-xs uppercase tracking-[0.14em] text-muted-foreground">
             <TableRow>
               <TableHead className="py-3 pl-4 pr-3 font-medium">{text("用户", "User")}</TableHead>
-              <TableHead className="px-3 py-3 font-medium">{text("等级", "Plan")}</TableHead>
+              <TableHead className="px-3 py-3 font-medium">{text("额度方案", "Plan")}</TableHead>
               <TableHead className="px-3 py-3 font-medium">{text("订阅额度", "Subscription quota")}</TableHead>
-              <TableHead className="px-3 py-3 font-medium">{text("标签", "Label")}</TableHead>
-              <TableHead className="px-3 py-3 font-medium">{text("日报", "Digests")}</TableHead>
+              <TableHead className="px-3 py-3 font-medium">{text("累计日报", "Total digests")}</TableHead>
               <TableHead className="px-3 py-3 font-medium">{text("状态", "Status")}</TableHead>
               <TableHead className="py-3 pl-3 pr-4 text-right font-medium">{text("操作", "Action")}</TableHead>
             </TableRow>
@@ -637,7 +609,7 @@ export default function AdminPage() {
             ))}
             {filteredUsers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-28 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={6} className="h-28 text-center text-sm text-muted-foreground">
                   {text("没有匹配用户", "No matching users")}
                 </TableCell>
               </TableRow>
@@ -646,79 +618,182 @@ export default function AdminPage() {
         </Table>
       </Card>
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
-        <Card className="border-border bg-card/70 p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <div className="text-sm font-semibold">{text("套餐规则", "Plan Rules")}</div>
-              <div className="mt-1 text-xs text-muted-foreground">
-                {text("第一版规则由后端 entitlements 服务执行。", "First version is enforced by the backend entitlements service.")}
-              </div>
+      <Card className="border-border bg-card/70 p-5 shadow-sm">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="text-sm font-semibold">{text("额度方案", "Plan Rules")}</div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {text(
+                "这些方案只控制订阅源数量上限，不代表后台管理员权限。",
+                "Plans control feed limits only; they do not grant admin access.",
+              )}
             </div>
           </div>
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
-            {(Object.keys(PLAN_META) as AdminPlan[]).map((plan) => (
-              <div key={plan} className="rounded-md border border-border bg-background/60 p-4">
-                <Badge variant="outline" className={cn("rounded-sm", PLAN_META[plan].className)}>
-                  {planLabel(plan, text)}
-                </Badge>
-                <div className="mt-4 text-2xl font-semibold">
-                  {limitText(PLAN_META[plan].limit, text)}
-                </div>
-                <div className="mt-1 text-xs text-muted-foreground">
-                  {text("active subscriptions", "active subscriptions")}
-                </div>
+        </div>
+        <div className="mt-5 grid gap-3 md:grid-cols-3">
+          {(Object.keys(PLAN_META) as AdminPlan[]).map((plan) => (
+            <div key={plan} className="rounded-md border border-border bg-background/60 p-4">
+              <Badge variant="outline" className={cn("rounded-sm", PLAN_META[plan].className)}>
+                {planLabel(plan, text)}
+              </Badge>
+              <div className="mt-4 text-2xl font-semibold">
+                {limitText(PLAN_META[plan].limit, text)}
               </div>
-            ))}
-          </div>
-        </Card>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {text("订阅源上限", "feed limit")}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+        </TabsContent>
 
-        <Card className="border-border bg-card/70 p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-semibold">{text("内测邀请", "Tester Invites")}</div>
+        <TabsContent value="operations" className="space-y-7">
+          <div className="grid gap-5 md:grid-cols-4">
+            <AdminMetric
+              icon={<Activity className="h-4 w-4" />}
+              label={text("昨日任务", "Yesterday jobs")}
+              value={String(yesterdayOperations?.jobs.total ?? 0)}
+              detail={text(
+                `${yesterdayOperations?.jobs.succeeded ?? 0} 成功 / ${yesterdayOperations?.jobs.skipped ?? 0} 跳过`,
+                `${yesterdayOperations?.jobs.succeeded ?? 0} succeeded / ${yesterdayOperations?.jobs.skipped ?? 0} skipped`,
+              )}
+            />
+            <AdminMetric
+              icon={<CircleAlert className="h-4 w-4" />}
+              label={text("近 7 天异常", "7-day anomalies")}
+              value={String(operations?.anomalies.length ?? 0)}
+              detail={text("失败或到点未完成任务", "Failed or overdue jobs")}
+            />
+            <AdminMetric
+              icon={<Gauge className="h-4 w-4" />}
+              label={text("昨日日报", "Yesterday digests")}
+              value={String(yesterdayOperations?.digests ?? 0)}
+              detail={text("昨日已生成日报", "Generated yesterday")}
+            />
+            <AdminMetric
+              icon={<Users className="h-4 w-4" />}
+              label={text("昨日条目", "Yesterday items")}
+              value={String(yesterdayOperations?.items ?? 0)}
+              detail={text("昨日 digest items", "Digest items yesterday")}
+            />
+          </div>
+
+          <Card className="overflow-hidden border-border bg-card/70 shadow-sm">
+            <div className="p-4">
+              <div className="text-sm font-semibold">{text("最近 7 天逐日运行", "Daily Runs: Last 7 Days")}</div>
               <div className="mt-1 text-xs text-muted-foreground">
-                {text("按邮箱预设等级，用户注册后自动认领。", "Assign a plan before signup; claim on first login.")}
+                {text("每一行是一条日报目标日期，用来快速确认每天是否正常完成。", "Each row is one digest target date, so daily completion is easy to scan.")}
               </div>
             </div>
-            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setInviteOpen(true)}>
-              <MailPlus className="h-3.5 w-3.5" />
-              {text("添加", "Add")}
-            </Button>
-          </div>
-          <div className="mt-5 space-y-3">
-            {invites.map((invite) => (
-              <div key={invite.id} className="flex items-center justify-between gap-3 border-t border-border pt-3">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-medium">{invite.email}</div>
-                  <div className="text-xs text-muted-foreground">{formatDate(invite.createdAt, text)}</div>
+            <div className="space-y-2 border-t border-border p-4">
+              {(operations?.days ?? []).map((day) => (
+                <div
+                  key={day.date}
+                  className="grid gap-3 rounded-md border border-border bg-background/55 p-3 md:grid-cols-[150px_110px_1fr_160px]"
+                >
+                  <div>
+                    <div className="text-sm font-semibold">{day.date}</div>
+                    <Badge variant="outline" className={cn("mt-2 rounded-sm", operationHealthClass(day))}>
+                      {operationHealthLabel(day, text)}
+                    </Badge>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-semibold leading-none">{day.jobs.total}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">{text("任务", "jobs")}</div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-sm md:grid-cols-5">
+                    <div>
+                      <div className="font-semibold">{day.jobs.succeeded}</div>
+                      <div className="text-xs text-muted-foreground">{text("成功", "succeeded")}</div>
+                    </div>
+                    <div>
+                      <div className="font-semibold">{day.jobs.skipped}</div>
+                      <div className="text-xs text-muted-foreground">{text("跳过", "skipped")}</div>
+                    </div>
+                    <div>
+                      <div className={cn("font-semibold", day.jobs.failed > 0 ? "text-destructive" : "")}>{day.jobs.failed}</div>
+                      <div className="text-xs text-muted-foreground">{text("失败", "failed")}</div>
+                    </div>
+                    <div>
+                      <div className={cn("font-semibold", day.jobs.pending + day.jobs.running > 0 ? "text-primary" : "")}>
+                        {day.jobs.pending + day.jobs.running}
+                      </div>
+                      <div className="text-xs text-muted-foreground">{text("待处理", "pending")}</div>
+                    </div>
+                    <div>
+                      <div className="font-semibold">{day.digests}</div>
+                      <div className="text-xs text-muted-foreground">{text("日报", "digests")}</div>
+                    </div>
+                  </div>
+                  <div className="md:text-right">
+                    <div className="text-2xl font-semibold leading-none">{day.items}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">{text("总结条目", "digest items")}</div>
+                  </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <Badge variant="outline" className={cn("rounded-sm", PLAN_META[invite.accountPlan].className)}>
-                    {invite.status}
-                  </Badge>
-                  {invite.status === "invited" ? (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={() => onRevokeInvite(invite.id)}
-                    >
-                      <Ban className="h-3.5 w-3.5" />
-                      <span className="sr-only">{text("撤销邀请", "Revoke invite")}</span>
-                    </Button>
-                  ) : null}
+              ))}
+              {operations && operations.days.length === 0 ? (
+                <div className="rounded-md border border-border bg-background/55 p-6 text-center text-sm text-muted-foreground">
+                  {text("暂无运行数据", "No operations data")}
                 </div>
+              ) : null}
+            </div>
+          </Card>
+
+          <Card className="overflow-hidden border-border bg-card/70 shadow-sm">
+            <div className="p-4">
+              <div className="text-sm font-semibold">{text("需要关注的任务", "Needs Attention")}</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {text("只显示失败、到点仍 pending 或 running 的任务。", "Failed, pending, or running jobs past schedule.")}
               </div>
-            ))}
-            {invites.length === 0 ? (
-              <div className="border-t border-border pt-4 text-sm text-muted-foreground">
-                {text("暂无邀请", "No invites yet")}
-              </div>
-            ) : null}
-          </div>
-        </Card>
-      </div>
+            </div>
+            <Table className="min-w-[820px] border-collapse text-left">
+              <TableHeader className="border-t border-border bg-secondary/45 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                <TableRow>
+                  <TableHead className="py-3 pl-4 pr-3 font-medium">{text("日期", "Date")}</TableHead>
+                  <TableHead className="px-3 py-3 font-medium">{text("用户", "User")}</TableHead>
+                  <TableHead className="px-3 py-3 font-medium">{text("状态", "Status")}</TableHead>
+                  <TableHead className="px-3 py-3 font-medium">{text("调度时间", "Scheduled")}</TableHead>
+                  <TableHead className="py-3 pl-3 pr-4 font-medium">{text("错误", "Error")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(operations?.anomalies ?? []).map((job) => (
+                  <TableRow key={job.id}>
+                    <TableCell className="py-3 pl-4 pr-3 text-sm font-medium">{job.targetDate}</TableCell>
+                    <TableCell className="px-3 py-3 text-sm">{job.userEmail}</TableCell>
+                    <TableCell className="px-3 py-3">
+                      <Badge variant="outline" className={cn("rounded-sm", jobStatusTone(job.status))}>
+                        {job.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="px-3 py-3 text-xs text-muted-foreground">
+                      {formatDate(job.scheduledFor, text)}
+                    </TableCell>
+                    <TableCell className="max-w-[320px] truncate py-3 pl-3 pr-4 text-xs text-muted-foreground">
+                      {job.lastError || text("暂无", "None")}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {operations && operations.anomalies.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-24 text-center text-sm text-muted-foreground">
+                      {text("没有需要处理的任务", "No jobs need attention")}
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+                {!operations ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-24 text-center text-sm text-muted-foreground">
+                      {text("暂无运行数据", "No operations data")}
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </Table>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={limitDialogOpen} onOpenChange={setLimitDialogOpen}>
         <DialogContent className="bg-card">
@@ -778,6 +853,39 @@ export default function AdminPage() {
                 <SlidersHorizontal className="h-4 w-4" />
               )}
               {text("保存额度", "Save limit")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(userToRevoke)} onOpenChange={(open) => !open && setUserToRevoke(null)}>
+        <DialogContent className="bg-card">
+          <DialogHeader>
+            <DialogTitle>{text("停用这个用户？", "Revoke this account?")}</DialogTitle>
+            <DialogDescription>
+              {userToRevoke
+                ? text(
+                    `停用 ${userToRevoke.email} 后，该用户不能继续使用 API，调度器也不会再为他生成日报。历史数据会保留。`,
+                    `After revoking ${userToRevoke.email}, they cannot use the app APIs and the scheduler will stop generating digests for them. Existing history is kept.`,
+                  )
+                : text("停用后会停止访问和日报生成。", "Revoking stops access and digest generation.")}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUserToRevoke(null)}>
+              {text("取消", "Cancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={onConfirmRevoke}
+              disabled={Boolean(userToRevoke && busyUserId === userToRevoke.id)}
+            >
+              {userToRevoke && busyUserId === userToRevoke.id ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Ban className="h-4 w-4" />
+              )}
+              {text("停用用户", "Revoke account")}
             </Button>
           </DialogFooter>
         </DialogContent>

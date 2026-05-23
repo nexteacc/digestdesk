@@ -322,6 +322,37 @@ export type AdminInvite = {
   claimedUserId: string | null;
 };
 
+export type AdminOperationsDay = {
+  date: string;
+  jobs: {
+    total: number;
+    succeeded: number;
+    skipped: number;
+    failed: number;
+    pending: number;
+    running: number;
+  };
+  digests: number;
+  items: number;
+};
+
+export type AdminOperationsAnomaly = {
+  id: string;
+  userId: string;
+  userEmail: string;
+  targetDate: string;
+  status: string;
+  lastError: string | null;
+  scheduledFor: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+};
+
+export type AdminOperationsSummary = {
+  days: AdminOperationsDay[];
+  anomalies: AdminOperationsAnomaly[];
+};
+
 export function fetchAdminMe(): Promise<{
   isAdmin: true;
   user: { id: string; email: string; name: string | null; avatarUrl: string | null };
@@ -347,6 +378,10 @@ export function updateAdminUserEntitlement(
     method: "PATCH",
     body: JSON.stringify(data),
   });
+}
+
+export function fetchAdminOperationsSummary(days = 7): Promise<AdminOperationsSummary> {
+  return request(`/admin/operations/summary?days=${encodeURIComponent(String(days))}`);
 }
 
 export async function fetchAdminInvites(): Promise<AdminInvite[]> {

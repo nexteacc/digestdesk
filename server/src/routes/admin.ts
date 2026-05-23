@@ -5,6 +5,7 @@ import { desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "../db/index.js";
 import { userInvites, users } from "../db/schema.js";
+import { getTimeZoneDateLabel, shiftDateLabel } from "../utils/timezone.js";
 import {
   createInvite,
   getEffectiveSubscriptionLimit,
@@ -28,6 +29,18 @@ const inviteSchema = z.object({
   accountPlan: z.enum(["free", "test", "admin"]),
   subscriptionLimitOverride: z.number().int().positive().nullable().optional(),
 });
+
+const ADMIN_OPERATIONS_TIMEZONE = process.env.ADMIN_OPERATIONS_TIMEZONE || "Asia/Shanghai";
+
+function getRecentDateLabels(days: number) {
+  const safeDays = Math.min(Math.max(days, 1), 30);
+  const today = getTimeZoneDateLabel(new Date(), ADMIN_OPERATIONS_TIMEZONE);
+  const labels: string[] = [];
+  for (let offset = safeDays - 1; offset >= 0; offset -= 1) {
+    labels.push(shiftDateLabel(today, -offset));
+  }
+  return labels;
+}
 
 async function getAdminActor(req: Request) {
   const auth = getAuth(req);
@@ -181,6 +194,101 @@ adminRouter.patch("/users/:id/entitlements", async (req, res) => {
       subscriptionLimitOverride: entitlement.subscriptionLimitOverride,
       subscriptionLimit: getEffectiveSubscriptionLimit(entitlement),
     },
+  });
+});
+
+adminRouter.get("/operations/summary", async (req, res) => {
+  const daysParam = Number(req.query.days ?? 7);
+  const days = Number.isFinite(daysParam) ? daysParam : 7;
+  const dateLabels = getRecentDateLabels(days);
+  const startDate = dateLabels[0];
+  const now = new Date().toISOString();
+  const db = getDb();
+
+  const jobRows = await db.execute(sql`
+    SELECT
+      target_date AS "date",
+      COUNT(*)::int AS "total",
+      COUNT(*) FILTER (WHERE status = 'succeeded')::int AS "succeeded",
+      COUNT(*) FILTER (WHERE status = 'skipped')::int AS "skipped",
+      COUNT(*) FILTER (WHERE status = 'failed')::int AS "failed",
+      COUNT(*) FILTER (WHERE status = 'pending')::int AS "pending",
+      COUNT(*) FILTER (WHERE status = 'running')::int AS "running"
+    FROM digest_jobs
+    WHERE job_type = 'daily_digest'
+      AND target_date >= ${startDate}
+    GROUP BY target_date
+  `);
+
+  const digestRows = await db.execute(sql`
+    SELECT
+      d.date AS "date",
+      COUNT(DISTINCT d.id)::int AS "digests",
+      COUNT(di.id)::int AS "items"
+    FROM digests d
+    LEFT JOIN digest_items di ON di.digest_id = d.id
+    WHERE d.type = 'daily'
+      AND d.date >= ${startDate}
+    GROUP BY d.date
+  `);
+
+  const anomalyRows = await db.execute(sql`
+    SELECT
+      j.id,
+      j.user_id AS "userId",
+      u.email AS "userEmail",
+      j.target_date AS "targetDate",
+      j.status,
+      j.last_error AS "lastError",
+      j.scheduled_for AS "scheduledFor",
+      j.started_at AS "startedAt",
+      j.finished_at AS "finishedAt"
+    FROM digest_jobs j
+    INNER JOIN users u ON u.id = j.user_id
+    WHERE j.job_type = 'daily_digest'
+      AND j.target_date >= ${startDate}
+      AND (
+        j.status = 'failed'
+        OR (j.status IN ('pending', 'running') AND j.scheduled_for <= ${now})
+      )
+    ORDER BY j.scheduled_for DESC
+    LIMIT 20
+  `);
+
+  const jobsByDate = new Map((jobRows as Array<Record<string, unknown>>).map((row) => [String(row.date), row]));
+  const digestsByDate = new Map((digestRows as Array<Record<string, unknown>>).map((row) => [String(row.date), row]));
+
+  const daysPayload = dateLabels.map((date) => {
+    const job = jobsByDate.get(date);
+    const digest = digestsByDate.get(date);
+    return {
+      date,
+      jobs: {
+        total: Number(job?.total ?? 0),
+        succeeded: Number(job?.succeeded ?? 0),
+        skipped: Number(job?.skipped ?? 0),
+        failed: Number(job?.failed ?? 0),
+        pending: Number(job?.pending ?? 0),
+        running: Number(job?.running ?? 0),
+      },
+      digests: Number(digest?.digests ?? 0),
+      items: Number(digest?.items ?? 0),
+    };
+  });
+
+  res.json({
+    days: daysPayload,
+    anomalies: (anomalyRows as Array<Record<string, unknown>>).map((row) => ({
+      id: String(row.id),
+      userId: String(row.userId),
+      userEmail: String(row.userEmail),
+      targetDate: String(row.targetDate),
+      status: String(row.status),
+      lastError: row.lastError ? String(row.lastError) : null,
+      scheduledFor: String(row.scheduledFor),
+      startedAt: row.startedAt ? String(row.startedAt) : null,
+      finishedAt: row.finishedAt ? String(row.finishedAt) : null,
+    })),
   });
 });
 

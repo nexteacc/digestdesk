@@ -1245,3 +1245,125 @@ scheduler 日志对账：
 - 抽查新生成的金额/百分比/数量摘要；若旧错误摘要仍在页面可见，再决定是否定向重生成对应缓存和 digest 快照。
 - 继续确认未复现 OpenRouter/Alibaba JSON protocol error。
 - 单独观察 YouTube `content_too_short` 是否只是无 transcript 噪音；不要把它和英文 validator fallback 混为同一问题。
+
+---
+
+## 2026-05-23: Admin access, duplicate Clerk users, and production data cleanup
+
+### Summary
+
+复查 2026-05-22 日报运行、OpenRouter Activity、Admin 页面统计和生产数据库后，确认日报生成质量正常，但 Admin 统计里存在历史测试/生产环境混写导致的重复用户记录。重复记录使用相同 email、不同 Clerk `user_id`，旧记录仍保留 active subscriptions，因此 scheduler 按 `users.id` 扫描时继续为旧用户生成日报。
+
+第一步没有代码改动；先执行了一次生产数据库清理，删除两条旧用户记录及其关联 subscriptions、digest jobs、digests 和 digest items。随后补充了最小代码修复，让 Admin 停用状态进入普通 API 和 scheduler 的执行路径。
+
+### Detection & Evidence
+
+OpenRouter 1 Day 截图对账：
+
+- Spend: `$0.148`
+- Requests: `187`
+- Tokens: `820K`
+- `gpt-oss-120b`: 163 requests、587K tokens、约 `$0.10`
+- `Qwen3.5-Flash`: 24 requests、232K tokens、约 `$0.05`
+
+日志与数据库对账：
+
+- `targetDate=2026-05-22` 的 `digest_jobs`：5 succeeded、4 skipped、0 failed。
+- 当前 backlog：无 pending、running、failed。
+- 5 份 digest，共 196 个展示 items、154 篇去重文章。
+- 预摘要层实际摘要约 169 篇文章，`modelRequests=187`、`retryRequests=24`。
+- `summaryFallbacks=0`、`emptyInsights=0`。
+
+Admin 页面相关发现：
+
+- 生产域名为 `https://digestdesk.nextbigtoy.com`。
+- 前端使用 `wouter/use-hash-location`，实际 Admin URL 是 `https://digestdesk.nextbigtoy.com/#/admin`，不是裸 `/admin`。
+- `ADMIN_EMAILS` 已在 Zeabur `digestdesk` web 服务生效，运行进程可读到 1 个 admin email。
+- admin 权限由 `/api/admin/*` 后端按 `ADMIN_EMAILS` 校验；未配置或不匹配时，登录后应显示 `Admin email required`。
+
+重复用户发现：
+
+- `nexteacc@gmail.com` 有两条 `users` 记录，email 相同、Clerk id 不同：
+  - 旧：`u7eySPJXwLxEqomFqDBgj`，last login `2026-03-26T05:04:31.887Z`
+  - 新：`XH6oa2l-Y0cfFgIBT9ISD`，last login `2026-05-23T15:06:35.732Z`
+- `pablopixes@gmail.com` 有两条 `users` 记录，email 相同、Clerk id 不同：
+  - 旧：`UFYcMeKg9vTp5Xbt3k_zo`，last login `2026-03-26T03:11:03.299Z`
+  - 新：`-QKtPrjaAAowJw4HC8vUa`，last login `2026-05-23T15:08:44.187Z`
+
+旧记录仍影响调度：
+
+- `UFYcMeKg9vTp5Xbt3k_zo` 仍有 1 个 active Slashdot subscription，尽管新 Pablo 账号已在主站取消订阅。
+- `u7eySPJXwLxEqomFqDBgj` 仍有 111 个 active subscriptions。
+- `dispatchDigestJobs()` 当前按 `users.id` 扫描所有用户，而不是按 email 去重，因此旧记录会继续生成日报。
+
+### Root Cause & Contributing Factors
+
+根因是历史环境隔离不足：
+
+- 测试环境和生产环境曾连接同一个 Postgres。
+- 同一 email 在不同 Clerk app/key 或重建后的 Clerk 用户中会得到不同 Clerk `user_id`。
+- 应用登录逻辑按 `clerk_id` 查找用户；数据库约束是 `clerk_id unique`，email 不是 unique。
+- 因此同一 email 可以生成多条 `users` 记录。
+
+设计上继续按 Clerk `user_id` 做身份主键是正确的。email 适合做重复数据治理和 admin 告警，不适合替代 Clerk id 成为运行时身份主键。
+
+### Mitigation / Changes
+
+第一步直接在生产数据库执行事务清理，无代码变更、无需部署：
+
+删除旧用户：
+
+- `u7eySPJXwLxEqomFqDBgj`
+- `UFYcMeKg9vTp5Xbt3k_zo`
+
+同步删除关联数据：
+
+- `digest_items`: 2855
+- `digests`: 121
+- `digest_jobs`: 124
+- `subscriptions`: 112
+- `user_settings`: 3
+- `users`: 2
+
+清理后生产统计：
+
+- 用户：7
+- active subscriptions：211
+- 用户累计日报：162
+- 重复 email：0
+- pending/running/failed digest jobs：0
+- Pablo 旧记录 active subscription：0
+
+后续补充了一次最小代码修复，目标是让 Admin 停用状态真正进入用户旅程和 scheduler 闭环，但不引入复杂 RBAC 或用户合并系统：
+
+- 普通 API 的 `resolveUser` 会拒绝 `access_status=revoked` 的非 admin 用户。
+- `/api/auth/me` 里的 invite claim 不再把已停用的非 admin 用户自动恢复为 active。
+- `dispatchDigestJobs()` 不再为 revoked 用户创建新的日报 job。
+- `runPendingDigestJobs()` 在执行日报前再次检查 revoked 状态；若用户已停用，将 job 标记为 skipped，不调用 `executeDailyDigestJob`。
+- Admin 用户管理默认只展示 active 用户，提供 active/revoked/all 过滤；顶部订阅数、接近上限、日报数改为只按 active 用户统计。
+- Admin UI 后续进一步收敛：主界面移除“预授权邮箱/邀请”操作和列表，避免把未形成真实邀请闭环的技术能力暴露给日常 Admin；后端 invite 接口暂时保留但不作为主流程入口。
+- Admin UI 去掉重复的 plan 标签列，额度方案文案改为“基础/内测/不限额”，明确这些方案只控制订阅源数量上限，不代表后台管理员权限。
+- 停用用户增加确认弹窗，说明会停止 API 使用和日报生成，但保留历史数据。
+- Admin 页面新增轻量 Tab：`用户与额度` / `运行状态`。运行状态第一版不抓平台 runtime logs，而是通过 `/api/admin/operations/summary?days=7` 聚合 `digest_jobs`、`digests`、`digest_items`，展示昨日任务/日报/条目数量、最近 7 天逐日运行列表，以及 failed、到点未完成 pending/running 任务。
+
+### Decisions
+
+- 运行时身份和调度继续使用 Clerk `user_id` / 本地 `users.id`，不改成按 email 去重。
+- 短期通过生产数据清理解决旧用户重复推送。
+- 中期不做重型“用户合并系统”；如需要，只在 Admin 页面增加轻量重复 email 检测和告警。
+- 长期要隔离测试/生产数据库和 Clerk app/key，避免测试登录再次污染生产 `users` 表。
+
+### Follow-up Actions
+
+| Action | Owner | Status | Notes |
+|---|---|---|---|
+| 明天复查 scheduler 是否不再为旧 Pablo/nexteacc 生成 job | AI agent | Pending | 看 `digest_jobs` 是否只剩 7 个用户扫描 |
+| 复查 Admin 页面统计 | User / AI agent | Pending | 预期用户 7、订阅 211、日报 162 |
+| 核对测试环境和生产环境的 Postgres 是否仍共用 | User / AI agent | Pending | 不输出密钥，只比对连接目标/服务 |
+| 考虑 Admin 增加重复 email 提示 | AI agent | Optional | 轻量查询即可，不进入 scheduler 主路径 |
+
+### Next Review
+
+- 检查 2026-05-23/2026-05-24 的 scheduler runtime logs，确认 scanned users 从 9 降为 7。
+- 确认 `pablopixes@gmail.com` 不再收到 Slashdot 旧记录日报。
+- 若重复 email 再出现，优先排查测试环境是否仍连接生产数据库，而不是修改 scheduler 按 email 去重。
