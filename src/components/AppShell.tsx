@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { UserButton } from "@clerk/react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Newspaper, PanelLeft, Maximize, Minimize, Settings as SettingsIcon, Github } from "lucide-react";
+import { Newspaper, PanelLeft, Maximize, Minimize, Settings as SettingsIcon, Github, ChevronDown } from "lucide-react";
 import { useI18n } from "@/contexts/I18nContext";
 import { useZenMode } from "@/hooks/useZenMode";
 import { preloadRoute } from "@/lib/route-preload";
@@ -23,6 +23,7 @@ export default function AppShell({ children }: PropsWithChildren) {
     try { return localStorage.getItem("sidebar-collapsed") === "true"; }
     catch { return false; }
   });
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(true);
   const { locale, setLocale, text } = useI18n();
   const { isZen, toggleZenMode } = useZenMode();
 
@@ -70,15 +71,15 @@ export default function AppShell({ children }: PropsWithChildren) {
       {/* Masthead */}
       <header className={cn(
         "relative overflow-hidden transition-[max-height,opacity,border-color,box-shadow] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
-        isZen ? "max-h-0 opacity-0 border-none" : "max-h-[100px] opacity-100 hairline"
+        isZen ? "max-h-0 opacity-0 border-none" : "max-h-[140px] md:max-h-[100px] opacity-100 hairline"
       )}>
-        <div className="mx-auto max-w-6xl px-4 py-4 md:px-6">
-          <div className="flex items-center justify-between gap-4">
-            <h1 className="text-2xl md:text-3xl font-semibold leading-none">
+        <div className="mx-auto max-w-6xl px-4 py-3 md:px-6 md:py-4">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 md:flex-nowrap md:gap-4">
+            <h1 className="min-w-0 text-2xl md:text-3xl font-semibold leading-none">
               <Link href="/">
-                <span className="flex items-center gap-3 hover:opacity-90 transition-opacity">
+                <span className="flex items-center gap-2 md:gap-3 hover:opacity-90 transition-opacity">
                   <span>DigestDesk</span>
-                  <span className="flex items-center gap-2">
+                  <span className="hidden md:flex items-center gap-2">
                     <img
                       src="/logos/substack.svg"
                       alt="Substack"
@@ -104,33 +105,41 @@ export default function AppShell({ children }: PropsWithChildren) {
               </Link>
             </h1>
 
-            <div className="flex items-center gap-1 rounded-full border border-border bg-card/70 p-1">
-              <a
-                href="https://github.com/nexteacc/digestdesk"
-                target="_blank"
-                rel="noreferrer"
-                className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                title={text("开源代码", "Open Source")}
-              >
-                <Github className="h-4 w-4" />
-              </a>
-              <div className="h-4 w-[1px] bg-border mx-0.5" />
-              <Button
-                variant={locale === "zh" ? "default" : "ghost"}
-                size="sm"
-                className="h-7 rounded-full px-2.5 text-xs"
-                onClick={() => setLocale("zh")}
-              >
-                中文
-              </Button>
-              <Button
-                variant={locale === "en" ? "default" : "ghost"}
-                size="sm"
-                className="h-7 rounded-full px-2.5 text-xs"
-                onClick={() => setLocale("en")}
-              >
-                EN
-              </Button>
+            <div className="order-3 flex w-full items-center justify-between gap-2 md:order-none md:w-auto md:justify-end">
+              <div className="flex items-center gap-2 md:hidden">
+                <img src="/logos/substack.svg" alt="Substack" className="h-4 w-4" />
+                <img src="/logos/applepodcasts-9933cc.svg" alt="Podcast" className="h-4 w-4" />
+                <img src="/logos/youtube.svg" alt="YouTube" className="h-4 w-4" />
+                <img src="/logos/rss.svg" alt="RSS" className="h-4 w-4" />
+              </div>
+              <div className="flex items-center gap-1 rounded-full border border-border bg-card/70 p-1">
+                <a
+                  href="https://github.com/nexteacc/digestdesk"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  title={text("开源代码", "Open Source")}
+                >
+                  <Github className="h-4 w-4" />
+                </a>
+                <div className="h-4 w-[1px] bg-border mx-0.5" />
+                <Button
+                  variant={locale === "zh" ? "default" : "ghost"}
+                  size="sm"
+                  className="h-7 rounded-full px-2.5 text-xs"
+                  onClick={() => setLocale("zh")}
+                >
+                  中文
+                </Button>
+                <Button
+                  variant={locale === "en" ? "default" : "ghost"}
+                  size="sm"
+                  className="h-7 rounded-full px-2.5 text-xs"
+                  onClick={() => setLocale("en")}
+                >
+                  EN
+                </Button>
+              </div>
             </div>
             <UserButton
               afterSignOutUrl="/"
@@ -181,17 +190,29 @@ export default function AppShell({ children }: PropsWithChildren) {
         )}>
           {/* Sidebar */}
           <aside className={cn(
-            "md:sticky md:top-6 h-fit overflow-hidden whitespace-nowrap transition-[opacity,transform,margin] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
+            "md:sticky md:top-6 h-fit overflow-hidden md:whitespace-nowrap transition-[opacity,transform,margin] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
             isZen ? "opacity-0 -translate-x-4" : "opacity-100 translate-x-0"
           )}>
             <div className="rounded-lg border border-border bg-card/70 backdrop-blur p-2 shadow-sm">
+              <button
+                type="button"
+                aria-expanded={isMobileNavOpen}
+                aria-controls="sidebar-navigation"
+                onClick={() => setIsMobileNavOpen(!isMobileNavOpen)}
+                className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left transition-colors hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
+                title={isMobileNavOpen ? text("收起导航", "Collapse navigation") : text("展开导航", "Expand navigation")}
+              >
+                <span className="text-xs tracking-[0.18em] uppercase text-muted-foreground">{text("导航", "Navigation")}</span>
+                <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform duration-300", isMobileNavOpen && "rotate-180")} />
+              </button>
+
               <button
                 type="button"
                 aria-expanded={!isCollapsed}
                 aria-controls="sidebar-navigation"
                 onClick={() => setIsCollapsed(!isCollapsed)}
                 className={cn(
-                  "flex w-full items-center rounded-md px-3 py-2 text-left transition-colors hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "hidden w-full items-center rounded-md px-3 py-2 text-left transition-colors hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:flex",
                   isCollapsed ? "justify-center" : "justify-between"
                 )}
                 title={isCollapsed ? text("展开导航", "Expand navigation") : text("折叠导航", "Collapse navigation")}
@@ -204,75 +225,81 @@ export default function AppShell({ children }: PropsWithChildren) {
                 </div>
               </button>
               
-              <nav id="sidebar-navigation" className="mt-2 grid gap-1">
-                {contentNav.map((item) => {
-                  const active =
-                    location === item.href ||
-                    (item.href !== "/" && location.startsWith(item.href));
-                  return (
-                    <Button
-                      key={item.href}
-                      asChild
-                      variant={active ? "secondary" : "ghost"}
-                      className={cn(
-                        "w-full transition-[background-color,color,border-color,box-shadow,transform] duration-300",
-                        active && "border border-border",
-                        isCollapsed ? "justify-center px-0" : "justify-start px-3 gap-3"
-                      )}
-                      title={isCollapsed ? item.label : ""}
-                      onMouseEnter={() => handleNavIntent(item.href)}
-                      onFocus={() => handleNavIntent(item.href)}
-                      onPointerDown={() => handleNavIntent(item.href)}
-                      onTouchStart={() => handleNavIntent(item.href)}
-                    >
-                      <Link href={item.href}>
-                        <div className="flex h-4 w-4 shrink-0 items-center justify-center">
-                          {item.icon}
-                        </div>
-                        {!isCollapsed && <span>{item.label}</span>}
-                      </Link>
-                    </Button>
-                  );
-                })}
-              </nav>
-              
-              {!isCollapsed && (
-                <div className="mt-4 text-[10px] tracking-[0.2em] uppercase text-muted-foreground px-3 py-1">
+              <div className={cn(
+                "overflow-hidden transition-[max-height,opacity] duration-300 md:max-h-none md:overflow-visible md:opacity-100",
+                isMobileNavOpen ? "max-h-[520px] opacity-100" : "max-h-0 opacity-0"
+              )}>
+                <nav id="sidebar-navigation" className="mt-2 grid gap-1">
+                  {contentNav.map((item) => {
+                    const active =
+                      location === item.href ||
+                      (item.href !== "/" && location.startsWith(item.href));
+                    return (
+                      <Button
+                        key={item.href}
+                        asChild
+                        variant={active ? "secondary" : "ghost"}
+                        className={cn(
+                          "w-full transition-[background-color,color,border-color,box-shadow,transform] duration-300",
+                          active && "border border-border",
+                          isCollapsed ? "md:justify-center md:px-0 justify-start px-3 gap-3" : "justify-start px-3 gap-3"
+                        )}
+                        title={isCollapsed ? item.label : ""}
+                        onMouseEnter={() => handleNavIntent(item.href)}
+                        onFocus={() => handleNavIntent(item.href)}
+                        onPointerDown={() => handleNavIntent(item.href)}
+                        onTouchStart={() => handleNavIntent(item.href)}
+                      >
+                        <Link href={item.href}>
+                          <div className="flex h-4 w-4 shrink-0 items-center justify-center">
+                            {item.icon}
+                          </div>
+                          <span className={cn(isCollapsed && "md:hidden")}>{item.label}</span>
+                        </Link>
+                      </Button>
+                    );
+                  })}
+                </nav>
+                
+                <div className={cn(
+                  "mt-4 text-[10px] tracking-[0.2em] uppercase text-muted-foreground px-3 py-1",
+                  isCollapsed && "md:hidden"
+                )}>
                   {text("管理", "Manage")}
                 </div>
-              )}
-              
-              <nav className={cn("mb-1 grid gap-1", isCollapsed && "mt-1")}>
-                {manageNav.map((item) => {
-                  const active =
-                    location === item.href ||
-                    (item.href !== "/" && location.startsWith(item.href));
-                  return (
-                    <Button
-                      key={item.href}
-                      asChild
-                      variant={active ? "secondary" : "ghost"}
-                      className={cn(
-                        "w-full transition-[background-color,color,border-color,box-shadow,transform] duration-300",
-                        active && "border border-border",
-                        isCollapsed ? "justify-center px-0" : "justify-start px-3 gap-3"
-                      )}
-                      title={isCollapsed ? item.label : ""}
-                      onMouseEnter={() => handleNavIntent(item.href)}
-                      onFocus={() => handleNavIntent(item.href)}
-                      onPointerDown={() => handleNavIntent(item.href)}
-                      onTouchStart={() => handleNavIntent(item.href)}
-                    >
-                      <Link href={item.href}>
-                        <div className="flex h-4 w-4 shrink-0 items-center justify-center">
-                          {item.icon}
-                        </div>
-                        {!isCollapsed && <span>{item.label}</span>}
-                      </Link>
-                    </Button>
-                  );
-                })}
-              </nav>
+                
+                <nav className={cn("mb-1 grid gap-1", isCollapsed && "md:mt-1")}>
+                  {manageNav.map((item) => {
+                    const active =
+                      location === item.href ||
+                      (item.href !== "/" && location.startsWith(item.href));
+                    return (
+                      <Button
+                        key={item.href}
+                        asChild
+                        variant={active ? "secondary" : "ghost"}
+                        className={cn(
+                          "w-full transition-[background-color,color,border-color,box-shadow,transform] duration-300",
+                          active && "border border-border",
+                          isCollapsed ? "md:justify-center md:px-0 justify-start px-3 gap-3" : "justify-start px-3 gap-3"
+                        )}
+                        title={isCollapsed ? item.label : ""}
+                        onMouseEnter={() => handleNavIntent(item.href)}
+                        onFocus={() => handleNavIntent(item.href)}
+                        onPointerDown={() => handleNavIntent(item.href)}
+                        onTouchStart={() => handleNavIntent(item.href)}
+                      >
+                        <Link href={item.href}>
+                          <div className="flex h-4 w-4 shrink-0 items-center justify-center">
+                            {item.icon}
+                          </div>
+                          <span className={cn(isCollapsed && "md:hidden")}>{item.label}</span>
+                        </Link>
+                      </Button>
+                    );
+                  })}
+                </nav>
+              </div>
             </div>
           </aside>
 
