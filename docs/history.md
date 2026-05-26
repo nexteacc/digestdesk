@@ -1367,3 +1367,86 @@ Admin 页面相关发现：
 - 检查 2026-05-23/2026-05-24 的 scheduler runtime logs，确认 scanned users 从 9 降为 7。
 - 确认 `pablopixes@gmail.com` 不再收到 Slashdot 旧记录日报。
 - 若重复 email 再出现，优先排查测试环境是否仍连接生产数据库，而不是修改 scheduler 按 email 去重。
+
+## 2026-05-26: 2026-05-24 Slashdot summary quality incident
+
+### Summary
+
+复查 `target_date=2026-05-24` 的日报质量时，发现一篇 Slashdot 文章的中文摘要入库为结构完整但语义损坏的结果：`oneLiner` 只有 `Google`，第三条 `keyInsights` 含隐藏字符/乱码残片。该问题不是前端展示、日报组装或抓取为空导致，而是 AI 摘要阶段偶发坏输出后，被过松的硬校验误判为成功并写入 `articles.summary_zh` 缓存。
+
+### Detection & Evidence
+
+异常文章：
+
+- Title: `Friday Google's AI-Powered Search Results Glitched on the Word 'Disregard'`
+- Source: Slashdot RSS
+- Article id: `PvwgqpsGQh9B52XDczmiQ`
+- `content_text` length: 1891
+- `inputLength=1891`、`sentLength=1891`、`maxInputChars=12000`
+
+排查结论：
+
+- 数据库正文包含 TechCrunch 报道、Google AI Overview 对 `disregard` 返回 `Understood...`、页面空白、新 Search 体验和 Google 后续修复等核心事实。
+- 送入模型前没有裁剪；同一段 `content_text` 重新调用当前模型可生成正常摘要。
+- 当时日志显示 `[summarizer] AI summary complete attempt=1 ... One-liner: Google...`，因此系统没有触发 retry。
+- 后续 `generateDaily` 阶段全部命中缓存：`summaryCacheHits=26`、`summaryGenerated=0`、`aiRequests=0`，说明坏结果在 `presummarizeForUser()` 写入缓存后被日报快照复用。
+
+### Root Cause & Contributing Factors
+
+根因分两层：
+
+- 模型层：`openai/gpt-oss-120b` 对这篇输入偶发输出坏摘要。返回对象结构完整，但 `oneLiner` 是单词残片，部分洞察含隐藏字符。
+- 系统防线层：prompt 已要求中文 `oneLiner` 目标 `35-70` 字符，但 schema 和 `normalizeSummary()` 仍只要求 `oneLiner >= 6` 字符；`Google` 刚好满足硬校验，因此未进入 retry。
+
+这不是抓取链路问题，也不是调度抢占问题。任务抢占只负责将 `digest_jobs` 标记为 `running`，文章级去重只负责避免同一进程内重复摘要；二者不是坏摘要的直接原因。
+
+### Mitigation / Changes
+
+本次做最小代码修复，不重定义产品规则、不更换模型、不改摘要链路：
+
+- 中文 `oneLiner` 硬下限从 `6` 个字符对齐到现有 prompt 下限 `35` 个可见字符。
+- 英文 `oneLiner` 增加现有 prompt 下限，少于 `14 words` 判失败。
+- schema 和最终 validator 使用同一组下限，确保短残片在结构化输出阶段或最终入库前被拦截。
+- 可见字符口径：中文、英文、数字、标点都计数；空格、换行、tab 不计数。
+- 控制字符和零宽字符直接判为低质量，防止隐藏字符/乱码洞察入库。
+- `keyInsights` 下限暂不强行改为 prompt 目标 `55` 字符。最近两天真实数据扫描显示，若硬改会让不少可读短洞察失效，超出本次 `oneLiner=Google` incident 的修复范围。
+
+修复后预期行为：
+
+```
+模型返回 oneLiner = "Google"
+  -> too_short_oneLiner
+  -> 触发 retry model
+  -> retry 成功才写 articles.summary_zh
+  -> retry 失败走 fallback，不写坏缓存
+```
+
+### Verification
+
+本地验证：
+
+- `parseCachedArticleSummary({ oneLiner: "Google", ... }, "zh")` 返回 `null`。
+- 含零宽/隐藏字符的洞察返回 `null`。
+- 正常中文摘要仍可通过。
+- `pnpm --filter substack-digest-server build` 通过。
+- `pnpm lint` 通过。
+
+生产数据风险扫描：
+
+- 最近两天 `2026-05-24` 和 `2026-05-25` 共 222 条 digest items 中，仅 1 条 `oneLiner < 35`，即该 Slashdot 异常样本。
+- `keyInsights < 55` 的条目较多，因此本次未扩大 keyInsight 下限，避免误伤已有可读摘要和引发不必要重算。
+
+### Follow-up Actions
+
+| Action | Owner | Status | Notes |
+|---|---|---|---|
+| 部署后复查 2026-05-24 异常缓存是否被判 invalid 并重新生成 | AI agent | Pending | 可通过手动/定时重跑目标日期或定向清理该 article summary 后验证 |
+| 观察 `too_short_oneLiner` 和 retry 成功率 | AI agent | Pending | 判断主模型短残片是否偶发还是频繁 |
+| 评估网页总结模型候选 | AI agent + User | Optional | 用真实文章样本比较当前模型、retry 模型、Claude/Gemini/GPT 系列的质量、成本、速度 |
+| 继续抽查 `keyInsights` 质量 | AI agent | Optional | 若短洞察或乱码仍出现，再单独定义 keyInsight 质量规则 |
+
+### Next Review
+
+- 下一轮日报后检查 scheduler 日志中的 validation metadata，确认短 `oneLiner` 会进入 retry。
+- 抽样检查新生成摘要是否仍出现单词残片、隐藏字符或缓存污染。
+- 若 retry 后仍频繁失败，再讨论模型稳定性、并发/频率和主模型切换，而不是继续扩大 validator 规则。

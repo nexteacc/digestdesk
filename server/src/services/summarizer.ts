@@ -208,13 +208,16 @@ export type ArticleSummary = z.infer<typeof ArticleSummarySchema>;
 
 const SUMMARY_LIMITS = {
   zh: {
+    oneLinerMinChars: 35,
     oneLinerMaxChars: 90,
     keyInsightMaxChars: 130,
     minInsightChars: 10,
   },
   en: {
+    oneLinerMinWords: 14,
     oneLinerMaxWords: 45,
     keyInsightMaxWords: 60,
+    oneLinerMinChars: 6,
     minInsightChars: 24,
   },
 } as const;
@@ -255,9 +258,19 @@ function compactSummaryText(value: string) {
     .trim();
 }
 
+function hasDisallowedSummaryChars(value: string) {
+  for (const char of value) {
+    const code = char.charCodeAt(0);
+    if ((code <= 0x001f) || (code >= 0x007f && code <= 0x009f)) return true;
+    if (code === 0x200b || code === 0x200c || code === 0x200d || code === 0xfeff) return true;
+  }
+  return false;
+}
+
 function isLowQualitySummaryText(value: string) {
   const text = value.trim();
   if (!text) return true;
+  if (hasDisallowedSummaryChars(text)) return true;
   if (!/[A-Za-z\u4e00-\u9fff]/.test(text)) return true;
   if (/^the[.!?。！？….\s]*$/i.test(text)) return true;
   if (/^\.{2,}$|^…+$/.test(text)) return true;
@@ -271,28 +284,38 @@ function countSummaryWords(value: string) {
   return text ? text.split(/\s+/).length : 0;
 }
 
+function countVisibleChars(value: string) {
+  return [...value.replace(/[\s\u200b-\u200d\ufeff]/g, "")].length;
+}
+
 function assertSummaryText(value: string, field: "oneLiner" | "keyInsight", language: "zh" | "en") {
-  const limits = SUMMARY_LIMITS[language] ?? SUMMARY_LIMITS.zh;
-  const minChars = field === "oneLiner" ? 6 : limits.minInsightChars;
+  const visibleChars = countVisibleChars(value);
   const words = language === "en" ? countSummaryWords(value) : null;
   const validationMeta = {
     field,
     language,
-    chars: value.length,
+    chars: visibleChars,
     words,
   };
 
   if (isLowQualitySummaryText(value)) {
     throw new SummaryValidationError(`low_quality_${field}`, validationMeta);
   }
-  if (value.length < minChars) {
-    throw new SummaryValidationError(`too_short_${field}`, {
-      ...validationMeta,
-      limit: minChars,
-      limitUnit: "chars",
-    });
-  }
   if (language === "en") {
+    if (field === "oneLiner" && words !== null && words < SUMMARY_LIMITS.en.oneLinerMinWords) {
+      throw new SummaryValidationError(`too_short_${field}`, {
+        ...validationMeta,
+        limit: SUMMARY_LIMITS.en.oneLinerMinWords,
+        limitUnit: "words",
+      });
+    }
+    if (field === "keyInsight" && visibleChars < SUMMARY_LIMITS.en.minInsightChars) {
+      throw new SummaryValidationError(`too_short_${field}`, {
+        ...validationMeta,
+        limit: SUMMARY_LIMITS.en.minInsightChars,
+        limitUnit: "chars",
+      });
+    }
     const maxWords = field === "oneLiner" ? SUMMARY_LIMITS.en.oneLinerMaxWords : SUMMARY_LIMITS.en.keyInsightMaxWords;
     if (words !== null && words > maxWords) {
       throw new SummaryValidationError(`too_long_${field}`, {
@@ -304,8 +327,16 @@ function assertSummaryText(value: string, field: "oneLiner" | "keyInsight", lang
     return;
   }
 
+  const minChars = field === "oneLiner" ? SUMMARY_LIMITS.zh.oneLinerMinChars : SUMMARY_LIMITS.zh.minInsightChars;
   const maxChars = field === "oneLiner" ? SUMMARY_LIMITS.zh.oneLinerMaxChars : SUMMARY_LIMITS.zh.keyInsightMaxChars;
-  if (value.length > maxChars) {
+  if (visibleChars < minChars) {
+    throw new SummaryValidationError(`too_short_${field}`, {
+      ...validationMeta,
+      limit: minChars,
+      limitUnit: "chars",
+    });
+  }
+  if (visibleChars > maxChars) {
     throw new SummaryValidationError(`too_long_${field}`, {
       ...validationMeta,
       limit: maxChars,
@@ -337,17 +368,18 @@ export function parseCachedArticleSummary(input: unknown, language: "zh" | "en" 
 }
 
 function buildArticleSummaryGenerationSchema(language: "zh" | "en") {
-  const limits = SUMMARY_LIMITS[language] ?? SUMMARY_LIMITS.zh;
+  const oneLinerMinChars = language === "zh" ? SUMMARY_LIMITS.zh.oneLinerMinChars : SUMMARY_LIMITS.en.oneLinerMinChars;
+  const keyInsightMinChars = language === "zh" ? SUMMARY_LIMITS.zh.minInsightChars : SUMMARY_LIMITS.en.minInsightChars;
   return z.object({
     oneLiner: z
       .string()
-      .min(6)
+      .min(oneLinerMinChars)
       .describe(PROMPTS[language].schema.oneLiner),
     keyInsights: z
       .array(
         z
           .string()
-          .min(limits.minInsightChars)
+          .min(keyInsightMinChars)
           .describe(PROMPTS[language].schema.keyInsights),
       )
       .length(3)
