@@ -154,7 +154,7 @@ export default function AppShell({ children }: PropsWithChildren) {
           </div>
       </header>
 
-      <div className="relative z-50 flex justify-center h-0">
+      <div className="relative z-50 hidden h-0 justify-center md:flex">
         <div className={cn(
           "absolute transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
           isZen ? "opacity-0 scale-0 pointer-events-none -top-4" : "-top-0 -translate-y-1/2 opacity-100 scale-100"
@@ -162,7 +162,7 @@ export default function AppShell({ children }: PropsWithChildren) {
           <Button
             variant="outline"
             size="icon"
-            className="h-11 w-11 rounded-full shadow-md md:h-9 md:w-9"
+            className="h-9 w-9 rounded-full shadow-md"
             onClick={handleToggleZen}
             title={isZen ? text("退出沉浸模式", "Exit zen mode") : text("进入沉浸模式", "Enter zen mode")}
           >
