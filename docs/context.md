@@ -49,7 +49,8 @@ Compact AI context: invariants, boundaries, workflows, and checks.
 - An article is stored once globally.
 - Multiple users can reference the same article.
 - Article summaries are cached globally by article and language.
-- Current summary cache fields are `summary_zh` and `summary_en`.
+- Primary summary cache is `article_summaries(article_id, language, summary_json, ...)`.
+- Legacy `articles.summary_zh` and `articles.summary_en` remain as compatibility fallback for existing Chinese/English summaries.
 
 ## User-Specific State
 

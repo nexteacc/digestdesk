@@ -1,6 +1,7 @@
 export type Locale = "zh" | "en";
 
 export type {
+  DigestLanguage,
   DigestSourceType,
   Feed,
   DigestItem,

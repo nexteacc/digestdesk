@@ -13,7 +13,7 @@ import {
 import { useI18n } from "@/contexts/I18nContext";
 import * as api from "@/lib/api";
 import { ApiError } from "@/lib/api";
-import type { DigestSourceType } from "@/lib/types";
+import type { DigestLanguage, DigestSourceType } from "@/lib/types";
 import { DIGEST_SOURCE_META, DIGEST_SOURCE_ORDER } from "@/lib/digest-sources";
 import { Check, Settings as SettingsIcon } from "lucide-react";
 import type { Settings } from "@/lib/types";
@@ -36,6 +36,11 @@ const TIMEZONES = [
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, "0"));
 const MINUTES = ["00", "15", "30", "45"];
+const DIGEST_LANGUAGE_OPTIONS: Array<{ value: DigestLanguage; zhLabel: string; enLabel: string }> = [
+  { value: "zh", zhLabel: "简体中文", enLabel: "Simplified Chinese" },
+  { value: "en", zhLabel: "English", enLabel: "English" },
+  { value: "de", zhLabel: "德语", enLabel: "German" },
+];
 let settingsCache: Settings | null = null;
 
 function getSettingsErrorText(error: unknown, text: (zh: string, en: string) => string) {
@@ -128,7 +133,7 @@ export default function SettingsPage() {
   const [hour, setHour] = useState("08");
   const [minute, setMinute] = useState("00");
   const [timezone, setTimezone] = useState("Asia/Shanghai");
-  const [digestLanguage, setDigestLanguage] = useState<"zh" | "en">("zh");
+  const [digestLanguage, setDigestLanguage] = useState<DigestLanguage>("zh");
   const [digestSourceTypes, setDigestSourceTypes] = useState<DigestSourceType[]>(DIGEST_SOURCE_ORDER);
 
   const orderedSourceTypes = useMemo(
@@ -225,13 +230,16 @@ export default function SettingsPage() {
                   {text("日报语言", "Digest Language")}
                 </label>
               </div>
-              <Select value={digestLanguage} onValueChange={(v) => setDigestLanguage(v as "zh" | "en")}>
+              <Select value={digestLanguage} onValueChange={(v) => setDigestLanguage(v as DigestLanguage)}>
                 <SelectTrigger className="w-[200px] h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="zh">{text("简体中文", "Simplified Chinese")}</SelectItem>
-                  <SelectItem value="en">{text("English", "English")}</SelectItem>
+                  {DIGEST_LANGUAGE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {text(option.zhLabel, option.enLabel)}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

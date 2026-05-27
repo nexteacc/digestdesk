@@ -1,4 +1,4 @@
-import { pgTable, text, integer, index } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, index, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
@@ -53,6 +53,25 @@ export const articles = pgTable("articles", {
   summaryZh: text("summary_zh"),
   summaryEn: text("summary_en"),
 });
+
+export const articleSummaries = pgTable(
+  "article_summaries",
+  {
+    id: text("id").primaryKey(),
+    articleId: text("article_id").notNull().references(() => articles.id, { onDelete: "cascade" }),
+    language: text("language").notNull(),
+    summaryJson: text("summary_json").notNull(),
+    model: text("model"),
+    promptVersion: text("prompt_version"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => ({
+    articleLanguageUnique: uniqueIndex("idx_article_summaries_article_language_unique").on(table.articleId, table.language),
+    articleIdx: index("idx_article_summaries_article_id").on(table.articleId),
+    languageIdx: index("idx_article_summaries_language").on(table.language),
+  }),
+);
 
 export const digests = pgTable("digests", {
   id: text("id").primaryKey(),

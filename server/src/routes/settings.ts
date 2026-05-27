@@ -6,11 +6,12 @@ import { getDb } from "../db/index.js";
 import { userSettings } from "../db/schema.js";
 import { getRequestUserId } from "../auth/user-context.js";
 import { DEFAULT_DIGEST_SOURCE_TYPES, parseDigestSourceTypes } from "../services/user-settings.js";
+import { DIGEST_LANGUAGES, parseDigestLanguage } from "../services/summary-language-profiles.js";
 
 const updateSettingsSchema = z.object({
   digestTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/),
   timezone: z.string().min(1),
-  digestLanguage: z.enum(["zh", "en"]).default("zh"),
+  digestLanguage: z.enum(DIGEST_LANGUAGES).default("zh"),
   digestSourceTypes: z.array(z.enum(["substack", "rss", "podcast", "youtube"])).min(1).default(DEFAULT_DIGEST_SOURCE_TYPES),
 });
 
@@ -65,7 +66,7 @@ settingsRouter.get("/", async (req, res) => {
   res.json({
     digestTime: config.digest_time || "08:00",
     timezone: config.timezone || "Asia/Shanghai",
-    digestLanguage: config.digest_language || "zh",
+    digestLanguage: parseDigestLanguage(config.digest_language),
     digestSourceTypes: parseDigestSourceTypes(config.digest_source_types),
   });
 });

@@ -82,6 +82,32 @@ export async function initDb() {
   `;
 
   await queryClient`
+    CREATE TABLE IF NOT EXISTS article_summaries (
+      id TEXT PRIMARY KEY,
+      article_id TEXT NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+      language TEXT NOT NULL,
+      summary_json TEXT NOT NULL,
+      model TEXT,
+      prompt_version TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `;
+
+  await queryClient`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_article_summaries_article_language_unique
+    ON article_summaries(article_id, language);
+  `;
+
+  await queryClient`
+    CREATE INDEX IF NOT EXISTS idx_article_summaries_article_id ON article_summaries(article_id);
+  `;
+
+  await queryClient`
+    CREATE INDEX IF NOT EXISTS idx_article_summaries_language ON article_summaries(language);
+  `;
+
+  await queryClient`
     CREATE TABLE IF NOT EXISTS digests (
       id TEXT PRIMARY KEY,
       type TEXT NOT NULL CHECK(type IN ('daily')),

@@ -1,6 +1,7 @@
 // 前后端共享的类型定义
 
 export type DigestSourceType = "substack" | "rss" | "youtube" | "podcast";
+export type DigestLanguage = "zh" | "en" | "de";
 
 export type Feed = {
   id: string;
@@ -131,6 +132,6 @@ export type GoogleYouTubeSubscription = {
 export type Settings = {
   digestTime: string;
   timezone: string;
-  digestLanguage: "zh" | "en";
+  digestLanguage: DigestLanguage;
   digestSourceTypes: DigestSourceType[];
 };

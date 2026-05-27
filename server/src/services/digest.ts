@@ -3,9 +3,16 @@ import { eq, and, gte, lt, inArray, isNull } from "drizzle-orm";
 import pLimit from "p-limit";
 import { getDb } from "../db/index.js";
 import { feeds, articles, digests, digestItems, subscriptions, userSettings } from "../db/schema.js";
-import { classifyAiError, getMaxInputChars, parseCachedArticleSummary, summarizeArticle } from "./summarizer.js";
+import { classifyAiError, getMaxInputChars, summarizeArticle } from "./summarizer.js";
 import { getDayRangeForTimeZone, getPreviousDateLabel, getTimeZoneDateLabel } from "../utils/timezone.js";
 import { parseDigestSourceTypes } from "./user-settings.js";
+import { getSummaryLanguageProfile, parseDigestLanguage } from "./summary-language-profiles.js";
+import {
+  readArticleSummaryMap,
+  readCachedArticleSummaryFromMaps,
+  writeArticleSummary,
+} from "./article-summary-cache.js";
+import type { DigestLanguage } from "../../../shared/types.js";
 
 const DEFAULT_CONCURRENCY = 3;
 
@@ -55,7 +62,7 @@ async function _generateDailyCore(
     .from(userSettings)
     .where(eq(userSettings.userId, userId));
   const settings = Object.fromEntries(settingRows.map((row) => [row.key, row.value]));
-  const language = (settings.digest_language as "zh" | "en") || "zh";
+  const language = parseDigestLanguage(settings.digest_language);
   const timezone = settings.timezone || "Asia/Shanghai";
   const enabledSourceTypes = parseDigestSourceTypes(settings.digest_source_types);
   const todayLabel = getTimeZoneDateLabel(new Date(), timezone);
@@ -86,7 +93,7 @@ async function generateWithId(
   dateLabel: string,
   startTime: string,
   endTime: string,
-  language: "zh" | "en" = "zh",
+  language: DigestLanguage = "zh",
   enabledSourceTypes: Array<"substack" | "rss" | "youtube" | "podcast">,
   options?: { executionId?: string },
 ): Promise<string> {
@@ -94,6 +101,7 @@ async function generateWithId(
   const db = getDb();
   const trace = options?.executionId ? ` executionId=${options.executionId}` : "";
   const debug = isDigestDebugEnabled();
+  const languageProfile = getSummaryLanguageProfile(language);
 
   const subscribedFeedRows = await db
     .select({ feedId: subscriptions.feedId, startedAt: subscriptions.startedAt })
@@ -149,6 +157,11 @@ async function generateWithId(
         lt(articles.publishedAt, endTime),
       ),
     );
+
+  const summaryMap = await readArticleSummaryMap(
+    dayArticles.map((article) => article.id),
+    language,
+  );
 
   console.log(
     `[digest] Articles in range${trace} user=${userId} date=${dateLabel} count=${dayArticles.length}`,
@@ -217,7 +230,7 @@ async function generateWithId(
   const tasks = eligibleArticles.map((article) =>
     limit(async (): Promise<ItemResult> => {
       const contentText = article.contentText || "";
-      const feedName = feedMap.get(article.feedId) || (language === "zh" ? "未知来源" : "Unknown source");
+      const feedName = feedMap.get(article.feedId) || languageProfile.fallbackText.unknownSource;
       const sourceType = feedSourceMap.get(article.feedId) || "substack";
       const base = {
         articleId: article.id,
@@ -230,7 +243,13 @@ async function generateWithId(
         publishedAt: article.publishedAt,
       };
       if (debug) {
-        const cachedLength = language === "zh" ? (article.summaryZh?.length ?? 0) : (article.summaryEn?.length ?? 0);
+        const cachedLength =
+          summaryMap.get(article.id)?.length ??
+          (language === "zh"
+            ? (article.summaryZh?.length ?? 0)
+            : language === "en"
+              ? (article.summaryEn?.length ?? 0)
+              : 0);
         console.log(
           `[digest] Article summary input${trace} user=${userId} date=${dateLabel} article=${article.id} feed=${article.feedId} sourceType=${sourceType} publishedAt=${article.publishedAt} contentLength=${contentText.length} cachedSummaryLength=${cachedLength} url=${article.url}`,
         );
@@ -246,40 +265,34 @@ async function generateWithId(
         return {
           ...base,
           oneLiner: isYouTube
-            ? (language === "zh" ? "YouTube 视频，暂无文本总结。" : "YouTube update with no transcript-based summary yet.")
+            ? languageProfile.fallbackText.youtubeNoTranscript
             : isPodcast
-              ? (language === "zh" ? "播客已更新，以下为简介型快讯。" : "Podcast updated. Summary is based on the available episode description.")
-              : (language === "zh" ? "文章内容太短，无法生成总结。" : "Content is too short to generate a useful summary."),
+              ? languageProfile.fallbackText.podcastDescription
+              : languageProfile.fallbackText.contentTooShort,
           keyInsights: [],
         };
       }
 
       // Check cache first
-      const cachedField = language === "zh" ? article.summaryZh : article.summaryEn;
-      if (cachedField) {
-        try {
-          const cached = parseCachedArticleSummary(JSON.parse(cachedField), language);
-          if (cached) {
-            summaryCacheHits += 1;
-            console.log(
-              `[digest] Summary cache hit${trace} article=${article.id} sourceType=${sourceType} language=${language} insights=${Array.isArray(cached.keyInsights) ? cached.keyInsights.length : "unknown"} url=${article.url}`,
-            );
-            return { ...base, oneLiner: cached.oneLiner, keyInsights: cached.keyInsights };
-          }
-          summaryCacheInvalid += 1;
-          if (debug) {
-            console.warn(
-              `[digest] Summary cache invalid${trace} article=${article.id} sourceType=${sourceType} language=${language} reason=failed_quality_or_length_validation url=${article.url}`,
-            );
-          }
-        } catch {
-          summaryCacheInvalid += 1;
-          if (debug) {
-            console.warn(
-              `[digest] Summary cache invalid${trace} article=${article.id} sourceType=${sourceType} language=${language} reason=json_parse_failed url=${article.url}`,
-            );
-          }
-          // invalid cache, fall through to AI
+      const cached = readCachedArticleSummaryFromMaps({
+        articleId: article.id,
+        language,
+        summaryMap,
+        legacyFields: article,
+      });
+      if (cached) {
+        summaryCacheHits += 1;
+        console.log(
+          `[digest] Summary cache hit${trace} article=${article.id} sourceType=${sourceType} language=${language} cacheSource=${cached.source} insights=${Array.isArray(cached.summary.keyInsights) ? cached.summary.keyInsights.length : "unknown"} url=${article.url}`,
+        );
+        return { ...base, oneLiner: cached.summary.oneLiner, keyInsights: cached.summary.keyInsights };
+      }
+      if (summaryMap.has(article.id) || (language === "zh" && article.summaryZh) || (language === "en" && article.summaryEn)) {
+        summaryCacheInvalid += 1;
+        if (debug) {
+          console.warn(
+            `[digest] Summary cache invalid${trace} article=${article.id} sourceType=${sourceType} language=${language} reason=failed_quality_or_length_validation url=${article.url}`,
+          );
         }
       }
       summaryCacheMisses += 1;
@@ -297,10 +310,7 @@ async function generateWithId(
           },
         });
         summaryGenerated += 1;
-        // Cache the summary
-        const summaryJson = JSON.stringify({ oneLiner: summary.oneLiner, keyInsights: summary.keyInsights });
-        const updateField = language === "zh" ? { summaryZh: summaryJson } : { summaryEn: summaryJson };
-        await db.update(articles).set(updateField).where(eq(articles.id, article.id)).catch((e) => {
+        await writeArticleSummary({ articleId: article.id, language, summary }).catch((e) => {
           console.warn(`[digest] Failed to cache summary${trace} article=${article.id} url=${article.url}:`, e instanceof Error ? e.message : e);
         });
         if (debug) {
@@ -320,7 +330,7 @@ async function generateWithId(
         );
         return {
           ...base,
-          oneLiner: language === "zh" ? "暂时无法生成摘要。" : "Summary unavailable for now.",
+          oneLiner: languageProfile.fallbackText.unavailable,
           keyInsights: [],
         };
       }
@@ -330,14 +340,14 @@ async function generateWithId(
   const items = await Promise.all(tasks);
   items.sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : -1));
   const fallbackCount = items.filter((item) =>
-    language === "zh" ? item.oneLiner === "暂时无法生成摘要。" : item.oneLiner === "Summary unavailable for now.",
+    item.oneLiner === languageProfile.fallbackText.unavailable,
   ).length;
   const emptyInsightsCount = items.filter((item) => item.keyInsights.length === 0).length;
 
   if (debug) {
     for (const item of items) {
       const fallback =
-        language === "zh" ? item.oneLiner === "暂时无法生成摘要。" : item.oneLiner === "Summary unavailable for now.";
+        item.oneLiner === languageProfile.fallbackText.unavailable;
       console.log(
         `[digest] Item ready${trace} user=${userId} date=${dateLabel} article=${item.articleId} feed=${item.feedId} sourceType=${item.sourceType} publishedAt=${item.publishedAt} fallback=${fallback} insights=${item.keyInsights.length} oneLinerLength=${item.oneLiner.length} url=${item.url}`,
       );

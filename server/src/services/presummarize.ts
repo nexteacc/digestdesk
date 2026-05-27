@@ -16,8 +16,15 @@ import pLimit from "p-limit";
 import { getDb } from "../db/index.js";
 import { articles, feeds, subscriptions } from "../db/schema.js";
 import { getUserSettingsMap, parseDigestSourceTypes } from "./user-settings.js";
-import { classifyAiError, getMaxInputChars, parseCachedArticleSummary, summarizeArticle } from "./summarizer.js";
+import { classifyAiError, getMaxInputChars, summarizeArticle } from "./summarizer.js";
 import { getDayRangeForTimeZone, getPreviousDateLabel, getTimeZoneDateLabel } from "../utils/timezone.js";
+import { parseDigestLanguage } from "./summary-language-profiles.js";
+import {
+  readArticleSummaryMap,
+  readCachedArticleSummaryFromMaps,
+  writeArticleSummary,
+} from "./article-summary-cache.js";
+import type { DigestLanguage } from "../../../shared/types.js";
 
 const DEFAULT_CONCURRENCY = 3;
 const MIN_CONTENT_LENGTH = 50;
@@ -39,9 +46,10 @@ function getPresummarizeConcurrency() {
 
 async function readCachedSummary(
   articleId: string,
-  language: "zh" | "en",
+  language: DigestLanguage,
 ): Promise<boolean> {
   const db = getDb();
+  const summaryMap = await readArticleSummaryMap([articleId], language);
   const [row] = await db
     .select({
       summaryZh: articles.summaryZh,
@@ -50,13 +58,14 @@ async function readCachedSummary(
     .from(articles)
     .where(eq(articles.id, articleId));
 
-  const cached = language === "zh" ? row?.summaryZh : row?.summaryEn;
-  if (!cached) return false;
-  try {
-    return Boolean(parseCachedArticleSummary(JSON.parse(cached), language));
-  } catch {
-    return false;
-  }
+  return Boolean(
+    readCachedArticleSummaryFromMaps({
+      articleId,
+      language,
+      summaryMap,
+      legacyFields: row,
+    }),
+  );
 }
 
 async function summarizeAndCacheArticle(
@@ -64,8 +73,7 @@ async function summarizeAndCacheArticle(
     id: string;
     contentText: string | null;
   },
-  language: "zh" | "en",
-  updateField: "summaryZh" | "summaryEn",
+  language: DigestLanguage,
   options?: { onAttempt?: (attempt: number) => void },
 ): Promise<{ attempts: number; dedupedWait: boolean; cacheHitAfterWait: boolean }> {
   const key = `${language}:${article.id}`;
@@ -82,7 +90,6 @@ async function summarizeAndCacheArticle(
       continue;
     }
 
-    const db = getDb();
     let attempts = 0;
     const work = (async () => {
       const summary = await summarizeArticle(article.contentText!, language, {
@@ -91,11 +98,7 @@ async function summarizeAndCacheArticle(
           options?.onAttempt?.(attempt);
         },
       });
-      const summaryJson = JSON.stringify({ oneLiner: summary.oneLiner, keyInsights: summary.keyInsights });
-      await db
-        .update(articles)
-        .set({ [updateField]: summaryJson })
-        .where(eq(articles.id, article.id));
+      await writeArticleSummary({ articleId: article.id, language, summary });
     })();
 
     inFlightSummaryWrites.set(key, work);
@@ -127,7 +130,7 @@ export async function presummarizeForUser(
 
   // Read user settings to get the correct language and timezone
   const settings = await getUserSettingsMap(userId);
-  const language = (settings.digest_language as "zh" | "en") || "zh";
+  const language = parseDigestLanguage(settings.digest_language);
   const timezone = settings.timezone || "Asia/Shanghai";
   const enabledSourceTypes = parseDigestSourceTypes(settings.digest_source_types);
 
@@ -179,6 +182,11 @@ export async function presummarizeForUser(
       ),
     );
 
+  const summaryMap = await readArticleSummaryMap(
+    articlesInRange.map((article) => article.id),
+    language,
+  );
+
   let skippedShort = 0;
   let skippedCached = 0;
   let invalidCache = 0;
@@ -214,24 +222,23 @@ export async function presummarizeForUser(
       }
       return false;
     }
-    const cached = language === "zh" ? a.summaryZh : a.summaryEn;
+    const cached = readCachedArticleSummaryFromMaps({
+      articleId: a.id,
+      language,
+      summaryMap,
+      legacyFields: a,
+    });
     if (cached) {
-      try {
-        const parsed = parseCachedArticleSummary(JSON.parse(cached), language);
-        if (parsed) {
-          skippedCached += 1;
-          if (debug) {
-            console.log(
-              `[presummarize] Article skip${trace} user=${userId} date=${dateLabel} article=${a.id} feed=${a.feedId} publishedAt=${a.publishedAt} contentLength=${contentLength} reason=already_cached language=${language} url=${a.url}`,
-            );
-          }
-          return false; // already valid
-        }
-        invalidCache += 1;
-      } catch {
-        invalidCache += 1;
-        // corrupt cache — re-generate
+      skippedCached += 1;
+      if (debug) {
+        console.log(
+          `[presummarize] Article skip${trace} user=${userId} date=${dateLabel} article=${a.id} feed=${a.feedId} publishedAt=${a.publishedAt} contentLength=${contentLength} reason=already_cached language=${language} cacheSource=${cached.source} url=${a.url}`,
+        );
       }
+      return false; // already valid
+    }
+    if (summaryMap.has(a.id) || (language === "zh" && a.summaryZh) || (language === "en" && a.summaryEn)) {
+      invalidCache += 1;
     }
     if (debug) {
       console.log(
@@ -260,12 +267,11 @@ export async function presummarizeForUser(
   );
 
   const limit = pLimit(getPresummarizeConcurrency());
-  const updateField = language === "zh" ? "summaryZh" : "summaryEn";
 
   const results = await Promise.allSettled(
     articlesToProcess.map((article) =>
       limit(async () => {
-        const result = await summarizeAndCacheArticle(article, language, updateField, {
+        const result = await summarizeAndCacheArticle(article, language, {
           onAttempt: (attempt) => {
             modelRequests += 1;
             if (attempt > 1) retryRequests += 1;

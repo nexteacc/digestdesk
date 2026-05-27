@@ -1450,3 +1450,38 @@ Admin 页面相关发现：
 - 下一轮日报后检查 scheduler 日志中的 validation metadata，确认短 `oneLiner` 会进入 retry。
 - 抽样检查新生成摘要是否仍出现单词残片、隐藏字符或缓存污染。
 - 若 retry 后仍频繁失败，再讨论模型稳定性、并发/频率和主模型切换，而不是继续扩大 validator 规则。
+
+## 2026-05-27: Multilingual digest language routing and German support
+
+### Summary
+
+为支持中文、英文以外的日报语言，摘要链路改为按目标语言读取专用 profile。首个新增语言为德语，设置页新增 Deutsch 选项，后端按用户 `digest_language` 选择对应 prompt、schema、轻量校验、fallback 文案和缓存键。
+
+### Behavior Contract
+
+- 手动生成、定时生成和预摘要仍必须通过 `executeDailyDigestJob` 相关链路执行，保持 feed sync、pre-summary、digest assembly 顺序不变。
+- 同一篇文章可以按不同目标语言生成不同摘要；抓取仍复用同一篇 `articles` 记录，摘要缓存按 `article_id + language` 隔离。
+- 旧的 `articles.summary_zh` / `summary_en` 继续作为兼容回退，不改变既有中文/英文用户的缓存读取。
+- 德语只做轻量 Latin script 校验，不用脆弱的德语词表或特殊字母硬规则；语言质量主要由德语专用 prompt、结构化 schema、长度/低质量校验和 retry 兜底。
+
+### Changes
+
+- 新增 `article_summaries` 表，使用 `(article_id, language)` 唯一索引保存多语言摘要 JSON、模型和 prompt version。
+- 新增 summary language profile，把中文、英文、德语 prompt/schema/validation/fallback 文案集中管理。
+- `presummarizeForUser()` 和 digest assembly 均优先读取 `article_summaries`，再回退 legacy `summary_zh/en`，生成后写入新缓存；中文/英文同步回写 legacy 字段。
+- Settings API 和前端设置页允许 `zh` / `en` / `de`，历史非法值继续回退为 `zh`。
+
+### Verification
+
+- `server/node_modules/.bin/tsc -p server/tsconfig.build.json` 通过。
+- `node_modules/.bin/eslint .` 通过。
+- `node_modules/.bin/tsc -p tsconfig.app.json --noEmit` 仍失败于既有前端类型问题：Clerk `afterSignOutUrl` prop 与 DailyDigest union `.id` narrowing。
+- `node_modules/.bin/vite build` 受本机 Rollup optional native package code signing 问题阻塞，未到业务代码编译阶段。
+
+### Follow-up Actions
+
+| Action | Owner | Status | Notes |
+|---|---|---|---|
+| 部署后抽查德语日报输出 | AI agent + User | Pending | 重点看自然德语、专业术语、fallback 数量和 retry 日志 |
+| 观察 `article_summaries` 命中率 | AI agent | Pending | 对比 `summaryCacheHits`、`summaryCacheMisses`、`aiRequests` 是否符合 `article + language` 口径 |
+| 修复前端既有 TypeScript 问题 | AI agent + User | Optional | 当前不由本次多语言改造引入，但会影响完整 frontend typecheck |

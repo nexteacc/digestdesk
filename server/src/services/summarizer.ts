@@ -1,6 +1,8 @@
 import { generateObject, type LanguageModel } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { z } from "zod";
+import type { DigestLanguage } from "../../../shared/types.js";
+import { getSummaryLanguageProfile } from "./summary-language-profiles.js";
 
 const _cachedModels = new Map<string, LanguageModel>();
 const DEFAULT_MODEL = "gpt-4o-mini";
@@ -38,7 +40,7 @@ export type AiErrorCategory =
 
 class SummaryValidationError extends Error {
   field: "oneLiner" | "keyInsight";
-  language: "zh" | "en";
+  language: DigestLanguage;
   chars: number;
   words: number | null;
   limit: number | null;
@@ -48,7 +50,7 @@ class SummaryValidationError extends Error {
     message: string,
     options: {
       field: "oneLiner" | "keyInsight";
-      language: "zh" | "en";
+      language: DigestLanguage;
       chars: number;
       words: number | null;
       limit?: number;
@@ -206,54 +208,6 @@ const ArticleSummarySchema = z.object({
 
 export type ArticleSummary = z.infer<typeof ArticleSummarySchema>;
 
-const SUMMARY_LIMITS = {
-  zh: {
-    oneLinerMinChars: 35,
-    oneLinerMaxChars: 90,
-    keyInsightMaxChars: 130,
-    minInsightChars: 10,
-  },
-  en: {
-    oneLinerMinWords: 14,
-    oneLinerMaxWords: 45,
-    keyInsightMaxWords: 60,
-    oneLinerMinChars: 6,
-    minInsightChars: 24,
-  },
-} as const;
-
-const PROMPTS = {
-  zh: {
-    system: `你是 DigestDesk 的中文日报编辑。将输入文章总结为简体中文。
-
-要求：
-- oneLiner：1 条核心结论，35-70 个中文字符。
-- keyInsights：3 条信息点，每条只写 1 个事实、数据、方法或结论，55-90 个中文字符。
-- 数值事实准确；英文金额按中文习惯换算（如 $124m -> 1.24 亿美元），数量级和指标类型准确。
-- 行业术语翻译：先判断文章所属领域，再按该领域选择中文译法；不要机械直译多义词。
-- 专业文章的关键术语必须符合对应行业的中文习惯。
-- 若英文术语在中文专业语境中更常保留英文，优先保留英文原词；不确定时保留英文，不要误译到其他行业。`,
-    schema: {
-      oneLiner: "1 条中文核心结论。",
-      keyInsights: "3 条中文信息点，每条 1 个事实、数据、方法或结论。",
-    }
-  },
-  en: {
-    system: `You are an editor for DigestDesk. Read articles in any language and output concise English summaries.
-
-Writing rules:
-- Keep the core conclusion and important facts; remove ads, links, boilerplate, and background noise.
-- Preserve amounts, percentages, dates, quantities, units, and order of magnitude; do not confuse funding, revenue, valuation, cost, or spend; omit uncertain numeric details instead of guessing.
-- oneLiner: one core conclusion, target 14-30 words.
-- keyInsights: exactly 3 takeaways, one fact, data point, method, or conclusion each, target 18-40 words.
-- Prefer a shorter complete sentence over a longer unfinished one.`,
-    schema: {
-      oneLiner: "One complete, natural English sentence expressing the core conclusion.",
-      keyInsights: "Exactly 3 complete, natural English sentences. Each expresses one concrete fact, data point, method, or conclusion.",
-    }
-  }
-};
-
 function compactSummaryText(value: string) {
   return value
     .replace(/\s+/g, " ")
@@ -291,9 +245,19 @@ function countVisibleChars(value: string) {
   return [...value.replace(/[\s\u200b-\u200d\ufeff]/g, "")].length;
 }
 
-function assertSummaryText(value: string, field: "oneLiner" | "keyInsight", language: "zh" | "en") {
+function hasExpectedLanguageScript(value: string, language: DigestLanguage) {
+  const profile = getSummaryLanguageProfile(language);
+  if (profile.validation.expectedScript === "cjk") {
+    return /[\u4e00-\u9fff]/.test(value);
+  }
+  return /[A-Za-zÀ-ÖØ-öø-ÿ]/.test(value);
+}
+
+function assertSummaryText(value: string, field: "oneLiner" | "keyInsight", language: DigestLanguage) {
+  const profile = getSummaryLanguageProfile(language);
+  const rule = field === "oneLiner" ? profile.validation.oneLiner : profile.validation.keyInsight;
   const visibleChars = countVisibleChars(value);
-  const words = language === "en" ? countSummaryWords(value) : null;
+  const words = rule.unit === "words" ? countSummaryWords(value) : null;
   const validationMeta = {
     field,
     language,
@@ -304,51 +268,51 @@ function assertSummaryText(value: string, field: "oneLiner" | "keyInsight", lang
   if (isLowQualitySummaryText(value)) {
     throw new SummaryValidationError(`low_quality_${field}`, validationMeta);
   }
-  if (language === "en") {
-    if (field === "oneLiner" && words !== null && words < SUMMARY_LIMITS.en.oneLinerMinWords) {
+  if (!hasExpectedLanguageScript(value, language)) {
+    throw new SummaryValidationError(`wrong_language_${field}`, validationMeta);
+  }
+  if (rule.unit === "words") {
+    if (rule.minChars && visibleChars < rule.minChars) {
       throw new SummaryValidationError(`too_short_${field}`, {
         ...validationMeta,
-        limit: SUMMARY_LIMITS.en.oneLinerMinWords,
-        limitUnit: "words",
-      });
-    }
-    if (field === "keyInsight" && visibleChars < SUMMARY_LIMITS.en.minInsightChars) {
-      throw new SummaryValidationError(`too_short_${field}`, {
-        ...validationMeta,
-        limit: SUMMARY_LIMITS.en.minInsightChars,
+        limit: rule.minChars,
         limitUnit: "chars",
       });
     }
-    const maxWords = field === "oneLiner" ? SUMMARY_LIMITS.en.oneLinerMaxWords : SUMMARY_LIMITS.en.keyInsightMaxWords;
-    if (words !== null && words > maxWords) {
+    if (words !== null && words < rule.min) {
+      throw new SummaryValidationError(`too_short_${field}`, {
+        ...validationMeta,
+        limit: rule.min,
+        limitUnit: "words",
+      });
+    }
+    if (words !== null && words > rule.max) {
       throw new SummaryValidationError(`too_long_${field}`, {
         ...validationMeta,
-        limit: maxWords,
+        limit: rule.max,
         limitUnit: "words",
       });
     }
     return;
   }
 
-  const minChars = field === "oneLiner" ? SUMMARY_LIMITS.zh.oneLinerMinChars : SUMMARY_LIMITS.zh.minInsightChars;
-  const maxChars = field === "oneLiner" ? SUMMARY_LIMITS.zh.oneLinerMaxChars : SUMMARY_LIMITS.zh.keyInsightMaxChars;
-  if (visibleChars < minChars) {
+  if (visibleChars < rule.min) {
     throw new SummaryValidationError(`too_short_${field}`, {
       ...validationMeta,
-      limit: minChars,
+      limit: rule.min,
       limitUnit: "chars",
     });
   }
-  if (visibleChars > maxChars) {
+  if (visibleChars > rule.max) {
     throw new SummaryValidationError(`too_long_${field}`, {
       ...validationMeta,
-      limit: maxChars,
+      limit: rule.max,
       limitUnit: "chars",
     });
   }
 }
 
-function normalizeSummary(input: unknown, language: "zh" | "en" = "zh"): ArticleSummary {
+function normalizeSummary(input: unknown, language: DigestLanguage = "zh"): ArticleSummary {
   const parsed = ArticleSummarySchema.parse(input);
   const oneLiner = compactSummaryText(parsed.oneLiner || "");
   const keyInsights = parsed.keyInsights.map(compactSummaryText);
@@ -362,7 +326,7 @@ function normalizeSummary(input: unknown, language: "zh" | "en" = "zh"): Article
   };
 }
 
-export function parseCachedArticleSummary(input: unknown, language: "zh" | "en" = "zh"): ArticleSummary | null {
+export function parseCachedArticleSummary(input: unknown, language: DigestLanguage = "zh"): ArticleSummary | null {
   try {
     return normalizeSummary(input, language);
   } catch {
@@ -370,66 +334,46 @@ export function parseCachedArticleSummary(input: unknown, language: "zh" | "en" 
   }
 }
 
-function buildArticleSummaryGenerationSchema(language: "zh" | "en") {
-  const oneLinerMinChars = language === "zh" ? SUMMARY_LIMITS.zh.oneLinerMinChars : SUMMARY_LIMITS.en.oneLinerMinChars;
-  const keyInsightMinChars = language === "zh" ? SUMMARY_LIMITS.zh.minInsightChars : SUMMARY_LIMITS.en.minInsightChars;
+function getRuleMinChars(language: DigestLanguage, field: "oneLiner" | "keyInsight") {
+  const profile = getSummaryLanguageProfile(language);
+  const rule = field === "oneLiner" ? profile.validation.oneLiner : profile.validation.keyInsight;
+  return rule.unit === "chars" ? rule.min : rule.minChars ?? 1;
+}
+
+function buildArticleSummaryGenerationSchema(language: DigestLanguage) {
+  const profile = getSummaryLanguageProfile(language);
+  const oneLinerMinChars = getRuleMinChars(language, "oneLiner");
+  const keyInsightMinChars = getRuleMinChars(language, "keyInsight");
   return z.object({
     oneLiner: z
       .string()
       .min(oneLinerMinChars)
-      .describe(PROMPTS[language].schema.oneLiner),
+      .describe(profile.schema.oneLiner),
     keyInsights: z
       .array(
         z
           .string()
           .min(keyInsightMinChars)
-          .describe(PROMPTS[language].schema.keyInsights),
+          .describe(profile.schema.keyInsights),
       )
       .length(3)
-      .describe(PROMPTS[language].schema.keyInsights),
+      .describe(profile.schema.keyInsights),
   });
 }
 
-function buildEditorialSummarySystemPrompt(language: "zh" | "en", retry: boolean) {
-  const promptConfig = PROMPTS[language] || PROMPTS.zh;
-  if (!retry) return promptConfig.system;
-  const retryInstructions = language === "en"
-    ? `Previous output failed length or quality validation. Regenerate and strictly follow:
-1. oneLiner must be one complete short sentence, target 14-30 words, with no ellipses, question-mark placeholders, or fragments.
-2. keyInsights must contain exactly 3 independent, specific, concise items, target 18-40 words each.
-3. Do not paste long source paragraphs, table-of-contents text, list dumps, or meaningless characters.`
-    : `上一轮输出未通过校验。请重新生成：
-1. oneLiner：1 条中文核心结论。
-2. keyInsights：3 条中文信息点，每条 1 个事实、数据、方法或结论。`;
+function buildEditorialSummarySystemPrompt(language: DigestLanguage, retry: boolean) {
+  const profile = getSummaryLanguageProfile(language);
+  if (!retry) return profile.editorialSystemPrompt;
+  return `${profile.editorialSystemPrompt}
 
-  return `${promptConfig.system}
-
-${retryInstructions}`;
+${profile.retryInstructions}`;
 }
 
-function buildStrictJsonSummarySystemPrompt(language: "zh" | "en") {
-  if (language === "en") {
-    return `You are a strict JSON generator for DigestDesk article summaries.
-
-Task rules:
-1. Output one complete English oneLiner sentence, 14-30 words.
-2. Output keyInsights as exactly 3 complete English sentences, 18-40 words each.
-3. Preserve amounts, percentages, dates, quantities, units, and order of magnitude; do not confuse funding, revenue, valuation, cost, or spend; omit uncertain numeric details instead of guessing.
-4. Each key insight must contain one specific fact, data point, method, or conclusion.
-5. Never use ellipses, placeholders, fragments, headings, markdown, or source text dumps.
-6. Required JSON object shape: {"oneLiner": string, "keyInsights": [string, string, string]}.`;
-  }
-
-  return `你是 DigestDesk 文章摘要的严格 JSON 生成器。
-
-任务规则：
-1. oneLiner：1 条核心结论，35-70 个中文字符。
-2. keyInsights：3 条信息点，每条只写 1 个事实、数据、方法或结论，55-90 个中文字符。
-3. 数值事实准确；英文金额按中文习惯换算（如 $124m -> 1.24 亿美元），数量级和指标类型准确。
-4. 输出 JSON 对象：{"oneLiner": string, "keyInsights": [string, string, string]}。`;
+function buildStrictJsonSummarySystemPrompt(language: DigestLanguage) {
+  return getSummaryLanguageProfile(language).strictJsonSystemPrompt;
 }
 
-function buildSummarySystemPrompt(language: "zh" | "en", adapter: ModelAdapter, retry: boolean) {
+function buildSummarySystemPrompt(language: DigestLanguage, adapter: ModelAdapter, retry: boolean) {
   const taskPrompt =
     adapter.promptProfile === "strict-json"
       ? buildStrictJsonSummarySystemPrompt(language)
@@ -563,7 +507,7 @@ function buildMarkdownSummaryInput(markdown: string, maxChars: number): string {
 
 export async function summarizeArticle(
   markdown: string,
-  language: "zh" | "en" = "zh",
+  language: DigestLanguage = "zh",
   options?: { onAttempt?: (attempt: number) => void },
 ): Promise<ArticleSummary> {
   const baseURL = process.env.AI_BASE_URL || "https://api.openai.com/v1";
