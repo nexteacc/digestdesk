@@ -37,6 +37,72 @@ type ChannelMetadata = {
   logoUrl: string;
 };
 
+export type YouTubeFeedItem = {
+  title: string;
+  link: string;
+  guid: string;
+  creator?: string;
+  author?: string;
+  isoDate: string;
+  pubDate: string;
+  contentSnippet: string;
+  content: string;
+};
+
+type YouTubeDataApiChannel = {
+  title: string;
+  logoUrl: string;
+  uploadsPlaylistId: string;
+};
+
+type YouTubeDataApiChannelResponse = {
+  error?: {
+    message?: string;
+    status?: string;
+  };
+  items?: Array<{
+    snippet?: {
+      title?: string;
+      thumbnails?: {
+        high?: { url?: string };
+        medium?: { url?: string };
+        default?: { url?: string };
+      };
+    };
+    contentDetails?: {
+      relatedPlaylists?: {
+        uploads?: string;
+      };
+    };
+  }>;
+};
+
+type YouTubeDataApiPlaylistItemsResponse = {
+  error?: {
+    message?: string;
+    status?: string;
+  };
+  items?: Array<{
+    snippet?: {
+      title?: string;
+      description?: string;
+      publishedAt?: string;
+      thumbnails?: {
+        high?: { url?: string };
+        medium?: { url?: string };
+        default?: { url?: string };
+      };
+      resourceId?: {
+        videoId?: string;
+      };
+    };
+    contentDetails?: {
+      videoId?: string;
+      videoPublishedAt?: string;
+    };
+  }>;
+};
+
 type YouTubeChannelPresentation = {
   title: string;
   logoUrl: string;
@@ -106,6 +172,163 @@ export function isYouTubeLongFormFeedUrl(feedUrl: string): boolean {
 
 export function buildYouTubeChannelUrl(channelId: string): string {
   return `https://www.youtube.com/channel/${channelId}`;
+}
+
+function getYouTubeApiKey(): string | null {
+  const key = process.env.YOUTUBE_API_KEY?.trim();
+  return key || null;
+}
+
+function pickThumbnailUrl(thumbnails: {
+  high?: { url?: string };
+  medium?: { url?: string };
+  default?: { url?: string };
+} | undefined): string {
+  return thumbnails?.high?.url || thumbnails?.medium?.url || thumbnails?.default?.url || "";
+}
+
+async function fetchYouTubeDataApi<T>(
+  path: "channels" | "playlistItems",
+  params: Record<string, string>,
+): Promise<T | null> {
+  const key = getYouTubeApiKey();
+  if (!key) {
+    return null;
+  }
+
+  const url = new URL(`https://www.googleapis.com/youtube/v3/${path}`);
+  for (const [name, value] of Object.entries(params)) {
+    url.searchParams.set(name, value);
+  }
+  url.searchParams.set("key", key);
+
+  const response = await fetch(url, {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(15000),
+  });
+
+  const data = (await response.json().catch(() => ({}))) as T & {
+    error?: { message?: string; status?: string };
+  };
+
+  if (!response.ok || data.error) {
+    console.warn(
+      `[youtube] YouTube Data API ${path} failed status=${response.status} reason=${data.error?.status || "unknown"} message=${data.error?.message || ""}`,
+    );
+    throw new YouTubeDiscoveryError(
+      "YouTube Data API fallback failed. Try again later.",
+      502,
+      "YOUTUBE_DATA_API_FAILED",
+      "YouTube Data API 备用读取失败，请稍后重试",
+    );
+  }
+
+  return data;
+}
+
+async function fetchYouTubeDataApiChannel(channelId: string): Promise<YouTubeDataApiChannel | null> {
+  const data = await fetchYouTubeDataApi<YouTubeDataApiChannelResponse>("channels", {
+    part: "snippet,contentDetails",
+    id: channelId,
+  });
+  if (!data) {
+    return null;
+  }
+
+  const item = data.items?.[0];
+  const uploadsPlaylistId = item?.contentDetails?.relatedPlaylists?.uploads || "";
+  if (!item || !uploadsPlaylistId) {
+    return null;
+  }
+
+  return {
+    title: item.snippet?.title?.trim() || "",
+    logoUrl: pickThumbnailUrl(item.snippet?.thumbnails),
+    uploadsPlaylistId,
+  };
+}
+
+export async function fetchYouTubeDataApiFeedItems(
+  channelId: string,
+  maxResults = 15,
+): Promise<YouTubeFeedItem[] | null> {
+  const channel = await fetchYouTubeDataApiChannel(channelId);
+  if (!channel?.uploadsPlaylistId) {
+    return null;
+  }
+
+  return fetchYouTubeDataApiPlaylistItems(channel.uploadsPlaylistId, maxResults);
+}
+
+async function fetchYouTubeDataApiPlaylistItems(
+  uploadsPlaylistId: string,
+  maxResults: number,
+): Promise<YouTubeFeedItem[] | null> {
+  const data = await fetchYouTubeDataApi<YouTubeDataApiPlaylistItemsResponse>("playlistItems", {
+    part: "snippet,contentDetails",
+    playlistId: uploadsPlaylistId,
+    maxResults: String(maxResults),
+  });
+  if (!data) {
+    return null;
+  }
+
+  return (data.items || [])
+    .map((item): YouTubeFeedItem | null => {
+      const videoId = item.contentDetails?.videoId || item.snippet?.resourceId?.videoId || "";
+      if (!videoId) return null;
+
+      const publishedAt =
+        item.contentDetails?.videoPublishedAt ||
+        item.snippet?.publishedAt ||
+        new Date().toISOString();
+      const url = `https://www.youtube.com/watch?v=${videoId}`;
+      const description = item.snippet?.description || "";
+      return {
+        title: item.snippet?.title || "Untitled",
+        link: url,
+        guid: videoId,
+        creator: "",
+        author: "",
+        isoDate: publishedAt,
+        pubDate: publishedAt,
+        contentSnippet: description,
+        content: description,
+      };
+    })
+    .filter((item): item is YouTubeFeedItem => Boolean(item));
+}
+
+async function fetchYouTubeDataApiDiscovery(
+  channelId: string,
+  maxResults = 5,
+): Promise<{
+  metadata: ChannelMetadata;
+  recentVideos: DiscoveredYouTubeChannel["recentVideos"];
+} | null> {
+  const channel = await fetchYouTubeDataApiChannel(channelId);
+  if (!channel) {
+    return null;
+  }
+
+  const feedItems = await fetchYouTubeDataApiPlaylistItems(channel.uploadsPlaylistId, maxResults);
+  return {
+    metadata: {
+      title: channel.title,
+      logoUrl: channel.logoUrl,
+    },
+    recentVideos: (feedItems || []).map((item) => {
+      const videoId = extractYouTubeVideoId(item.link);
+      return {
+        title: item.title,
+        url: item.link,
+        thumbnailUrl: videoId
+          ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+          : "",
+        publishedAt: item.isoDate,
+      };
+    }),
+  };
 }
 
 export function extractYouTubeVideoId(url: string): string | null {
@@ -206,6 +429,7 @@ export async function discoverYouTubeChannel(url: string): Promise<DiscoveredYou
   // 解析 RSS feed 获取频道名称和最近视频
   let feed;
   let usedFallbackFeed = false;
+  let dataApiFallback: Awaited<ReturnType<typeof fetchYouTubeDataApiDiscovery>> = null;
   try {
     feed = await rssParser.parseURL(feedUrl);
   } catch {
@@ -213,23 +437,27 @@ export async function discoverYouTubeChannel(url: string): Promise<DiscoveredYou
       feed = await rssParser.parseURL(fallbackFeedUrl);
       usedFallbackFeed = true;
     } catch {
-      throw new YouTubeDiscoveryError(
-        "Channel feed unavailable. Try again later.",
-        502,
-        "YOUTUBE_FEED_UNAVAILABLE",
-        "无法读取该频道订阅源，请稍后重试",
-      );
+      dataApiFallback = await fetchYouTubeDataApiDiscovery(channelId, 5);
+      if (!dataApiFallback) {
+        throw new YouTubeDiscoveryError(
+          "Channel feed unavailable. Try again later.",
+          502,
+          "YOUTUBE_FEED_UNAVAILABLE",
+          "无法读取该频道订阅源，请稍后重试",
+        );
+      }
     }
   }
 
   const title =
     channelMetadata.title ||
-    feed.items?.[0]?.author ||
-    feed.items?.[0]?.creator ||
-    feed.title ||
+    dataApiFallback?.metadata.title ||
+    feed?.items?.[0]?.author ||
+    feed?.items?.[0]?.creator ||
+    feed?.title ||
     "Unknown channel";
-  const recentVideos = [];
-  for (const item of feed.items || []) {
+  const recentVideos = [...(dataApiFallback?.recentVideos || [])];
+  for (const item of feed?.items || []) {
     const itemUrl = item.link || "";
     if (!itemUrl) continue;
     if (usedFallbackFeed && await isYouTubeShort(itemUrl)) {
@@ -256,7 +484,7 @@ export async function discoverYouTubeChannel(url: string): Promise<DiscoveredYou
     feedUrl,
     title,
     channelUrl,
-    logoUrl: channelMetadata.logoUrl,
+    logoUrl: channelMetadata.logoUrl || dataApiFallback?.metadata.logoUrl,
     recentVideos,
   };
 }

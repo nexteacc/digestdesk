@@ -73,6 +73,7 @@
      - `CF_SEARCH_PROXY_TOKEN`
      - `JINA_RPM`
      - `JINA_MAX_CONCURRENCY`
+     - `YOUTUBE_API_KEY`（可选；YouTube RSS 不可用时用于读取公开视频和频道更新）
      - `APP_URL`
      - `ADMIN_EMAILS`
      - `VITE_ENABLE_GOOGLE_YOUTUBE_IMPORT`
@@ -85,6 +86,7 @@
      - `AI_BASE_URL`
      - `JINA_RPM`
      - `JINA_MAX_CONCURRENCY`
+     - `YOUTUBE_API_KEY`（可选；YouTube RSS 不可用时用于读取公开视频和频道更新）
      - `DIGEST_DISPATCH_CRON`
      - `DIGEST_RUN_CRON`
      - `DIGEST_JOB_RUN_LIMIT`

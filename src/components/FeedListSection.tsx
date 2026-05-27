@@ -172,6 +172,13 @@ export default function FeedListSection({
         <div className="space-y-2">
           {feeds.map((f) => {
             const checked = batchSelected.has(f.id);
+            const authorName = f.authorName?.trim();
+            const visibleAuthorName =
+              showAuthor &&
+              authorName &&
+              authorName.toLocaleLowerCase() !== f.title.trim().toLocaleLowerCase()
+                ? authorName
+                : null;
             return (
               <Card
                 key={f.id}
@@ -202,26 +209,29 @@ export default function FeedListSection({
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium truncate">
-                        {f.title}
-                      </span>
-                      {showAuthor && f.authorName && (
-                        <span className="text-xs text-muted-foreground hidden sm:inline">
-                          {text("作者：", "by ")}
-                          {f.authorName}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 mt-0.5">
                       <a
-                        className="text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground truncate"
+                        className="block min-w-0 max-w-full text-sm font-medium truncate hover:underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
                         href={f.url}
                         target="_blank"
                         rel="noreferrer"
-                        onClick={(e) => batchMode && e.preventDefault()}
+                        onClick={(e) => {
+                          if (batchMode) {
+                            e.preventDefault();
+                            toggleBatchItem(f.id);
+                            e.stopPropagation();
+                            return;
+                          }
+                          e.stopPropagation();
+                        }}
                       >
-                        {f.url}
+                        {f.title}
                       </a>
+                      {visibleAuthorName && (
+                        <span className="text-xs text-muted-foreground hidden sm:inline">
+                          {text("作者：", "by ")}
+                          {visibleAuthorName}
+                        </span>
+                      )}
                     </div>
                   </div>
                   {!batchMode && (

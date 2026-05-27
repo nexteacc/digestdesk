@@ -9,6 +9,7 @@ import type { SourceType } from "../sources/types.js";
 import {
   buildYouTubeChannelFeedUrl,
   extractChannelIdFromYouTubeFeedUrl,
+  fetchYouTubeDataApiFeedItems,
   isYouTubeLongFormFeedUrl,
 } from "./youtube-discovery.js";
 
@@ -176,6 +177,7 @@ async function syncFeedInternal(feedId: string): Promise<number> {
 
   let parsed;
   let parsedFeedUrl = effectiveFeedUrl;
+  let usedYouTubeDataApiFallback = false;
   try {
     parsed = await rssParser.parseURL(effectiveFeedUrl);
   } catch (err) {
@@ -198,9 +200,37 @@ async function syncFeedInternal(feedId: string): Promise<number> {
         `[rss] Falling back to channel feed for ${feed.name}: primary=${effectiveFeedUrl} fallback=${fallbackFeedUrl}`,
       );
     } catch (fallbackErr) {
-      console.error(`[rss] Failed to fetch ${effectiveFeedUrl}:`, err);
-      console.error(`[rss] Failed to fetch fallback ${fallbackFeedUrl}:`, fallbackErr);
-      return 0;
+      if (!channelId) {
+        console.error(`[rss] Failed to fetch ${effectiveFeedUrl}:`, err);
+        console.error(`[rss] Failed to fetch fallback ${fallbackFeedUrl}:`, fallbackErr);
+        return 0;
+      }
+
+      let dataApiItems;
+      try {
+        dataApiItems = await fetchYouTubeDataApiFeedItems(channelId, 15);
+      } catch (dataApiErr) {
+        console.error(`[rss] Failed to fetch ${effectiveFeedUrl}:`, err);
+        console.error(`[rss] Failed to fetch fallback ${fallbackFeedUrl}:`, fallbackErr);
+        console.error(`[rss] Failed to fetch YouTube Data API fallback for ${feed.name}:`, dataApiErr);
+        return 0;
+      }
+
+      if (!dataApiItems) {
+        console.error(`[rss] Failed to fetch ${effectiveFeedUrl}:`, err);
+        console.error(`[rss] Failed to fetch fallback ${fallbackFeedUrl}:`, fallbackErr);
+        console.error(`[rss] YouTube Data API fallback unavailable for ${feed.name}`);
+        return 0;
+      }
+
+      parsed = {
+        items: dataApiItems,
+      };
+      parsedFeedUrl = `youtube-data-api:${channelId}`;
+      usedYouTubeDataApiFallback = true;
+      console.warn(
+        `[rss] Falling back to YouTube Data API for ${feed.name}: primary=${effectiveFeedUrl} fallback=${fallbackFeedUrl}`,
+      );
     }
   }
 
@@ -215,7 +245,10 @@ async function syncFeedInternal(feedId: string): Promise<number> {
   const adapter = getSourceAdapter(feed.sourceType as SourceType);
   const usedFallbackYouTubeFeed = isYouTubeFeed && parsedFeedUrl !== effectiveFeedUrl;
   const skipsShortFiltering =
-    isYouTubeFeed && !usedFallbackYouTubeFeed && isYouTubeLongFormFeedUrl(parsedFeedUrl);
+    isYouTubeFeed &&
+    !usedYouTubeDataApiFallback &&
+    !usedFallbackYouTubeFeed &&
+    isYouTubeLongFormFeedUrl(parsedFeedUrl);
 
   for (const item of parsed.items || []) {
     totalItems++;
