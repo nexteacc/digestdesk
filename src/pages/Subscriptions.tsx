@@ -166,7 +166,7 @@ export default function SubscriptionsPage() {
             <Button
               variant="outline"
               size="sm"
-              className="gap-1.5 border-primary/50 text-primary hover:bg-primary/10 hover:border-primary hover:text-primary transition-colors"
+              className="h-11 gap-1.5 border-primary/50 text-primary transition-colors hover:border-primary hover:bg-primary/10 hover:text-primary md:h-8"
               onClick={() => setImportOpen(true)}
             >
               <Download className="h-3.5 w-3.5" />
@@ -179,7 +179,7 @@ export default function SubscriptionsPage() {
         {/* Search */}
         <Card className="p-4 md:p-5">
           <div className="min-h-[220px]">
-              <div className="flex gap-2 mt-1">
+              <div className="mt-1 flex flex-col gap-2 sm:flex-row">
                 <Input
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -187,7 +187,7 @@ export default function SubscriptionsPage() {
                   placeholder={text("搜索 Substack 出版物", "Search Substack publications")}
                   className="flex-1"
                 />
-                <Button onClick={onSearch} disabled={searchLoading}>
+                <Button className="h-11 sm:h-9" onClick={onSearch} disabled={searchLoading}>
                   {searchLoading ? text("搜索中…", "Searching...") : text("搜索", "Search")}
                 </Button>
               </div>
@@ -213,29 +213,31 @@ export default function SubscriptionsPage() {
                       return (
                         <div
                           key={result.url}
-                          className="flex items-center gap-3 rounded-md border border-border p-3"
+                          className="flex flex-col gap-3 rounded-md border border-border p-3 sm:flex-row sm:items-center"
                         >
-                          <Avatar className="h-10 w-10">
-                            <AvatarImage
-                              src={result.logoUrl}
-                              alt={result.name}
-                            />
-                            <AvatarFallback>
-                              {result.name.slice(0, 2).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium truncate">
-                                {result.name}
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                {text("作者：", "by ")}{result.authorName}
-                              </span>
+                          <div className="flex min-w-0 items-start gap-3 sm:flex-1 sm:items-center">
+                            <Avatar className="h-10 w-10 shrink-0">
+                              <AvatarImage
+                                src={result.logoUrl}
+                                alt={result.name}
+                              />
+                              <AvatarFallback>
+                                {result.name.slice(0, 2).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex min-w-0 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
+                                <span className="truncate text-sm font-medium">
+                                  {result.name}
+                                </span>
+                                <span className="truncate text-xs text-muted-foreground">
+                                  {text("作者：", "by ")}{result.authorName}
+                                </span>
+                              </div>
+                              <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground sm:line-clamp-1">
+                                {result.description}
+                              </p>
                             </div>
-                            <p className="text-xs text-muted-foreground leading-relaxed line-clamp-1 mt-0.5">
-                              {result.description}
-                            </p>
                           </div>
                           {subscribed ? (
                             <AlertDialog>
@@ -243,7 +245,7 @@ export default function SubscriptionsPage() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="gap-1.5 shrink-0"
+                                  className="h-11 w-full shrink-0 gap-1.5 sm:w-auto md:h-8"
                                 >
                                   <Check className="h-3.5 w-3.5" />
                                   {text("已订阅", "Subscribed")}
@@ -277,7 +279,7 @@ export default function SubscriptionsPage() {
                             <Button
                               size="sm"
                               onClick={() => onSubscribeFromSearch(result)}
-                              className="shrink-0"
+                              className="h-11 w-full shrink-0 sm:w-auto md:h-8"
                             >
                               {text("订阅", "Subscribe")}
                             </Button>

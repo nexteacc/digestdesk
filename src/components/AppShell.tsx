@@ -23,7 +23,7 @@ export default function AppShell({ children }: PropsWithChildren) {
     try { return localStorage.getItem("sidebar-collapsed") === "true"; }
     catch { return false; }
   });
-  const [isMobileNavOpen, setIsMobileNavOpen] = useState(true);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const { locale, setLocale, text } = useI18n();
   const { isZen, toggleZenMode } = useZenMode();
 
@@ -117,7 +117,7 @@ export default function AppShell({ children }: PropsWithChildren) {
                   href="https://github.com/nexteacc/digestdesk"
                   target="_blank"
                   rel="noreferrer"
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-7 md:w-7"
                   title={text("开源代码", "Open Source")}
                 >
                   <Github className="h-4 w-4" />
@@ -126,7 +126,7 @@ export default function AppShell({ children }: PropsWithChildren) {
                 <Button
                   variant={locale === "zh" ? "default" : "ghost"}
                   size="sm"
-                  className="h-7 rounded-full px-2.5 text-xs"
+                  className="h-10 rounded-full px-3 text-xs md:h-7 md:px-2.5"
                   onClick={() => setLocale("zh")}
                 >
                   中文
@@ -134,7 +134,7 @@ export default function AppShell({ children }: PropsWithChildren) {
                 <Button
                   variant={locale === "en" ? "default" : "ghost"}
                   size="sm"
-                  className="h-7 rounded-full px-2.5 text-xs"
+                  className="h-10 rounded-full px-3 text-xs md:h-7 md:px-2.5"
                   onClick={() => setLocale("en")}
                 >
                   EN
@@ -142,7 +142,6 @@ export default function AppShell({ children }: PropsWithChildren) {
               </div>
             </div>
             <UserButton
-              afterSignOutUrl="/"
               userProfileProps={{
                 additionalOAuthScopes: googleYouTubeImportEnabled
                   ? {
@@ -163,7 +162,7 @@ export default function AppShell({ children }: PropsWithChildren) {
           <Button
             variant="outline"
             size="icon"
-            className="rounded-full h-9 w-9 shadow-md"
+            className="h-11 w-11 rounded-full shadow-md md:h-9 md:w-9"
             onClick={handleToggleZen}
             title={isZen ? text("退出沉浸模式", "Exit zen mode") : text("进入沉浸模式", "Enter zen mode")}
           >
@@ -178,7 +177,7 @@ export default function AppShell({ children }: PropsWithChildren) {
 
       <div className={cn(
         "mx-auto max-w-6xl px-4 transition-[padding] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
-        "py-6"
+        "py-4 md:py-6"
       )}>
         <div className={cn(
           "grid transition-[grid-template-columns,gap] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
@@ -190,7 +189,7 @@ export default function AppShell({ children }: PropsWithChildren) {
         )}>
           {/* Sidebar */}
           <aside className={cn(
-            "md:sticky md:top-6 h-fit overflow-hidden md:whitespace-nowrap transition-[opacity,transform,margin] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
+            "mb-4 h-fit overflow-hidden transition-[opacity,transform,margin] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] md:sticky md:top-6 md:mb-0 md:whitespace-nowrap",
             isZen ? "opacity-0 -translate-x-4" : "opacity-100 translate-x-0"
           )}>
             <div className="rounded-lg border border-border bg-card/70 backdrop-blur p-2 shadow-sm">
@@ -199,7 +198,7 @@ export default function AppShell({ children }: PropsWithChildren) {
                 aria-expanded={isMobileNavOpen}
                 aria-controls="sidebar-navigation"
                 onClick={() => setIsMobileNavOpen(!isMobileNavOpen)}
-                className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left transition-colors hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
+                className="flex min-h-11 w-full items-center justify-between rounded-md px-3 py-2 text-left transition-colors hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
                 title={isMobileNavOpen ? text("收起导航", "Collapse navigation") : text("展开导航", "Expand navigation")}
               >
                 <span className="text-xs tracking-[0.18em] uppercase text-muted-foreground">{text("导航", "Navigation")}</span>
@@ -240,7 +239,7 @@ export default function AppShell({ children }: PropsWithChildren) {
                         asChild
                         variant={active ? "secondary" : "ghost"}
                         className={cn(
-                          "w-full transition-[background-color,color,border-color,box-shadow,transform] duration-300",
+                          "h-11 w-full transition-[background-color,color,border-color,box-shadow,transform] duration-300 md:h-9",
                           active && "border border-border",
                           isCollapsed ? "md:justify-center md:px-0 justify-start px-3 gap-3" : "justify-start px-3 gap-3"
                         )}
@@ -279,7 +278,7 @@ export default function AppShell({ children }: PropsWithChildren) {
                         asChild
                         variant={active ? "secondary" : "ghost"}
                         className={cn(
-                          "w-full transition-[background-color,color,border-color,box-shadow,transform] duration-300",
+                          "h-11 w-full transition-[background-color,color,border-color,box-shadow,transform] duration-300 md:h-9",
                           active && "border border-border",
                           isCollapsed ? "md:justify-center md:px-0 justify-start px-3 gap-3" : "justify-start px-3 gap-3"
                         )}

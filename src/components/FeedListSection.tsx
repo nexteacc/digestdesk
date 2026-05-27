@@ -57,7 +57,7 @@ export default function FeedListSection({
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-3">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
           {text("已订阅", "Subscribed")} · {count}
         </span>
@@ -65,7 +65,7 @@ export default function FeedListSection({
           <Button
             variant="ghost"
             size="sm"
-            className="gap-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+            className="h-10 gap-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive md:h-8"
             onClick={enterBatchMode}
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -77,9 +77,9 @@ export default function FeedListSection({
       {/* Batch action bar */}
       {batchMode && (
         <Card className="p-3 mb-3">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-3">
-              <Button variant="ghost" size="sm" onClick={toggleBatchAll}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-3">
+              <Button variant="ghost" size="sm" className="h-10 md:h-8" onClick={toggleBatchAll}>
                 {batchSelected.size === count
                   ? text("取消全选", "Deselect all")
                   : text("全选", "Select all")}
@@ -103,12 +103,12 @@ export default function FeedListSection({
                 )}
               </span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={exitBatchMode}
-                className="gap-1.5"
+                className="h-10 gap-1.5 md:h-8"
               >
                 <X className="h-3.5 w-3.5" />
                 {text("取消", "Cancel")}
@@ -119,7 +119,7 @@ export default function FeedListSection({
                     variant="destructive"
                     size="sm"
                     disabled={batchSelected.size === 0 || batchDeleting}
-                    className="gap-1.5"
+                    className="h-10 gap-1.5 md:h-8"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                     {batchDeleting
@@ -188,7 +188,7 @@ export default function FeedListSection({
                 <div className="flex items-center gap-3">
                   {batchMode && (
                     <div
-                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ${
                         checked
                           ? "border-foreground bg-foreground text-background"
                           : "border-muted-foreground/40"
@@ -197,7 +197,7 @@ export default function FeedListSection({
                       {checked && <Check className="h-3 w-3" />}
                     </div>
                   )}
-                  <Avatar className="h-9 w-9">
+                  <Avatar className="h-10 w-10 md:h-9 md:w-9">
                     {f.logoUrl ? (
                       <AvatarImage src={f.logoUrl} alt={f.title} />
                     ) : null}
@@ -240,7 +240,7 @@ export default function FeedListSection({
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="text-muted-foreground hover:text-destructive shrink-0"
+                          className="h-11 w-11 shrink-0 text-muted-foreground hover:text-destructive md:h-9 md:w-9"
                           aria-label={text("删除", "Delete")}
                         >
                           <Trash2 className="h-4 w-4" />

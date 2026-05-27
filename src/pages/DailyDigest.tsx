@@ -21,6 +21,7 @@ import {
   Search,
   RefreshCw,
   ArrowUp,
+  ChevronDown,
 } from "lucide-react";
 import { useZenMode } from "@/hooks/useZenMode";
 import { useI18n } from "@/contexts/I18nContext";
@@ -320,6 +321,7 @@ export default function DailyDigest() {
   const [hasFeeds, setHasFeeds] = useState(true);
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [selectingId, setSelectingId] = useState<string | null>(null);
+  const [isMobileTocOpen, setIsMobileTocOpen] = useState(false);
   const { isZen } = useZenMode();
 
   const applyOverview = useCallback((overview: DigestOverview) => {
@@ -366,6 +368,10 @@ export default function DailyDigest() {
     try {
       const result = await api.generateDigest("daily", { force: true });
       if ("status" in result && result.status === "empty") {
+        toast(text("暂无新文章", "No new articles"));
+        return;
+      }
+      if (!("id" in result)) {
         toast(text("暂无新文章", "No new articles"));
         return;
       }
@@ -475,6 +481,7 @@ export default function DailyDigest() {
 
   const handleTocClick = useCallback((id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setIsMobileTocOpen(false);
   }, []);
 
   return (
@@ -493,11 +500,11 @@ export default function DailyDigest() {
                 {text("今日日报", "Today's Digest")}
               </h2>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               {hasFeeds && (
                 <Button
                   size="sm"
-                  className="gap-1.5 h-8 text-xs font-medium shadow-sm rounded-full"
+                  className="h-11 gap-1.5 rounded-full text-xs font-medium shadow-sm md:h-8"
                   onClick={syncNow}
                   disabled={generating || loading}
                 >
@@ -568,7 +575,7 @@ export default function DailyDigest() {
             </div>
             <Button
               size="sm"
-              className="mt-4 gap-1.5 h-8 text-xs font-medium shadow-sm rounded-full"
+              className="mt-4 h-11 gap-1.5 rounded-full text-xs font-medium shadow-sm md:h-8"
               onClick={syncNow}
               disabled={generating || loading}
             >
@@ -588,11 +595,11 @@ export default function DailyDigest() {
                 isZen ? "max-h-0 opacity-0 mb-0" : "max-h-[200px] opacity-100 mb-6"
               )}>
                 <Card className="p-4">
-                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
                       {text("归档", "Archive")}
                     </div>
-                    <div className="flex flex-wrap gap-2 justify-end">
+                    <div className="flex flex-wrap justify-start gap-2 md:justify-end">
                       {digestList.slice(0, 7).map((d) => {
                         const active = current.id === d.id;
                         return (
@@ -621,17 +628,39 @@ export default function DailyDigest() {
 
             <div className="grid gap-4 md:grid-cols-[320px_1fr] items-start transition-all duration-500">
               {/* TOC */}
-              <Card id="digest-toc" className="p-4 md:p-5 md:sticky md:top-6 flex flex-col md:h-[calc(100vh-5rem)] md:overflow-hidden">
-                <div className="text-xs tracking-[0.18em] uppercase text-muted-foreground shrink-0">
-                  {text("目录", "Contents")}
+              <Card id="digest-toc" className="flex flex-col p-4 md:sticky md:top-6 md:h-[calc(100vh-5rem)] md:overflow-hidden md:p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
+                      {text("目录", "Contents")}
+                    </div>
+                    <h3 className="mt-2 text-lg font-semibold md:text-xl">
+                      {formatDigestDate(current.date)} · {text("日报", "Digest")}
+                    </h3>
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      {current.items.length} {text("篇文章", "articles")}
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-11 w-11 md:hidden"
+                    aria-expanded={isMobileTocOpen}
+                    aria-controls="digest-toc-list"
+                    aria-label={isMobileTocOpen ? text("收起目录", "Collapse contents") : text("展开目录", "Expand contents")}
+                    onClick={() => setIsMobileTocOpen((open) => !open)}
+                  >
+                    <ChevronDown className={cn("h-4 w-4 transition-transform", isMobileTocOpen && "rotate-180")} />
+                  </Button>
                 </div>
-                <h3 className="mt-2 text-xl font-semibold shrink-0">
-                  {formatDigestDate(current.date)} · {text("日报", "Digest")}
-                </h3>
-                <div className="mt-2 text-xs text-muted-foreground shrink-0">
-                  {current.items.length} {text("篇文章", "articles")}
-                </div>
-                <ScrollArea className="mt-4 -mx-2 px-2 h-[400px] md:h-auto md:flex-1 md:min-h-0 md:overscroll-contain">
+                <ScrollArea
+                  id="digest-toc-list"
+                  className={cn(
+                    "mt-4 -mx-2 px-2 md:h-auto md:min-h-0 md:flex-1 md:overscroll-contain",
+                    isMobileTocOpen ? "h-[min(50vh,320px)]" : "hidden md:block",
+                  )}
+                >
                   <div className="space-y-5 pb-6">
                     {digestSections.map((section) => (
                       <section key={section.sourceType}>

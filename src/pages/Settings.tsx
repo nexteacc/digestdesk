@@ -94,7 +94,7 @@ function SourceInlineSelect({
   }
 
   return (
-    <div className="flex flex-wrap justify-end gap-2 max-w-[420px]">
+    <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 md:flex md:max-w-[420px] md:flex-wrap md:justify-end">
       {DIGEST_SOURCE_ORDER.map((type) => {
         const meta = DIGEST_SOURCE_META[type];
         const selected = orderedValue.includes(type);
@@ -104,7 +104,7 @@ function SourceInlineSelect({
             type="button"
             disabled={disabled}
             onClick={() => toggleSource(type)}
-            className={`inline-flex min-w-[122px] items-center justify-between gap-2 rounded-full border px-3 py-2 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+            className={`inline-flex min-h-11 w-full items-center justify-between gap-2 rounded-full border px-3 py-2 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60 md:min-w-[122px] ${
               selected
                 ? "border-primary/60 bg-primary/8 text-foreground shadow-[inset_0_0_0_1px_rgba(255,103,25,0.14)]"
                 : "border-border bg-background text-muted-foreground hover:border-foreground/20 hover:text-foreground"
@@ -204,7 +204,7 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-        <div className="max-w-2xl mx-auto py-10 px-4 space-y-6">
+        <div className="mx-auto max-w-2xl space-y-6 py-8 md:py-10">
           <div className="h-8 w-32 bg-muted animate-pulse rounded" />
           <div className="h-[200px] bg-muted animate-pulse rounded-lg" />
         </div>
@@ -212,7 +212,7 @@ export default function SettingsPage() {
   }
 
   return (
-      <div className="max-w-3xl mx-auto py-12 px-4">
+      <div className="mx-auto max-w-3xl py-6 md:py-12">
         {/* Header */}
         <div className="flex items-center gap-3 mb-10">
           <SettingsIcon className="h-5 w-5 text-muted-foreground" />
@@ -222,16 +222,16 @@ export default function SettingsPage() {
         </div>
 
         <Card className="border shadow-sm overflow-hidden bg-card/50">
-          <div className="p-8 space-y-0">
+          <div className="space-y-0 p-4 md:p-8">
             {/* Digest Language */}
-            <div className="flex items-center justify-between gap-8 py-1">
+            <div className="flex flex-col gap-3 py-1 md:flex-row md:items-center md:justify-between md:gap-8">
               <div>
                 <label className="text-sm font-medium text-foreground">
                   {text("日报语言", "Digest Language")}
                 </label>
               </div>
               <Select value={digestLanguage} onValueChange={(v) => setDigestLanguage(v as DigestLanguage)}>
-                <SelectTrigger className="w-[200px] h-9">
+                <SelectTrigger className="h-11 w-full md:h-9 md:w-[200px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -244,8 +244,8 @@ export default function SettingsPage() {
               </Select>
             </div>
 
-            <div className="flex items-start justify-between gap-8 pt-6 border-t border-border/50">
-              <div className="pt-2">
+            <div className="flex flex-col gap-3 border-t border-border/50 pt-6 md:flex-row md:items-start md:justify-between md:gap-8">
+              <div className="md:pt-2">
                 <label className="text-sm font-medium text-foreground">
                   {text("日报来源", "Digest Sources")}
                 </label>
@@ -258,15 +258,15 @@ export default function SettingsPage() {
             </div>
 
             {/* Delivery Time */}
-            <div className="flex items-center justify-between gap-8 pt-6 border-t border-border/50">
+            <div className="flex flex-col gap-3 border-t border-border/50 pt-6 md:flex-row md:items-center md:justify-between md:gap-8">
               <div>
                 <label className="text-sm font-medium text-foreground shrink-0">
                   {text("日报生成时间", "Digest Time")}
                 </label>
               </div>
-              <div className="flex items-center gap-2 bg-secondary/30 p-1 rounded-lg border border-border/50">
+              <div className="flex w-full items-center gap-2 rounded-lg border border-border/50 bg-secondary/30 p-1 md:w-auto">
                 <Select value={hour} onValueChange={setHour}>
-                  <SelectTrigger className="w-[64px] h-8 border-none bg-transparent hover:bg-background/80 font-bold text-base transition-colors focus:ring-0">
+                  <SelectTrigger className="h-10 flex-1 border-none bg-transparent text-base font-bold transition-colors hover:bg-background/80 focus:ring-0 md:h-8 md:w-[64px] md:flex-none">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -277,7 +277,7 @@ export default function SettingsPage() {
                 </Select>
                 <span className="text-muted-foreground/30 font-medium">:</span>
                 <Select value={minute} onValueChange={setMinute}>
-                  <SelectTrigger className="w-[64px] h-8 border-none bg-transparent hover:bg-background/80 font-bold text-base transition-colors focus:ring-0">
+                  <SelectTrigger className="h-10 flex-1 border-none bg-transparent text-base font-bold transition-colors hover:bg-background/80 focus:ring-0 md:h-8 md:w-[64px] md:flex-none">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -290,14 +290,14 @@ export default function SettingsPage() {
             </div>
 
             {/* Timezone */}
-            <div className="flex items-center justify-between gap-8 pt-6 border-t border-border/50">
+            <div className="flex flex-col gap-3 border-t border-border/50 pt-6 md:flex-row md:items-center md:justify-between md:gap-8">
               <div>
                 <label className="text-sm font-medium text-foreground">
                   {text("所在时区", "Timezone")}
                 </label>
               </div>
               <Select value={timezone} onValueChange={setTimezone}>
-                <SelectTrigger className="w-[200px] h-9">
+                <SelectTrigger className="h-11 w-full md:h-9 md:w-[200px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -311,11 +311,11 @@ export default function SettingsPage() {
             </div>
 
             {/* Action */}
-            <div className="pt-4 flex justify-end">
+            <div className="flex justify-stretch pt-4 md:justify-end">
               <Button 
                 onClick={onSave} 
                 disabled={saving}
-                className="px-10 h-10 font-bold tracking-tight transition-all active:scale-95"
+                className="h-11 w-full px-10 font-bold tracking-tight transition-all active:scale-95 md:h-10 md:w-auto"
               >
                 {saving ? (
                   <div className="flex items-center gap-2">
