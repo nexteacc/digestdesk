@@ -80,6 +80,7 @@ export async function writeArticleSummary(input: {
   summary: ArticleSummary;
   model?: string;
   promptVersion?: string;
+  generationAttempt?: number;
 }) {
   const db = getDb();
   const now = new Date().toISOString();
@@ -94,6 +95,7 @@ export async function writeArticleSummary(input: {
       summaryJson,
       model: input.model || null,
       promptVersion: input.promptVersion || null,
+      generationAttempt: input.generationAttempt ?? null,
       createdAt: now,
       updatedAt: now,
     })
@@ -103,6 +105,7 @@ export async function writeArticleSummary(input: {
         summaryJson,
         model: input.model || null,
         promptVersion: input.promptVersion || null,
+        generationAttempt: input.generationAttempt ?? null,
         updatedAt: now,
       },
     });

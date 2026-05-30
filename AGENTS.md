@@ -28,6 +28,7 @@ No test script is defined. If tests are added, follow existing package scripts a
 - Read relevant file context before edits and avoid unnecessary new files.
 - Before non-trivial changes, read the latest relevant section of `docs/history.md`.
 - Follow existing code style, naming, libraries, and structure.
+- Do not read private keys, tokens, `.env` files, or other secret-bearing files unless the user explicitly asks and the task cannot be completed with metadata-only checks; never output their contents.
 - Do not write, output, or log secrets.
 - Before proposing external platforms, deployment features, third-party services, or developer tools, verify the capability through explicit research or documentation lookup.
 

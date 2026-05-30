@@ -1475,6 +1475,36 @@ Admin 页面相关发现：
 
 - `server/node_modules/.bin/tsc -p server/tsconfig.build.json` 通过。
 - `node_modules/.bin/eslint .` 通过。
+
+### Follow-up: Model Switch Decision
+
+同日根据 10 篇德语样本探针，决定把生产 `AI_MODEL` 从 `openai/gpt-oss-120b` 切到 `qwen/qwen3.5-flash-02-23`。理由不是成本，而是任务匹配度：当前核心任务是多语言日报摘要，qwen 在抽样德语摘要中 10/10 成功、0 英文混入、0 JSON/schema 失败，而主模型在同一批次德语日报中出现少量英文 `keyInsights` 混入。已更新 web 与 scheduler 服务的 `AI_MODEL` 配置；运行进程是否已加载新配置需要通过后续重启/重部署后的摘要日志确认。
+
+### Follow-up: Background Pre-Summary Architecture
+
+同日决定实现“不新增服务”的阶段二最小架构优化：提前批次处理消化大部分抓取和摘要工作，日报时间保留最终同步、兜底和组装。
+
+设计边界：
+
+- 不新增 Zeabur 服务；仍使用现有 `scheduler` 服务承载 runner。
+- `executeDailyDigestJob()` 主链路不变，避免破坏手动生成、定时生成和新增订阅初始生成的一致性。
+- 后台 feed sync 每 4 小时扫描 active subscriptions 关联的 feeds，并尊重 `last_fetched_at` freshness window，只抓 due feeds。
+- feed sync 插入近期新文章后，按 active subscriber 的 `digest_language` 和 `digest_source_types` 创建 `article_summary_jobs(article_id, language)`，使用唯一键去重。
+- summary runner 每 5 分钟领取一批 `article_summary_jobs`，调用当前 `AI_MODEL` 写入 `article_summaries`。
+- 日报 job 仍运行 `presummarizeForUser()`，作为 cutoff/后台任务未完成时的兜底。
+
+本次实现：
+
+- 新增 `article_summary_jobs` 表、唯一索引和状态索引。
+- 新增 `article-summary-jobs.ts`，包含 enqueue、stale reclaim、claim/run/update 状态逻辑。
+- `syncFeed()` 对真实新插入且处于近期窗口的文章入队 summary jobs，并避免为用户已过滤的来源预摘要。
+- `scheduler` 新增 `ARTICLE_SUMMARY_RUN_CRON` 与 `FEED_SYNC_CRON` runner。
+- `.env.scheduler.example`、`docs/context.md`、`docs/operations.md` 已更新。
+
+验证：
+
+- `server/node_modules/.bin/tsc -p server/tsconfig.build.json` 通过。
+- `node_modules/.bin/eslint .` 通过。
 - `node_modules/.bin/tsc -p tsconfig.app.json --noEmit` 仍失败于既有前端类型问题：Clerk `afterSignOutUrl` prop 与 DailyDigest union `.id` narrowing。
 - `node_modules/.bin/vite build` 受本机 Rollup optional native package code signing 问题阻塞，未到业务代码编译阶段。
 
@@ -1485,3 +1515,44 @@ Admin 页面相关发现：
 | 部署后抽查德语日报输出 | AI agent + User | Pending | 重点看自然德语、专业术语、fallback 数量和 retry 日志 |
 | 观察 `article_summaries` 命中率 | AI agent | Pending | 对比 `summaryCacheHits`、`summaryCacheMisses`、`aiRequests` 是否符合 `article + language` 口径 |
 | 修复前端既有 TypeScript 问题 | AI agent + User | Optional | 当前不由本次多语言改造引入，但会影响完整 frontend typecheck |
+
+### Follow-up: Phase 2 Safety Review Fixes
+
+阶段二骨架 review 后补齐上线前安全项：
+
+- `ENABLE_ARTICLE_SUMMARY_JOBS`、`ENABLE_BACKGROUND_FEED_SYNC`、`ENABLE_ARTICLE_SUMMARY_BACKFILL` 改为显式 `true` 才启用，避免部署代码即改变生产负载。
+- `syncFeed()` 只有在 `ENABLE_ARTICLE_SUMMARY_JOBS=true` 时才写入 `article_summary_jobs`，避免主链路 feed sync 在灰度前产生新队列表数据。
+- `article_summary_jobs` 入队去掉手写 article id `IN (...)` 拼接，改用查询构造器参数化条件。
+- 已失败、跳过、取消或异常成功但缺少缓存的 summary job，再次入队时会重置为 `pending`，避免唯一键导致永久卡死。
+- summary runner 失败后按指数退避重试；达到最大尝试次数后不再被普通 runner 反复扫描，需通过再次入队/backfill 或人工 reset 重新激活。
+- 新增近期 backfill 入口，用于把已有近期文章按活跃订阅语言补入 `article_summary_jobs`，但默认关闭。
+
+## 2026-05-28: German digest quality review and summary metadata observability
+
+### Summary
+
+复查 `target_date=2026-05-27` 的德语日报后，确认多语言链路正常生效：德语用户生成 47 条日报内容，`presummarizeForUser()` 使用 `language=de`，日报组装阶段 47 条全部命中 `article_summaries` 缓存。质量问题集中在模型服从性：少量 `keyInsights` 仍为英文，主模型返回结构合法结果后通过了当前轻量 Latin script 校验，因此没有触发 retry。
+
+### Evidence
+
+- Scheduler 日志显示德语预摘要：`articlesToProcess=47 aiRequests=49 retryRequests=2 succeeded=47 failed=0`。
+- 2 次 retry 均由主模型 JSON parse error 触发，不是语言质量错误。
+- 日报组装日志显示：`summaryCacheHits=47 summaryGenerated=0 aiRequests=0`，说明问题摘要已在预摘要阶段写入缓存。
+- 抽样定位 4 篇文章共 7 条英文 `keyInsights`：`We Automated Everything With AI and Tripled Our Headcount`、`Time to freak out about the national debt`、`Your future job will be to keep AI on task`、`Choosing to Stay Human`。
+
+### Decision
+
+- 暂不把问题定义为 prompt 链路错误；德语 prompt 和 `language=de` 传递正常。
+- 暂不直接把 retry 模型替换为主模型；生产中 retry 模型只覆盖 2 次样本，能证明可用但不足以证明更适合作为主模型。
+- 先补可观察性：新生成的 `article_summaries` 持久化实际成功模型、prompt version 和成功 attempt，后续再用真实文章做主模型与候选模型的德语输出一致性探针。
+
+### Changes
+
+- `summarizeArticleWithMetadata()` 返回摘要和生成 metadata，保留 `summarizeArticle()` 兼容旧调用。
+- `presummarizeForUser()` 和 digest assembly 缓存写入时记录 `model`、`prompt_version`、`generation_attempt`。
+- `article_summaries` 增加 `generation_attempt` 列；既有 `model` / `prompt_version` 字段开始由生成链路写入。
+
+### Verification
+
+- `server/node_modules/.bin/tsc -p server/tsconfig.build.json` 通过。
+- `node_modules/.bin/eslint .` 通过。

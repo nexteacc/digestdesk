@@ -63,6 +63,7 @@ export const articleSummaries = pgTable(
     summaryJson: text("summary_json").notNull(),
     model: text("model"),
     promptVersion: text("prompt_version"),
+    generationAttempt: integer("generation_attempt"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -161,5 +162,30 @@ export const digestJobs = pgTable(
     userIdx: index("idx_digest_jobs_user_id").on(table.userId),
     statusScheduledIdx: index("idx_digest_jobs_status_scheduled_for").on(table.status, table.scheduledFor),
     userTargetIdx: index("idx_digest_jobs_user_target_date").on(table.userId, table.targetDate),
+  }),
+);
+
+export const articleSummaryJobs = pgTable(
+  "article_summary_jobs",
+  {
+    id: text("id").primaryKey(),
+    articleId: text("article_id").notNull().references(() => articles.id, { onDelete: "cascade" }),
+    language: text("language").notNull(),
+    status: text("status", {
+      enum: ["pending", "running", "succeeded", "failed", "skipped", "cancelled"],
+    }).notNull(),
+    scheduledFor: text("scheduled_for").notNull(),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    lastError: text("last_error"),
+    lockedAt: text("locked_at"),
+    lockedBy: text("locked_by"),
+    createdAt: text("created_at").notNull(),
+    startedAt: text("started_at"),
+    finishedAt: text("finished_at"),
+  },
+  (table) => ({
+    articleLanguageUnique: uniqueIndex("idx_article_summary_jobs_article_language_unique").on(table.articleId, table.language),
+    statusScheduledIdx: index("idx_article_summary_jobs_status_scheduled_for").on(table.status, table.scheduledFor),
+    articleIdx: index("idx_article_summary_jobs_article_id").on(table.articleId),
   }),
 );

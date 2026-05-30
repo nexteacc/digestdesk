@@ -50,3 +50,4 @@ server/.env.*
 .eslintcache
 .turbo
 *.tsbuildinfo
+.antigravitycli/

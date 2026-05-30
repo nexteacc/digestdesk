@@ -6,6 +6,7 @@ import { getDb } from "../db/index.js";
 import { feeds, articles, subscriptions } from "../db/schema.js";
 import { getSourceAdapter } from "../sources/factory.js";
 import type { SourceType } from "../sources/types.js";
+import { enqueueArticleSummaryJobsForArticles } from "./article-summary-jobs.js";
 import {
   buildYouTubeChannelFeedUrl,
   extractChannelIdFromYouTubeFeedUrl,
@@ -56,7 +57,11 @@ function wasSyncedRecently(lastFetchedAt: string | null, freshnessWindowMs: numb
   return Date.now() - timestamp < freshnessWindowMs;
 }
 
-export async function syncAllFeeds(): Promise<void> {
+function shouldEnqueueArticleSummaryJobs() {
+  return process.env.ENABLE_ARTICLE_SUMMARY_JOBS === "true";
+}
+
+export async function syncAllFeeds(options?: { freshnessWindowMs?: number }): Promise<void> {
   if (_syncPromise) {
     console.log("[rss] A sync job is already in progress, sharing existing promise...");
     return _syncPromise;
@@ -64,18 +69,22 @@ export async function syncAllFeeds(): Promise<void> {
 
   _syncPromise = (async () => {
     const db = getDb();
+    const freshnessWindowMs = options?.freshnessWindowMs ?? DEFAULT_RECENT_SYNC_WINDOW_MS;
     const allFeeds = await db
-      .selectDistinct({ id: feeds.id, name: feeds.name })
+      .selectDistinct({ id: feeds.id, name: feeds.name, lastFetchedAt: feeds.lastFetchedAt })
       .from(subscriptions)
       .innerJoin(feeds, eq(subscriptions.feedId, feeds.id))
       .where(isNull(subscriptions.endedAt));
+    const feedsToSync = allFeeds.filter((feed) => !wasSyncedRecently(feed.lastFetchedAt, freshnessWindowMs));
 
-    console.log(`[rss] Starting sync job for ${allFeeds.length} feeds...`);
+    console.log(
+      `[rss] Starting sync job for ${allFeeds.length} feeds freshnessWindowMs=${freshnessWindowMs} toSync=${feedsToSync.length} skippedRecent=${allFeeds.length - feedsToSync.length}`,
+    );
 
     try {
       const syncLimit = pLimit(5);
       await Promise.all(
-        allFeeds.map(feed =>
+        feedsToSync.map(feed =>
           syncLimit(async () => {
             const feedStartedAt = Date.now();
             try {
@@ -241,6 +250,7 @@ async function syncFeedInternal(feedId: string): Promise<number> {
   let existingItems = 0;
   let insertedWithContent = 0;
   let insertedWithoutContent = 0;
+  const insertedArticleIds: string[] = [];
   const isYouTubeFeed = feed.sourceType === "youtube";
   const adapter = getSourceAdapter(feed.sourceType as SourceType);
   const usedFallbackYouTubeFeed = isYouTubeFeed && parsedFeedUrl !== effectiveFeedUrl;
@@ -294,19 +304,30 @@ async function syncFeedInternal(feedId: string): Promise<number> {
       fetchedAt: now,
     };
 
-    await db.insert(articles).values(article).onConflictDoNothing();
-    newCount++;
-    if (contentMarkdown && contentMarkdown.length > 0) {
-      insertedWithContent++;
-    } else {
-      insertedWithoutContent++;
-      console.warn(
-        `[rss] Inserted article without content feedId=${feed.id} articleUrl=${articleUrl} title=${article.title}`,
-      );
+    const inserted = await db.insert(articles).values(article).onConflictDoNothing().returning({ id: articles.id });
+    if (inserted.length > 0) {
+      insertedArticleIds.push(inserted[0].id);
+      newCount++;
+      if (contentMarkdown && contentMarkdown.length > 0) {
+        insertedWithContent++;
+      } else {
+        insertedWithoutContent++;
+        console.warn(
+          `[rss] Inserted article without content feedId=${feed.id} articleUrl=${articleUrl} title=${article.title}`,
+        );
+      }
     }
   }
 
   await db.update(feeds).set({ lastFetchedAt: now }).where(eq(feeds.id, feedId));
+  if (shouldEnqueueArticleSummaryJobs()) {
+    await enqueueArticleSummaryJobsForArticles(insertedArticleIds, { reason: `feed_sync:${feed.id}` }).catch((err) => {
+      console.warn(
+        `[rss] Failed to enqueue summary jobs feedId=${feed.id} inserted=${insertedArticleIds.length}:`,
+        err instanceof Error ? err.message : err,
+      );
+    });
+  }
 
   if (isYouTubeFeed) {
     console.log(

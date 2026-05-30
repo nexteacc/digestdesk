@@ -3,7 +3,7 @@ import { eq, and, gte, lt, inArray, isNull } from "drizzle-orm";
 import pLimit from "p-limit";
 import { getDb } from "../db/index.js";
 import { feeds, articles, digests, digestItems, subscriptions, userSettings } from "../db/schema.js";
-import { classifyAiError, getMaxInputChars, summarizeArticle } from "./summarizer.js";
+import { classifyAiError, getMaxInputChars, summarizeArticleWithMetadata } from "./summarizer.js";
 import { getDayRangeForTimeZone, getPreviousDateLabel, getTimeZoneDateLabel } from "../utils/timezone.js";
 import { parseDigestSourceTypes } from "./user-settings.js";
 import { getSummaryLanguageProfile, parseDigestLanguage } from "./summary-language-profiles.js";
@@ -302,15 +302,23 @@ async function generateWithId(
 
       try {
         let articleModelRequests = 0;
-        const summary = await summarizeArticle(contentText, language, {
+        const result = await summarizeArticleWithMetadata(contentText, language, {
           onAttempt: (attempt) => {
             articleModelRequests += 1;
             modelRequests += 1;
             if (attempt > 1) retryRequests += 1;
           },
         });
+        const summary = result.summary;
         summaryGenerated += 1;
-        await writeArticleSummary({ articleId: article.id, language, summary }).catch((e) => {
+        await writeArticleSummary({
+          articleId: article.id,
+          language,
+          summary,
+          model: result.metadata.model,
+          promptVersion: result.metadata.promptVersion,
+          generationAttempt: result.metadata.attempt,
+        }).catch((e) => {
           console.warn(`[digest] Failed to cache summary${trace} article=${article.id} url=${article.url}:`, e instanceof Error ? e.message : e);
         });
         if (debug) {

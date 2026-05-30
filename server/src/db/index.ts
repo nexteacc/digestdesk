@@ -89,9 +89,14 @@ export async function initDb() {
       summary_json TEXT NOT NULL,
       model TEXT,
       prompt_version TEXT,
+      generation_attempt INTEGER,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+  `;
+
+  await queryClient`
+    ALTER TABLE article_summaries ADD COLUMN IF NOT EXISTS generation_attempt INTEGER;
   `;
 
   await queryClient`
@@ -332,6 +337,38 @@ export async function initDb() {
   await queryClient`
     CREATE INDEX IF NOT EXISTS idx_digest_jobs_user_target_date
     ON digest_jobs(user_id, target_date);
+  `;
+
+  await queryClient`
+    CREATE TABLE IF NOT EXISTS article_summary_jobs (
+      id TEXT PRIMARY KEY,
+      article_id TEXT NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+      language TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('pending', 'running', 'succeeded', 'failed', 'skipped', 'cancelled')),
+      scheduled_for TEXT NOT NULL,
+      attempt_count INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      locked_at TEXT,
+      locked_by TEXT,
+      created_at TEXT NOT NULL,
+      started_at TEXT,
+      finished_at TEXT
+    );
+  `;
+
+  await queryClient`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_article_summary_jobs_article_language_unique
+    ON article_summary_jobs(article_id, language);
+  `;
+
+  await queryClient`
+    CREATE INDEX IF NOT EXISTS idx_article_summary_jobs_status_scheduled_for
+    ON article_summary_jobs(status, scheduled_for);
+  `;
+
+  await queryClient`
+    CREATE INDEX IF NOT EXISTS idx_article_summary_jobs_article_id
+    ON article_summary_jobs(article_id);
   `;
 
   console.log("Database initialized (PostgreSQL).");

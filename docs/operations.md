@@ -90,6 +90,14 @@
      - `DIGEST_DISPATCH_CRON`
      - `DIGEST_RUN_CRON`
      - `DIGEST_JOB_RUN_LIMIT`
+     - `ENABLE_ARTICLE_SUMMARY_JOBS`（阶段二开关；默认 `false`）
+     - `ENABLE_BACKGROUND_FEED_SYNC`（阶段二开关；默认 `false`）
+     - `ENABLE_ARTICLE_SUMMARY_BACKFILL`（一次性/灰度 backfill 开关；默认 `false`）
+     - `ARTICLE_SUMMARY_RUN_CRON`
+     - `ARTICLE_SUMMARY_JOB_RUN_LIMIT`
+     - `ARTICLE_SUMMARY_JOB_CONCURRENCY`
+     - `ARTICLE_SUMMARY_RETRY_BASE_DELAY_MS`
+     - `ARTICLE_SUMMARY_BACKFILL_LIMIT`
 6. 仅给 `web` 绑定公开域名。
 7. `scheduler` 不需要域名，不对外暴露 HTTP。
 8. `scheduler` 初始保持单实例。
@@ -142,6 +150,16 @@
 - `DIGEST_DISPATCH_CRON=*/15 * * * *`
 - `DIGEST_RUN_CRON=*/5 * * * *`
 - `DIGEST_JOB_RUN_LIMIT=10`
+- `ENABLE_ARTICLE_SUMMARY_JOBS=false` by default; set to `true` only when rolling out phase 2 summary jobs.
+- `ENABLE_BACKGROUND_FEED_SYNC=false` by default; set to `true` only after confirming feed sync capacity.
+- `ENABLE_ARTICLE_SUMMARY_BACKFILL=false` by default; temporarily set to `true` to seed recent existing articles.
+- `FEED_SYNC_CRON=0 */4 * * *`
+- `FEED_SYNC_FRESHNESS_WINDOW_MS=14400000`
+- `ARTICLE_SUMMARY_RUN_CRON=*/5 * * * *`
+- `ARTICLE_SUMMARY_JOB_RUN_LIMIT=10`
+- `ARTICLE_SUMMARY_JOB_CONCURRENCY=2`
+- `ARTICLE_SUMMARY_RETRY_BASE_DELAY_MS=300000`
+- `ARTICLE_SUMMARY_BACKFILL_LIMIT=50`
 
 这组值更贴合日报产品的节奏：
 
@@ -149,6 +167,9 @@
 - 降低 runner 空跑频次
 - 降低单轮抓取、总结、写库的资源峰值
 - 仍能在用户设定时间附近完成投递
+- 后台 feed sync 默认关闭；开启后每 4 小时只抓 due feeds，抓到近期新文章后按用户来源设置入队 `article_summary_jobs`
+- 后台 summary runner 默认关闭；开启后在现有 `scheduler` 服务内提前消化摘要任务，日报 job 仍保留同步和预摘要兜底
+- recent backfill 独立开关，避免部署代码时立刻扫描既有文章并放大 AI 请求峰值
 
 ## 7. 当前适用范围
 
@@ -162,6 +183,13 @@
 
 - 该阶段适合真实生产验证
 - 但不应直接承诺为“1 万用户晨峰稳态版本”
+
+阶段二最小优化：
+
+- 不新增 Zeabur 服务
+- 在现有 `scheduler` 中增加 feed sync runner 与 article summary runner
+- `executeDailyDigestJob` 主链路不变，仍负责最终同步、预摘要兜底和日报组装
+- 长期若 summary runner 影响 digest runner，再基于真实日志拆成独立服务
 
 ## 8. 面向 1 万用户的下一阶段
 

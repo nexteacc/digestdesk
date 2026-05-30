@@ -42,6 +42,7 @@ Compact AI context: invariants, boundaries, workflows, and checks.
 - `digest_items` are user-private daily snapshot rows.
 - `user_settings` are user-private preferences.
 - `digest_jobs` are durable scheduling and execution records.
+- `article_summary_jobs` are durable background pre-summary records by article and language.
 
 ## Global Assets
 
@@ -102,6 +103,15 @@ Compact AI context: invariants, boundaries, workflows, and checks.
 7. Executor runs `presummarizeForUser` for target date and language.
 8. Executor calls `generateDaily` to assemble the digest snapshot.
 9. Runner marks the job `succeeded`, `skipped`, or `failed`.
+
+## Background Pre-Summary Flow
+
+1. Scheduler periodically runs feed sync for due feeds only when `ENABLE_BACKGROUND_FEED_SYNC=true`.
+2. Feed sync inserts new global `articles`.
+3. Recent new articles enqueue `article_summary_jobs` only when `ENABLE_ARTICLE_SUMMARY_JOBS=true`, for active subscriber languages whose source filters allow that feed type.
+4. Scheduler runs `runPendingArticleSummaryJobs` to generate `article_summaries` only when `ENABLE_ARTICLE_SUMMARY_JOBS=true`.
+5. Digest execution still keeps `presummarizeForUser` as a final fallback for cache misses.
+6. Recent backfill is an explicit rollout action via `ENABLE_ARTICLE_SUMMARY_BACKFILL=true`; it should not run just because new code was deployed.
 
 ## API Boundaries
 

@@ -16,7 +16,7 @@ import pLimit from "p-limit";
 import { getDb } from "../db/index.js";
 import { articles, feeds, subscriptions } from "../db/schema.js";
 import { getUserSettingsMap, parseDigestSourceTypes } from "./user-settings.js";
-import { classifyAiError, getMaxInputChars, summarizeArticle } from "./summarizer.js";
+import { classifyAiError, getMaxInputChars, summarizeArticleWithMetadata } from "./summarizer.js";
 import { getDayRangeForTimeZone, getPreviousDateLabel, getTimeZoneDateLabel } from "../utils/timezone.js";
 import { parseDigestLanguage } from "./summary-language-profiles.js";
 import {
@@ -92,13 +92,20 @@ async function summarizeAndCacheArticle(
 
     let attempts = 0;
     const work = (async () => {
-      const summary = await summarizeArticle(article.contentText!, language, {
+      const result = await summarizeArticleWithMetadata(article.contentText!, language, {
         onAttempt: (attempt) => {
           attempts += 1;
           options?.onAttempt?.(attempt);
         },
       });
-      await writeArticleSummary({ articleId: article.id, language, summary });
+      await writeArticleSummary({
+        articleId: article.id,
+        language,
+        summary: result.summary,
+        model: result.metadata.model,
+        promptVersion: result.metadata.promptVersion,
+        generationAttempt: result.metadata.attempt,
+      });
     })();
 
     inFlightSummaryWrites.set(key, work);

@@ -208,6 +208,17 @@ const ArticleSummarySchema = z.object({
 
 export type ArticleSummary = z.infer<typeof ArticleSummarySchema>;
 
+export type ArticleSummaryMetadata = {
+  model: string;
+  promptVersion: string;
+  attempt: number;
+};
+
+export type ArticleSummaryResult = {
+  summary: ArticleSummary;
+  metadata: ArticleSummaryMetadata;
+};
+
 function compactSummaryText(value: string) {
   return value
     .replace(/\s+/g, " ")
@@ -505,14 +516,15 @@ function buildMarkdownSummaryInput(markdown: string, maxChars: number): string {
   return result.length > 0 ? result : markdown.slice(0, maxChars);
 }
 
-export async function summarizeArticle(
+export async function summarizeArticleWithMetadata(
   markdown: string,
   language: DigestLanguage = "zh",
   options?: { onAttempt?: (attempt: number) => void },
-): Promise<ArticleSummary> {
+): Promise<ArticleSummaryResult> {
   const baseURL = process.env.AI_BASE_URL || "https://api.openai.com/v1";
   const primaryModelId = getPrimaryModelId();
   const retryModelId = getRetryModelId(primaryModelId, baseURL);
+  const promptVersion = getSummaryLanguageProfile(language).promptVersion;
 
   const maxInputChars = getMaxInputChars();
   const input = buildMarkdownSummaryInput(markdown, maxInputChars);
@@ -539,7 +551,14 @@ export async function summarizeArticle(
       console.log(
         `[summarizer] AI summary complete attempt=${attempt} model=${attemptModelId}. One-liner: ${result.oneLiner.slice(0, 50)}...`,
       );
-      return result;
+      return {
+        summary: result,
+        metadata: {
+          model: attemptModelId,
+          promptVersion,
+          attempt,
+        },
+      };
     } catch (err) {
       lastError = err;
       const meta = summarizeErrorMeta(err);
@@ -556,4 +575,13 @@ export async function summarizeArticle(
     }
   }
   throw lastError;
+}
+
+export async function summarizeArticle(
+  markdown: string,
+  language: DigestLanguage = "zh",
+  options?: { onAttempt?: (attempt: number) => void },
+): Promise<ArticleSummary> {
+  const result = await summarizeArticleWithMetadata(markdown, language, options);
+  return result.summary;
 }
