@@ -1,11 +1,14 @@
 import RssParser from "rss-parser";
 import { nanoid } from "nanoid";
-import { eq, isNull, and } from "drizzle-orm";
+import { eq, isNull, and, gte } from "drizzle-orm";
 import pLimit from "p-limit";
 import { getDb } from "../db/index.js";
-import { feeds, articles, subscriptions } from "../db/schema.js";
+import { feeds, articles, subscriptions, users } from "../db/schema.js";
 import { getSourceAdapter } from "../sources/factory.js";
 import type { SourceType } from "../sources/types.js";
+import { assertPublicUrl } from "../sources/url-guard.js";
+import { safeParseRssUrl } from "../sources/safe-fetch.js";
+import { getActiveUserSinceIso } from "./active-users.js";
 import { enqueueArticleSummaryJobsForArticles } from "./article-summary-jobs.js";
 import {
   buildYouTubeChannelFeedUrl,
@@ -30,6 +33,7 @@ const rssParser = new RssParser({
     ],
   },
 });
+const RSS_READER_HEADERS = { "User-Agent": "DigestDesk/1.0 (RSS Reader)" };
 
 let _syncPromise: Promise<void> | null = null;
 const _feedSyncPromises = new Map<string, Promise<number>>();
@@ -70,11 +74,15 @@ export async function syncAllFeeds(options?: { freshnessWindowMs?: number }): Pr
   _syncPromise = (async () => {
     const db = getDb();
     const freshnessWindowMs = options?.freshnessWindowMs ?? DEFAULT_RECENT_SYNC_WINDOW_MS;
+    // Only sync feeds an active user still subscribes to; skip feeds kept alive
+    // only by dormant accounts to avoid wasted fetches and AI summaries.
+    const activeSince = getActiveUserSinceIso();
     const allFeeds = await db
       .selectDistinct({ id: feeds.id, name: feeds.name, lastFetchedAt: feeds.lastFetchedAt })
       .from(subscriptions)
       .innerJoin(feeds, eq(subscriptions.feedId, feeds.id))
-      .where(isNull(subscriptions.endedAt));
+      .innerJoin(users, eq(subscriptions.userId, users.id))
+      .where(and(isNull(subscriptions.endedAt), gte(users.lastLoginAt, activeSince)));
     const feedsToSync = allFeeds.filter((feed) => !wasSyncedRecently(feed.lastFetchedAt, freshnessWindowMs));
 
     console.log(
@@ -184,11 +192,22 @@ async function syncFeedInternal(feedId: string): Promise<number> {
   const effectiveFeedUrl = normalizeFeedUrl(feed.feedUrl);
   console.log(`[rss] Syncing feedId=${feed.id} sourceType=${feed.sourceType} name=${feed.name} feedUrl=${effectiveFeedUrl}`);
 
+  // Defense-in-depth: never fetch a feed URL that resolves to a private/internal address (SSRF guard).
+  try {
+    await assertPublicUrl(effectiveFeedUrl);
+  } catch (err) {
+    console.warn(
+      `[rss] Blocked non-public feed url feedId=${feed.id} name=${feed.name} url=${effectiveFeedUrl}:`,
+      err instanceof Error ? err.message : err,
+    );
+    return 0;
+  }
+
   let parsed;
   let parsedFeedUrl = effectiveFeedUrl;
   let usedYouTubeDataApiFallback = false;
   try {
-    parsed = await rssParser.parseURL(effectiveFeedUrl);
+    parsed = await safeParseRssUrl(rssParser, effectiveFeedUrl, { headers: RSS_READER_HEADERS });
   } catch (err) {
     if (feed.sourceType !== "youtube") {
       console.error(`[rss] Failed to fetch ${effectiveFeedUrl}:`, err);
@@ -203,7 +222,7 @@ async function syncFeedInternal(feedId: string): Promise<number> {
     }
 
     try {
-      parsed = await rssParser.parseURL(fallbackFeedUrl);
+      parsed = await safeParseRssUrl(rssParser, fallbackFeedUrl, { headers: RSS_READER_HEADERS });
       parsedFeedUrl = fallbackFeedUrl;
       console.warn(
         `[rss] Falling back to channel feed for ${feed.name}: primary=${effectiveFeedUrl} fallback=${fallbackFeedUrl}`,

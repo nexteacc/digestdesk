@@ -1,5 +1,6 @@
 import RssParser from "rss-parser";
 import type { PodcastSearchResult } from "../../../shared/types.js";
+import { safeParseRssUrl } from "../sources/safe-fetch.js";
 import { htmlToMarkdown } from "./content-extractor.js";
 
 const APPLE_SEARCH_URL = "https://itunes.apple.com/search";
@@ -21,6 +22,7 @@ const rssParser = new RssParser({
     "User-Agent": "DigestDesk/1.0 (Podcast Discovery)",
   },
 });
+const PODCAST_DISCOVERY_HEADERS = { "User-Agent": "DigestDesk/1.0 (Podcast Discovery)" };
 
 type ApplePodcastItem = {
   collectionName?: string;
@@ -109,7 +111,7 @@ export async function verifyPodcastFeed(candidate: {
   if (!feedUrl) return null;
 
   try {
-    const parsed = await rssParser.parseURL(feedUrl);
+    const parsed = await safeParseRssUrl(rssParser, feedUrl, { headers: PODCAST_DISCOVERY_HEADERS, timeoutMs: 10000 });
     const title = parsed.title?.trim() || candidate.title;
     if (!title) return null;
 

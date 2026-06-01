@@ -14,7 +14,8 @@
     "start:scheduler": "node dist/scheduler.js",
     "smoke:structured-output": "tsx src/scripts/smoke-structured-output.ts",
     "job:dispatch-digests": "node dist/jobs/dispatch-digest-jobs.js",
-    "job:run-digest-jobs": "node dist/jobs/run-digest-jobs.js"
+    "job:run-digest-jobs": "node dist/jobs/run-digest-jobs.js",
+    "test": "vitest run"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.29",
@@ -26,6 +27,7 @@
     "dotenv": "^17.3.1",
     "drizzle-orm": "^0.44.2",
     "express": "^5.1.0",
+    "express-rate-limit": "^7.0.0",
     "nanoid": "^5.1.6",
     "node-cron": "^4.0.7",
     "p-limit": "^7.3.0",
@@ -42,6 +44,7 @@
     "@types/node-cron": "^3.0.11",
     "@types/turndown": "^5.0.6",
     "drizzle-kit": "^0.31.4",
-    "typescript": "~5.9.3"
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.18"
   }
 }

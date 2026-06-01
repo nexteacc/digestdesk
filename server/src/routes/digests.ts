@@ -7,6 +7,7 @@ import { executeDailyDigestJob } from "../services/digest-execution.js";
 import { cancelPendingDigestJobsForDate } from "../services/digest-jobs.js";
 import type { Digest, DigestItem, DigestOverview, Feed } from "../../../shared/types.js";
 import { getRequestUserId } from "../auth/user-context.js";
+import { generatePerMinuteLimiter, generatePerDayLimiter } from "../middleware/rate-limit.js";
 import { isNull } from "drizzle-orm";
 
 export const digestsRouter = Router();
@@ -159,7 +160,7 @@ digestsRouter.get("/:id", async (req, res) => {
   res.json(toDigest(digest, items));
 });
 
-digestsRouter.post("/generate", async (req, res) => {
+digestsRouter.post("/generate", generatePerMinuteLimiter, generatePerDayLimiter, async (req, res) => {
   const parsed = generateSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.issues[0].message });

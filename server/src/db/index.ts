@@ -176,6 +176,10 @@ export async function initDb() {
   `;
 
   await queryClient`
+    CREATE INDEX IF NOT EXISTS idx_users_last_login_at ON users(last_login_at);
+  `;
+
+  await queryClient`
     CREATE TABLE IF NOT EXISTS subscriptions (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -299,6 +303,42 @@ export async function initDb() {
   await queryClient`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_digests_user_type_date_unique
     ON digests(user_id, type, date);
+  `;
+
+  // Enforce that every digest belongs to a real user (data integrity for open sign-up).
+  // Clean up orphaned rows first so NOT NULL + FK can be applied idempotently on
+  // existing databases. digest_items references digests ON DELETE CASCADE, so any
+  // child rows of removed digests are deleted too.
+  // Add the named FK only when missing. The duplicate_object handler covers
+  // concurrent web + scheduler initialization.
+  await queryClient`
+    DELETE FROM digests WHERE user_id IS NULL;
+  `;
+  await queryClient`
+    DELETE FROM digests WHERE user_id NOT IN (SELECT id FROM users);
+  `;
+  await queryClient`
+    ALTER TABLE digests ALTER COLUMN user_id SET NOT NULL;
+  `;
+  await queryClient`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'fk_digests_user_id'
+          AND conrelid = 'digests'::regclass
+      ) THEN
+        BEGIN
+          ALTER TABLE digests
+            ADD CONSTRAINT fk_digests_user_id
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+        EXCEPTION
+          WHEN duplicate_object THEN NULL;
+        END;
+      END IF;
+    END
+    $$;
   `;
 
   await queryClient`

@@ -1,6 +1,7 @@
 import RssParser from "rss-parser";
 import type { DiscoveredYouTubeChannel } from "../../../shared/types.js";
 import { AppError } from "../sources/app-error.js";
+import { safeParseRssUrl } from "../sources/safe-fetch.js";
 
 const rssParser = new RssParser({
   timeout: 10000,
@@ -8,6 +9,7 @@ const rssParser = new RssParser({
     "User-Agent": "DigestDesk/1.0 (YouTube Discovery)",
   },
 });
+const YOUTUBE_DISCOVERY_HEADERS = { "User-Agent": "DigestDesk/1.0 (YouTube Discovery)" };
 
 const YOUTUBE_HOSTS = new Set([
   "youtube.com",
@@ -431,10 +433,10 @@ export async function discoverYouTubeChannel(url: string): Promise<DiscoveredYou
   let usedFallbackFeed = false;
   let dataApiFallback: Awaited<ReturnType<typeof fetchYouTubeDataApiDiscovery>> = null;
   try {
-    feed = await rssParser.parseURL(feedUrl);
+    feed = await safeParseRssUrl(rssParser, feedUrl, { headers: YOUTUBE_DISCOVERY_HEADERS, timeoutMs: 10000 });
   } catch {
     try {
-      feed = await rssParser.parseURL(fallbackFeedUrl);
+      feed = await safeParseRssUrl(rssParser, fallbackFeedUrl, { headers: YOUTUBE_DISCOVERY_HEADERS, timeoutMs: 10000 });
       usedFallbackFeed = true;
     } catch {
       dataApiFallback = await fetchYouTubeDataApiDiscovery(channelId, 5);
@@ -603,10 +605,10 @@ export async function resolveYouTubeChannelPresentation(
     const fallbackFeedUrl = buildYouTubeChannelFeedUrl(extractChannelIdFromYouTubeFeedUrl(feedUrl) || "");
     let feed;
     try {
-      feed = await rssParser.parseURL(feedUrl);
+      feed = await safeParseRssUrl(rssParser, feedUrl, { headers: YOUTUBE_DISCOVERY_HEADERS, timeoutMs: 10000 });
     } catch {
       feed = fallbackFeedUrl
-        ? await rssParser.parseURL(fallbackFeedUrl)
+        ? await safeParseRssUrl(rssParser, fallbackFeedUrl, { headers: YOUTUBE_DISCOVERY_HEADERS, timeoutMs: 10000 })
         : null;
     }
 

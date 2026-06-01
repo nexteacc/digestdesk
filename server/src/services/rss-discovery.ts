@@ -1,6 +1,8 @@
 import RssParser from "rss-parser";
 import type { DiscoveredFeed } from "../../../shared/types.js";
 import { AppError } from "../sources/app-error.js";
+import { assertPublicUrl } from "../sources/url-guard.js";
+import { safeFetchText, safeParseRssUrl } from "../sources/safe-fetch.js";
 
 const rssParser = new RssParser({
   timeout: 10000,
@@ -8,6 +10,8 @@ const rssParser = new RssParser({
     "User-Agent": "DigestDesk/1.0 (RSS Discovery)",
   },
 });
+const RSS_DISCOVERY_HEADERS = { "User-Agent": "DigestDesk/1.0 (RSS Discovery)" };
+const HOMEPAGE_HEADERS = { "User-Agent": "DigestDesk/1.0" };
 
 type ParsedFeed = {
   title?: string;
@@ -28,9 +32,12 @@ export async function discoverFeed(url: string): Promise<DiscoveredFeed> {
     targetUrl = `https://${targetUrl}`;
   }
 
+  // Block private/loopback/metadata targets before any outbound fetch (SSRF guard).
+  await assertPublicUrl(targetUrl);
+
   // 1. 尝试直接解析 (可能已经是 feed URL)
   try {
-    const feed = await rssParser.parseURL(targetUrl);
+    const feed = await safeParseRssUrl(rssParser, targetUrl, { headers: RSS_DISCOVERY_HEADERS, timeoutMs: 10000 });
     return await mapFeedToDiscovered(feed, targetUrl, targetUrl);
   } catch {
     // console.log(`[discovery] Direct parse failed for ${targetUrl}, trying HTML discovery...`);
@@ -38,14 +45,11 @@ export async function discoverFeed(url: string): Promise<DiscoveredFeed> {
 
   // 2. 尝试从 HTML <link> 标签中探测
   try {
-    const response = await fetch(targetUrl, {
-      headers: { "User-Agent": "DigestDesk/1.0" },
-    });
+    const response = await safeFetchText(targetUrl, { headers: HOMEPAGE_HEADERS, timeoutMs: 10000, requireOk: false });
     if (response.ok) {
-      const html = await response.text();
-      const feedUrl = extractFeedUrlFromHtml(html, targetUrl);
+      const feedUrl = extractFeedUrlFromHtml(response.text, response.url);
       if (feedUrl) {
-        const feed = await rssParser.parseURL(feedUrl);
+        const feed = await safeParseRssUrl(rssParser, feedUrl, { headers: RSS_DISCOVERY_HEADERS, timeoutMs: 10000 });
         return await mapFeedToDiscovered(feed, feedUrl, targetUrl);
       }
     }
@@ -60,7 +64,7 @@ export async function discoverFeed(url: string): Promise<DiscoveredFeed> {
   for (const path of commonPaths) {
     const testUrl = `${baseUrl}${path}`;
     try {
-      const feed = await rssParser.parseURL(testUrl);
+      const feed = await safeParseRssUrl(rssParser, testUrl, { headers: RSS_DISCOVERY_HEADERS, timeoutMs: 10000 });
       return await mapFeedToDiscovered(feed, testUrl, baseUrl);
     } catch {
       // ignore
@@ -72,20 +76,15 @@ export async function discoverFeed(url: string): Promise<DiscoveredFeed> {
 
 async function fetchHomepageMetadata(siteUrl: string): Promise<HomepageMetadata> {
   try {
-    const response = await fetch(siteUrl, {
-      headers: { "User-Agent": "DigestDesk/1.0" },
-      redirect: "follow",
-      signal: AbortSignal.timeout(10000),
-    });
+    const response = await safeFetchText(siteUrl, { headers: HOMEPAGE_HEADERS, timeoutMs: 10000, requireOk: false });
 
     if (!response.ok) {
       return { ogImageUrl: "", faviconUrl: "" };
     }
 
-    const html = await response.text();
     return {
-      ogImageUrl: extractOgImageUrl(html, siteUrl),
-      faviconUrl: extractFaviconUrl(html, siteUrl),
+      ogImageUrl: extractOgImageUrl(response.text, response.url),
+      faviconUrl: extractFaviconUrl(response.text, response.url),
     };
   } catch {
     return { ogImageUrl: "", faviconUrl: "" };

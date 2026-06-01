@@ -7,11 +7,12 @@ import { feeds, subscriptions } from "../db/schema.js";
 import { toAppError } from "../sources/app-error.js";
 import { getSubstackAdapter } from "../sources/factory.js";
 import { getRequestUserId } from "../auth/user-context.js";
+import { discoverSearchLimiter } from "../middleware/rate-limit.js";
 
 export const substackRouter = Router();
 const substackAdapter = getSubstackAdapter();
 
-substackRouter.get("/info", async (req, res) => {
+substackRouter.get("/info", discoverSearchLimiter, async (req, res) => {
   const url = z.string().min(1, "参数 url 不能为空").safeParse(req.query.url);
   if (!url.success) {
     res.status(400).json({ error: url.error.issues[0].message });
@@ -28,7 +29,7 @@ substackRouter.get("/info", async (req, res) => {
   }
 });
 
-substackRouter.get("/search", async (req, res) => {
+substackRouter.get("/search", discoverSearchLimiter, async (req, res) => {
   const query = z.string().min(1, "参数 query 不能为空").safeParse(req.query.query);
   if (!query.success) {
     res.status(400).json({ error: query.error.issues[0].message });
@@ -76,7 +77,7 @@ substackRouter.get("/search", async (req, res) => {
   }
 });
 
-substackRouter.get("/reads", async (req, res) => {
+substackRouter.get("/reads", discoverSearchLimiter, async (req, res) => {
   const username = z.string().min(1, "参数 username 不能为空").safeParse(req.query.username);
   if (!username.success) {
     res.status(400).json({ error: username.error.issues[0].message });

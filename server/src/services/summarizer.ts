@@ -406,6 +406,12 @@ export function getMaxInputChars() {
   return Math.floor(raw);
 }
 
+export function getMaxOutputTokens() {
+  const raw = Number(process.env.AI_MAX_OUTPUT_TOKENS ?? 1200);
+  if (!Number.isFinite(raw) || raw <= 0) return 1200;
+  return Math.floor(raw);
+}
+
 type MarkdownBlock = {
   index: number;
   text: string;
@@ -527,10 +533,11 @@ export async function summarizeArticleWithMetadata(
   const promptVersion = getSummaryLanguageProfile(language).promptVersion;
 
   const maxInputChars = getMaxInputChars();
+  const maxOutputTokens = getMaxOutputTokens();
   const input = buildMarkdownSummaryInput(markdown, maxInputChars);
 
   console.log(
-    `[summarizer] Starting AI summary language=${language} model=${primaryModelId} retryModel=${retryModelId} baseURL=${baseURL} inputLength=${markdown.length} sentLength=${input.length} maxInputChars=${maxInputChars}`,
+    `[summarizer] Starting AI summary language=${language} model=${primaryModelId} retryModel=${retryModelId} baseURL=${baseURL} inputLength=${markdown.length} sentLength=${input.length} maxInputChars=${maxInputChars} maxOutputTokens=${maxOutputTokens}`,
   );
 
   let lastError: unknown;
@@ -546,6 +553,7 @@ export async function summarizeArticleWithMetadata(
         system: buildSummarySystemPrompt(language, adapter, attempt > 1),
         prompt: input,
         schema: buildArticleSummaryGenerationSchema(language),
+        maxOutputTokens,
       });
       const result = normalizeSummary(object, language);
       console.log(

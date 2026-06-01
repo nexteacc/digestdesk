@@ -9,6 +9,7 @@ import type { SourceAdapter, SourceType } from "../sources/types.js";
 import { getRequestUserId } from "../auth/user-context.js";
 import { queueInitialDigestForUser } from "../services/initial-digest-trigger.js";
 import { assertCanAddSubscriptions, sendEntitlementError } from "../services/entitlements.js";
+import { discoverSearchLimiter } from "../middleware/rate-limit.js";
 
 interface SourceFeedRouterOptions {
   adapter: SourceAdapter;
@@ -39,7 +40,7 @@ export function createSourceFeedRouter(opts: SourceFeedRouterOptions): Router {
     duplicateErrorEn = "Already subscribed.",
   } = opts;
 
-  router.post("/discover", async (req, res) => {
+  router.post("/discover", discoverSearchLimiter, async (req, res) => {
     const parsed = discoverSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.issues[0].message });

@@ -69,6 +69,8 @@
      - `AI_MODEL`
      - `AI_RETRY_MODEL`（可选；摘要校验失败时的第二次尝试模型）
      - `AI_BASE_URL`
+     - `AI_MAX_INPUT_CHARS`
+     - `AI_MAX_OUTPUT_TOKENS`（摘要最大输出 token；默认 `1200`）
      - `CF_SEARCH_PROXY_URL`
      - `CF_SEARCH_PROXY_TOKEN`
      - `JINA_RPM`
@@ -84,12 +86,15 @@
      - `AI_MODEL`
      - `AI_RETRY_MODEL`（可选；摘要校验失败时的第二次尝试模型）
      - `AI_BASE_URL`
+     - `AI_MAX_INPUT_CHARS`
+     - `AI_MAX_OUTPUT_TOKENS`（摘要最大输出 token；默认 `1200`）
      - `JINA_RPM`
      - `JINA_MAX_CONCURRENCY`
      - `YOUTUBE_API_KEY`（可选；YouTube RSS 不可用时用于读取公开视频和频道更新）
      - `DIGEST_DISPATCH_CRON`
      - `DIGEST_RUN_CRON`
      - `DIGEST_JOB_RUN_LIMIT`
+     - `DIGEST_ACTIVE_USER_WINDOW_DAYS`（仅为最近活跃用户生成日报和后台摘要；默认 `30`）
      - `ENABLE_ARTICLE_SUMMARY_JOBS`（阶段二开关；默认 `false`）
      - `ENABLE_BACKGROUND_FEED_SYNC`（阶段二开关；默认 `false`）
      - `ENABLE_ARTICLE_SUMMARY_BACKFILL`（一次性/灰度 backfill 开关；默认 `false`）
@@ -150,6 +155,8 @@
 - `DIGEST_DISPATCH_CRON=*/15 * * * *`
 - `DIGEST_RUN_CRON=*/5 * * * *`
 - `DIGEST_JOB_RUN_LIMIT=10`
+- `DIGEST_ACTIVE_USER_WINDOW_DAYS=30`
+- `AI_MAX_OUTPUT_TOKENS=1200`
 - `ENABLE_ARTICLE_SUMMARY_JOBS=false` by default; set to `true` only when rolling out phase 2 summary jobs.
 - `ENABLE_BACKGROUND_FEED_SYNC=false` by default; set to `true` only after confirming feed sync capacity.
 - `ENABLE_ARTICLE_SUMMARY_BACKFILL=false` by default; temporarily set to `true` to seed recent existing articles.

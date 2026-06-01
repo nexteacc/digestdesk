@@ -23,11 +23,14 @@ function getFormatter(timeZone: string) {
 function formatParts(date: Date, timeZone: string): TimeZoneParts {
   const parts = getFormatter(timeZone).formatToParts(date);
   const get = (type: string) => Number(parts.find((part) => part.type === type)?.value || "0");
+  // Some ICU builds format local midnight as 24:00 on the same date. Treat it
+  // as 00:00 so zonedTimeToUtc does not accidentally shift the range by a day.
+  const hour = get("hour") % 24;
   return {
     year: get("year"),
     month: get("month"),
     day: get("day"),
-    hour: get("hour"),
+    hour,
     minute: get("minute"),
     second: get("second"),
   };

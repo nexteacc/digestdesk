@@ -10,6 +10,7 @@ import { searchPodcasts, verifyPodcastFeed } from "../services/podcast-discovery
 import { queueInitialDigestForUser } from "../services/initial-digest-trigger.js";
 import { toAppError } from "../sources/app-error.js";
 import { assertCanAddSubscriptions, sendEntitlementError } from "../services/entitlements.js";
+import { discoverSearchLimiter } from "../middleware/rate-limit.js";
 
 const searchSchema = z.object({
   query: z.string().trim().min(1, "请输入播客节目名"),
@@ -34,7 +35,7 @@ function sanitizeUrl(url: string): string {
 export const podcastFeedsRouter = Router();
 const podcastAdapter = getPodcastAdapter();
 
-podcastFeedsRouter.get("/search", async (req, res) => {
+podcastFeedsRouter.get("/search", discoverSearchLimiter, async (req, res) => {
   const parsed = searchSchema.safeParse({ query: req.query.query });
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.issues[0].message });

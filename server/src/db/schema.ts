@@ -1,14 +1,18 @@
 import { pgTable, text, integer, index, uniqueIndex } from "drizzle-orm/pg-core";
 
-export const users = pgTable("users", {
-  id: text("id").primaryKey(),
-  clerkId: text("clerk_id").notNull().unique(),
-  email: text("email").notNull(),
-  name: text("name"),
-  avatarUrl: text("avatar_url"),
-  createdAt: text("created_at").notNull(),
-  lastLoginAt: text("last_login_at").notNull(),
-});
+export const users = pgTable(
+  "users",
+  {
+    id: text("id").primaryKey(),
+    clerkId: text("clerk_id").notNull().unique(),
+    email: text("email").notNull(),
+    name: text("name"),
+    avatarUrl: text("avatar_url"),
+    createdAt: text("created_at").notNull(),
+    lastLoginAt: text("last_login_at").notNull(),
+  },
+  (table) => [index("idx_users_last_login_at").on(table.lastLoginAt)],
+);
 
 export const feeds = pgTable("feeds", {
   id: text("id").primaryKey(),
@@ -79,7 +83,7 @@ export const digests = pgTable("digests", {
   type: text("type", { enum: ["daily"] }).notNull(),
   date: text("date").notNull(), // YYYY-MM-DD
   generatedAt: text("generated_at").notNull(),
-  userId: text("user_id"),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
 });
 
 export const digestItems = pgTable("digest_items", {

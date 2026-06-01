@@ -1,5 +1,6 @@
 import RssParser from "rss-parser";
 import type { SubstackSearchResult } from "../../../shared/types.js";
+import { safeParseRssUrl } from "../sources/safe-fetch.js";
 
 const rssParser = new RssParser({
   timeout: 10000,
@@ -7,6 +8,7 @@ const rssParser = new RssParser({
     "User-Agent": "DigestDesk/1.0 (RSS Reader)",
   },
 });
+const RSS_READER_HEADERS = { "User-Agent": "DigestDesk/1.0 (RSS Reader)" };
 
 export interface SubstackInfo {
   name: string;
@@ -25,7 +27,7 @@ export interface SubstackInfo {
 export async function getSubstackInfo(publicationUrl: string): Promise<SubstackInfo> {
   const feedUrl = publicationUrl.replace(/\/$/, "") + "/feed";
 
-  const feed = await rssParser.parseURL(feedUrl);
+  const feed = await safeParseRssUrl(rssParser, feedUrl, { headers: RSS_READER_HEADERS, timeoutMs: 10000 });
 
   const name = feed.title || "";
   const description = feed.description || "";

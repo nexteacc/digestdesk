@@ -1556,3 +1556,101 @@ Admin 页面相关发现：
 
 - `server/node_modules/.bin/tsc -p server/tsconfig.build.json` 通过。
 - `node_modules/.bin/eslint .` 通过。
+
+---
+
+## 2026-05-31: 开放注册前的安全与成本加固评估（SSRF 优先落地，部分未完成）
+
+### Summary
+
+对各功能模块做了一次代码质量评估。结合产品即将「开放谷歌邮箱登录」的定位，把改进收敛为「安全开放注册所必需的最小集」，而非通用质量改造。本轮先落地 SSRF 出站防护**代码**；其余项（限流、僵尸用户过滤、数据约束、测试）已规划但**未实现**，且本轮 SSRF 改动**尚未编译验证、未提交**（用户在验证前暂停）。
+
+> 状态说明：以上是 `2026-05-31` 暂停时的快照。相关实现已在 `2026-06-01` 收尾，当前状态见下方 Follow-up Actions 和 `2026-06-01` 记录。
+
+### Behavior Contract / 产品定位
+
+- 产品将从邀请制转向开放谷歌登录：任何 Google 账号可自助登录使用。`/api/auth/me` 已支持任意 Clerk 用户首访自动建号，新用户默认 `free`。
+- 订阅上限按用户决定**保持 `free=100` 不变**，不调 `entitlements.ts` 的 `PLAN_LIMITS`。
+- 防护重心据此定为：① 防 SSRF；② 防 AI 成本失控（贵端点限流 + 僵尸用户不烧钱），**不**通过压低正常用户额度来控成本。
+
+### 评估结论（收敛后）
+
+- 实读验证后纠正两处易误判，避免误改正常代码：
+  - `digest-jobs.ts` 的 `runPendingDigestJobs` 任务认领是「条件 UPDATE + 检查 affected rows」乐观锁，并发安全、可支持多实例，**非缺陷**。
+  - `presummarize.ts` 的 `while(true)` 去重循环**不会死循环**：in-flight promise 完成后即从 map 删除，下一轮走自生成分支。
+- 真实风险按开放注册定位排序：SSRF（非盲，`/discover` 回显抓取结果）> 贵端点无限流（可刷爆 AI 账单）> 僵尸用户照常每天烧钱。
+- **明确不做**（避免过度工程化，后续勿当 TODO 重提）：前端 react-query、前端 `strict` 全开、迁移 drizzle-kit、超大组件拆分、抽 `useFeedList` hook、监控告警系统。理由：与「安全开放注册」无关，只扩大改动面与回归风险。
+
+### Changes（本轮仅落地安全项）
+
+- 新增 `server/src/sources/url-guard.ts`：`assertPublicUrl(rawUrl)`，仅允许 http/https，DNS 解析后校验 IP，拒绝 loopback / 私网（10/172.16-31/192.168）/ 链路本地 `169.254.0.0/16`（含云 metadata）/ CGNAT / ULA / `localhost` / `*.local`。失败抛 `AppError`（400，双语，复用 `sources/app-error.ts`）。
+- 接入点（收敛后最小集）：
+  - `rss-discovery.ts`：入口 `targetUrl`、从 HTML 提取的 `feedUrl`、homepage 元数据抓取三处。
+  - `substack.ts` `getSubstackInfo()`：`feedUrl`。
+  - `rss.ts` `syncFeedInternal()`：所有 feed 抓取的**统一兜底拦截点**；命中私网则跳过该 feed、返回 0、记 warn。
+- 判断 `youtube-discovery.ts` **无需改**：`normalizeInputUrl()` 已强制 host 必须是 YouTube 域名。
+
+### 已知边界
+
+- SSRF guard 在 fetch 前按 host 校验，并通过 `safeFetchText()` 禁止客户端自动重定向、逐跳校验重定向目标。仍不在连接时复检 DNS，因此不是对 DNS-rebinding 的硬防护。若引入统一 fetch proxy 再加强。
+
+### Follow-up: Redirect SSRF hardening
+
+- 新增 `server/src/sources/safe-fetch.ts`：使用 `redirect: "manual"` 逐跳处理最多 5 次 HTTP 重定向，每次请求前都执行 `assertPublicUrl()`。
+- RSS 拉取统一改为安全抓取文本后调用 `rssParser.parseString()`，覆盖 RSS 发现、持久化 feed 同步、Substack、播客校验和 YouTube feed。
+- HTML 发现与 homepage 元数据抓取也统一走安全封装。
+- 安全抓取增加 15 秒默认超时和 5 MiB 默认响应体上限。
+- 新增 `safe-fetch.test.ts`，覆盖公网地址重定向到 metadata IP、相对公网重定向、重定向次数上限和响应体大小上限。
+
+### Verification
+
+- `2026-05-31` 暂停时尚未验证。`2026-06-01` 已完成 build、lint、单元测试和 `git diff --check`；部署后仍需通过真实路由做一次公网 RSS 放行与内网 URL 拒绝验收。
+
+### Follow-up Actions
+
+| Action | Owner | Status | Notes |
+|---|---|---|---|
+| SSRF 改动编译验证 + 起服务实测 | AI agent | Partial | build、lint 和 SSRF 单测已完成；部署后补真实路由验收 |
+| 贵端点限流（`express-rate-limit`，按 `req.userId`） | AI agent | Completed | discover/search 30/min，generate 5/min+30/day |
+| 僵尸用户不烧钱（按 `users.lastLoginAt` 过滤） | AI agent | Completed | 已覆盖 `dispatchDigestJobs`、`syncAllFeeds`、summary enqueue/backfill，窗口默认 30 天 |
+| `digests.userId` 补 `NOT NULL` + 外键 | AI agent | Completed | 已清理孤儿并补约束；外键初始化处理 web/scheduler 并发 |
+| 关键纯函数补 vitest + test 脚本 | AI agent | Completed | 已覆盖 SSRF、redirect、配额、timezone、摘要缓存校验 |
+
+### Next Review
+
+- 部署后通过真实路由确认拒绝内网 URL、放行正常公网 RSS。
+- 检查摘要日志出现 `maxOutputTokens=1200`，并按独立开关灰度开启阶段二。
+
+---
+
+## 2026-06-01: 开放注册加固收尾、日报 fallback 事故与输出 token 上限
+
+### Production Review
+
+- `target_date=2026-05-31` 日报调度正常，无 job 积压，但三份日报分别出现 `48/65`、`15/18`、`17/29` 条 fallback。
+- 日志确认 retry 模型请求被 OpenRouter `402` 拒绝：请求未显式设置输出上限，供应商按最多 `65536 tokens` 评估余额。
+- 未修改 `AI_MODEL` 或 `AI_RETRY_MODEL` 名称。新增 `AI_MAX_OUTPUT_TOKENS`，默认 `1200`，并在摘要启动日志输出实际值。
+
+### Safety Completion
+
+- 新增 `safeFetchText()`：逐跳校验重定向目标，阻断公网 URL 跳转到 metadata / loopback 地址。
+- 补齐 IPv6 SSRF 判断：完整拦截 `fe80::/10`、`fc00::/7`、IPv6 multicast、十六进制 IPv4-mapped IPv6 和 IPv4 兼容写法。
+- 修复 ICU 在本地午夜返回 `hour=24` 导致日报范围提前一天的问题，并补上海与纽约 DST 测试。
+- `article_summary_jobs` enqueue 与 backfill 查询加入最近活跃用户过滤，避免共享 feed 为休眠用户语言继续消耗摘要预算。
+- `users.last_login_at` 增加索引。
+- `digests.user_id` 外键改为仅缺失时新增，并处理 web 与 scheduler 并发初始化时的 `duplicate_object`。
+- 新增贵端点按用户限流、`digests.user_id` 数据约束和关键纯函数 vitest。
+
+### Verification
+
+- `pnpm install --lockfile-only --frozen-lockfile` 通过。
+- `pnpm --filter substack-digest-server build` 通过。
+- `pnpm --filter substack-digest-server test` 通过：`35/35`。
+- `pnpm lint` 通过。
+- `git diff --check` 通过。
+
+### Rollout Notes
+
+- 阶段二开关仍默认关闭：`ENABLE_ARTICLE_SUMMARY_JOBS=false`、`ENABLE_BACKGROUND_FEED_SYNC=false`、`ENABLE_ARTICLE_SUMMARY_BACKFILL=false`。
+- 部署后先确认摘要日志出现 `maxOutputTokens=1200`，再重跑受影响的 `2026-05-31` 日报。
+- OpenRouter credits 仍需恢复为正数；输出上限修复用于避免按不必要的 `65536 tokens` 最坏情况提前拒绝请求。

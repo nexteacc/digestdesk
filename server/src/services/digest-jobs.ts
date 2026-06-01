@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, lte } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import pLimit from "p-limit";
 import { getDb } from "../db/index.js";
@@ -11,6 +11,7 @@ import {
 } from "../utils/timezone.js";
 import { executeDailyDigestJob } from "./digest-execution.js";
 import { getUserEntitlement } from "./entitlements.js";
+import { getActiveUserSinceIso } from "./active-users.js";
 
 const JOB_TYPE = "daily_digest" as const;
 const DISPATCH_BACKFILL_DAYS = 3;
@@ -25,12 +26,19 @@ function getRunnerId() {
 
 export async function dispatchDigestJobs(now = new Date()) {
   const db = getDb();
+  // Only dispatch for recently-active users so dormant/abandoned accounts don't
+  // keep burning AI budget every day once sign-up is open.
+  const activeSince = getActiveUserSinceIso(now);
   const allUsers = await db
     .select({ id: users.id, accessStatus: userEntitlements.accessStatus })
     .from(users)
-    .leftJoin(userEntitlements, eq(userEntitlements.userId, users.id));
+    .leftJoin(userEntitlements, eq(userEntitlements.userId, users.id))
+    .where(gte(users.lastLoginAt, activeSince));
   let created = 0;
   let existing = 0;
+  console.log(
+    `[digest-jobs] Dispatch active-user filter activeSince=${activeSince} activeUsers=${allUsers.length}`,
+  );
 
   for (const user of allUsers) {
     if (user.accessStatus === "revoked") {

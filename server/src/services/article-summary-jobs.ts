@@ -11,7 +11,9 @@ import {
   subscriptions,
   userEntitlements,
   userSettings,
+  users,
 } from "../db/schema.js";
+import { getActiveUserSinceIso } from "./active-users.js";
 import { parseDigestLanguage } from "./summary-language-profiles.js";
 import { classifyAiError, summarizeArticleWithMetadata } from "./summarizer.js";
 import { writeArticleSummary } from "./article-summary-cache.js";
@@ -56,6 +58,7 @@ export async function enqueueArticleSummaryJobsForArticles(articleIds: string[],
 
   const db = getDb();
   const now = new Date().toISOString();
+  const activeSince = getActiveUserSinceIso(new Date(now));
   const publishedAfter = new Date(Date.now() - RECENT_ARTICLE_WINDOW_MS).toISOString();
   const rows = await db
     .selectDistinct({
@@ -74,6 +77,7 @@ export async function enqueueArticleSummaryJobsForArticles(articleIds: string[],
         gte(articles.publishedAt, subscriptions.startedAt),
       ),
     )
+    .innerJoin(users, eq(users.id, subscriptions.userId))
     .leftJoin(userEntitlements, eq(userEntitlements.userId, subscriptions.userId))
     .leftJoin(
       userSettings,
@@ -96,6 +100,7 @@ export async function enqueueArticleSummaryJobsForArticles(articleIds: string[],
         gte(articles.publishedAt, publishedAfter),
         sql`${articles.contentText} IS NOT NULL`,
         sql`length(${articles.contentText}) >= ${MIN_CONTENT_LENGTH}`,
+        gte(users.lastLoginAt, activeSince),
         sql`(${userEntitlements.accessStatus} IS NULL OR ${userEntitlements.accessStatus} <> 'revoked')`,
         isNull(articleSummaries.id),
       ),
@@ -175,6 +180,7 @@ export async function enqueueArticleSummaryJobsForArticles(articleIds: string[],
 export async function enqueueRecentArticleSummaryBackfill(options?: { limit?: number; reason?: string; now?: Date }) {
   const db = getDb();
   const now = options?.now ?? new Date();
+  const activeSince = getActiveUserSinceIso(now);
   const publishedAfter = new Date(now.getTime() - RECENT_ARTICLE_WINDOW_MS).toISOString();
   const limit = options?.limit ?? getSummaryJobRunLimit();
 
@@ -182,6 +188,7 @@ export async function enqueueRecentArticleSummaryBackfill(options?: { limit?: nu
     .selectDistinct({ articleId: articles.id })
     .from(articles)
     .innerJoin(subscriptions, and(eq(subscriptions.feedId, articles.feedId), isNull(subscriptions.endedAt)))
+    .innerJoin(users, eq(users.id, subscriptions.userId))
     .leftJoin(userEntitlements, eq(userEntitlements.userId, subscriptions.userId))
     .leftJoin(
       userSettings,
@@ -200,6 +207,7 @@ export async function enqueueRecentArticleSummaryBackfill(options?: { limit?: nu
         gte(articles.publishedAt, subscriptions.startedAt),
         sql`${articles.contentText} IS NOT NULL`,
         sql`length(${articles.contentText}) >= ${MIN_CONTENT_LENGTH}`,
+        gte(users.lastLoginAt, activeSince),
         sql`(${userEntitlements.accessStatus} IS NULL OR ${userEntitlements.accessStatus} <> 'revoked')`,
         isNull(articleSummaries.id),
       ),
