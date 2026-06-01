@@ -63,6 +63,7 @@
 5. 给 `web` 和 `scheduler` 都配置相同的后端环境变量：
    - `web`:
      - `VITE_CLERK_PUBLISHABLE_KEY`
+     - `CLERK_PUBLISHABLE_KEY`
      - `CLERK_SECRET_KEY`
      - `DATABASE_URL` 或 `POSTGRES_CONNECTION_STRING` / `POSTGRES_URI`
      - `AI_API_KEY`
