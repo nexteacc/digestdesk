@@ -179,6 +179,40 @@
 - 后台 summary runner 默认关闭；开启后在现有 `scheduler` 服务内提前消化摘要任务，日报 job 仍保留同步和预摘要兜底
 - recent backfill 独立开关，避免部署代码时立刻扫描既有文章并放大 AI 请求峰值
 
+### 6.1 当前生产灰度状态（2026-06-01）
+
+当前已完成阶段 0 和阶段 1：
+
+- `AI_MAX_OUTPUT_TOKENS=1200`
+- `DIGEST_ACTIVE_USER_WINDOW_DAYS=30`
+- `ENABLE_ARTICLE_SUMMARY_JOBS=true`
+- `ENABLE_BACKGROUND_FEED_SYNC=false`
+- `ENABLE_ARTICLE_SUMMARY_BACKFILL=false`
+- `ARTICLE_SUMMARY_RUN_CRON=*/5 * * * *`
+- `ARTICLE_SUMMARY_JOB_RUN_LIMIT=10`
+- `ARTICLE_SUMMARY_JOB_CONCURRENCY=2`
+
+阶段 1 的目标是先验证 summary runner 本身，不主动扩大抓取范围。进入阶段 2 前，先检查至少一个完整观察窗口：
+
+- summary runner 是否持续按 cron 执行，且无持续失败或积压
+- 日报生成是否正常，fallback、OpenRouter `402`、`summaryCacheMisses` 是否异常
+- `web` 是否持续 HTTP 200，Clerk 鉴权日志是否正常
+
+阶段 1 通过后，阶段 2 仅开启：
+
+- `ENABLE_BACKGROUND_FEED_SYNC=true`
+
+阶段 2 仍保持：
+
+- `ENABLE_ARTICLE_SUMMARY_BACKFILL=false`
+
+阶段 2 开启后观察：
+
+- feed sync 扫描量、due feed 数和抓取耗时
+- 新文章数量、summary job 入队量
+- summary runner 的 `claimed`、`succeeded`、`failed`
+- OpenRouter `402`、重试量和摘要缓存命中率
+
 ## 7. 当前适用范围
 
 阶段一目标：

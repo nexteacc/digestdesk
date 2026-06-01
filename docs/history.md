@@ -1654,3 +1654,29 @@ Admin 页面相关发现：
 - 阶段二开关仍默认关闭：`ENABLE_ARTICLE_SUMMARY_JOBS=false`、`ENABLE_BACKGROUND_FEED_SYNC=false`、`ENABLE_ARTICLE_SUMMARY_BACKFILL=false`。
 - 部署后先确认摘要日志出现 `maxOutputTokens=1200`，再重跑受影响的 `2026-05-31` 日报。
 - OpenRouter credits 仍需恢复为正数；输出上限修复用于避免按不必要的 `65536 tokens` 最坏情况提前拒绝请求。
+
+### Production Rollout: Stage 0 and Stage 1 Completed
+
+同日完成生产灰度的阶段 0 和阶段 1。数据库复合索引优化暂缓，不属于本次发布。
+
+阶段 0 验收：
+
+- `web` 和 `scheduler` 均配置 `AI_MAX_OUTPUT_TOKENS=1200`。
+- `scheduler` 配置 `DIGEST_ACTIVE_USER_WINDOW_DAYS=30`。
+- 部署检查发现 `web` 仅有前端 `VITE_CLERK_PUBLISHABLE_KEY`，服务端 `clerkMiddleware()` 缺少同值的 `CLERK_PUBLISHABLE_KEY`。已补齐生产变量，并同步更新 `.env.web.example` 与 `docs/operations.md`。
+- `web` 数据库初始化成功，公开站点返回 HTTP 200；Clerk 中间件可正常识别未登录请求。
+- `scheduler` 数据库初始化成功，日报 dispatcher 正常扫描最近活跃用户。最近一轮日志为 `activeUsers=7`：5 个唯一用户进入日报扫描，2 个唯一 revoked 用户被跳过，无重复用户。
+
+阶段 1 验收：
+
+- 仅在 `scheduler` 开启 `ENABLE_ARTICLE_SUMMARY_JOBS=true`。
+- 保持 `ENABLE_BACKGROUND_FEED_SYNC=false`、`ENABLE_ARTICLE_SUMMARY_BACKFILL=false`。
+- 灰度参数为 `ARTICLE_SUMMARY_RUN_CRON=*/5 * * * *`、`ARTICLE_SUMMARY_JOB_RUN_LIMIT=10`、`ARTICLE_SUMMARY_JOB_CONCURRENCY=2`。
+- 新 scheduler 单实例已替换旧实例，启动日志明确显示 `articleSummaryJobsEnabled=true`、`backgroundFeedSyncEnabled=false`、`articleSummaryBackfillEnabled=false`。
+- summary runner 已完成 startup catch-up，并在 `12:00Z`、`12:05Z`、`12:10Z` 按计划执行 scheduled tick；当前均为 `claimed=0 succeeded=0 skipped=0 failed=0`。这表示 runner 已正常工作，但暂时没有新任务，因此尚无真实 AI 摘要质量样本。
+
+下一步：
+
+- `2026-06-02` 先检查阶段 1 过夜日志和新生成日报质量，不直接假设阶段 2 可以开启。
+- 阶段 1 无异常后，再开启 `ENABLE_BACKGROUND_FEED_SYNC=true` 进入阶段 2；`ENABLE_ARTICLE_SUMMARY_BACKFILL` 继续保持 `false`。
+- 阶段 2 开启后观察 feed sync 扫描量、due feed 数、新文章数、summary job 入队量、runner 成功/失败量、OpenRouter 402 和摘要缓存命中率。
