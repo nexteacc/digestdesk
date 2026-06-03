@@ -1753,6 +1753,7 @@ Admin 页面相关发现：
 - Zeabur `web` 部署 `6a20632dd1b851e4629864cf` 已进入 `RUNNING`，旧 web 实例已移除；线上搜索效果仍待用真实登录态验证。
 - 公开首页健康检查返回 HTTP 200，响应 `last-modified=2026-06-03T17:26:08Z`，Clerk 未登录识别正常。
 - `docs/operations.md` 已按代码实际读取的 env 补齐可选变量清单。生产 Zeabur 变量完整核对需读取服务变量列表；该操作会暴露密钥值，必须在获得明确授权后执行，且核对时只记录变量名/状态，不输出值。
-- 后续 docs-only 提交 `2dc26ac Align operations docs with runtime envs` 已推送到 `main`，但触发的 Zeabur `web` 部署 `6a2064ccd1b851e462986593` 失败；构建日志显示 Vite/server build 均成功并已完成镜像上传，失败点在部署/运行接管阶段，且 Zeabur 未生成该部署的 runtime log 文件。当前生产仍运行上一版成功部署 `6a20632dd1b851e4629864cf`；复查公开首页仍为 HTTP 200，`last-modified=2026-06-03T17:26:08Z`。
+- 后续 docs-only 提交 `2dc26ac Align operations docs with runtime envs` 已推送到 `main`，并触发 Zeabur `web` 部署 `6a2064ccd1b851e462986593`；该部署一度显示为失败/缺少 runtime log，随后进入 `RUNNING`，旧部署 `6a20632dd1b851e4629864cf` 已移除。构建日志显示 Vite/server build 均成功。复查公开首页仍为 HTTP 200，`last-modified=2026-06-03T17:26:08Z`。
+- docs-only 提交仍会触发 web 自动部署；记录生产状态时必须以 Zeabur 最新 deployment list 和生产健康检查为准，避免把中间态写成最终态。
 - 部署后用中英文播客关键词各测一次，观察 `rawCandidates`、`deduped`、`verified` 日志。
 - 若搜索覆盖仍不足，再接入 Podcast Index 作为第二 provider。
