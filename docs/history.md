@@ -1680,3 +1680,43 @@ Admin 页面相关发现：
 - `2026-06-02` 先检查阶段 1 过夜日志和新生成日报质量，不直接假设阶段 2 可以开启。
 - 阶段 1 无异常后，再开启 `ENABLE_BACKGROUND_FEED_SYNC=true` 进入阶段 2；`ENABLE_ARTICLE_SUMMARY_BACKFILL` 继续保持 `false`。
 - 阶段 2 开启后观察 feed sync 扫描量、due feed 数、新文章数、summary job 入队量、runner 成功/失败量、OpenRouter 402 和摘要缓存命中率。
+
+---
+
+## 2026-06-03: Stage 2 Background Feed Sync Gray Release
+
+### Production Review
+
+- `scheduler` 当前生产部署持续运行，`web` 首页返回 HTTP 200，Clerk 中间件可正常识别未登录访问。
+- `scheduler` 日志在 `2026-06-03 05:10Z-08:15Z` 窗口内稳定 tick：
+  - digest runner 与 summary runner 均为 `claimed=0 succeeded=0 skipped=0 failed=0`。
+  - summary job scan 持续为 `candidates=0`，说明阶段 1 runner 存活但暂无待处理摘要任务。
+  - dispatcher 每 15 分钟扫描，最新为 `activeUsers=6`、`scannedUsers=6 created=0 existing=12`。
+  - 2 个 revoked 用户被跳过，没有看到重复创建任务、失败积压或 OpenRouter `402` 日志。
+
+### Stage 2 Change
+
+- 仅在 Zeabur `scheduler` 服务开启 `ENABLE_BACKGROUND_FEED_SYNC=true`。
+- `ENABLE_ARTICLE_SUMMARY_JOBS=true` 保持开启。
+- `ENABLE_ARTICLE_SUMMARY_BACKFILL=false` 保持关闭。
+- 本阶段目标是验证“后台 feed sync -> 新文章入库 -> 小批量 article summary jobs 入队 -> summary runner 可控处理/失败”的链路，不补历史文章。
+
+### Expected Signals
+
+- 正常有新文章时：
+  - `[rss] Starting sync job ... toSync=...`
+  - `[summary-jobs] Enqueue complete ... created=... existing=... requeued=...`
+  - `[summary-jobs] Runner candidate scan ... candidates=...`
+  - `[scheduler] Summary runner ... claimed=... succeeded=... failed=...`
+- 如果 OpenRouter credit 仍不足，预期失败应小批量、可解释：
+  - `aiErrorCategory=quota_or_billing` 或 OpenRouter `402`
+  - `failed` 可以出现，但不能持续失控增长
+  - `ENABLE_ARTICLE_SUMMARY_BACKFILL=false` 应保证不会批量重跑历史摘要
+
+### Next Review
+
+- `2026-06-04` 检查阶段 2 过夜日志。
+- 优先确认新部署启动日志中 `backgroundFeedSyncEnabled=true`。
+- 检查 feed sync 扫描量、due feed 数、抓取耗时、新文章数、summary job 入队数。
+- 检查 summary runner 的 `claimed/succeeded/failed`、OpenRouter `402`、重试量和摘要缓存命中率。
+- 若余额不足导致失败，先确认失败是否受 `ARTICLE_SUMMARY_JOB_RUN_LIMIT=10` 与 `ARTICLE_SUMMARY_JOB_CONCURRENCY=2` 控制，再决定是否充值或暂停阶段 2。
