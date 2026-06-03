@@ -1701,6 +1701,13 @@ Admin 页面相关发现：
 - `ENABLE_ARTICLE_SUMMARY_BACKFILL=false` 保持关闭。
 - 本阶段目标是验证“后台 feed sync -> 新文章入库 -> 小批量 article summary jobs 入队 -> summary runner 可控处理/失败”的链路，不补历史文章。
 
+### Activation Verification
+
+- 推送文档提交后触发新的 `scheduler` 部署 `6a1fe3bc43208a2c509fab82`。
+- 新部署已进入 `RUNNING`，旧 scheduler 实例已移除。
+- 启动日志确认：`articleSummaryJobsEnabled=true`、`backgroundFeedSyncEnabled=true`、`articleSummaryBackfillEnabled=false`。
+- scheduler 启动时不会立即执行 feed sync；feed sync 只按 `FEED_SYNC_CRON` 运行，当前为 `0 */4 * * *`。
+
 ### Expected Signals
 
 - 正常有新文章时：
