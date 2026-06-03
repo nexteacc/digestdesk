@@ -1749,5 +1749,9 @@ Admin 页面相关发现：
 
 ### Follow-up
 
+- 代码已推送到 `main`：`cebb4f0 Support multi-region Apple podcast search`。
+- Zeabur `web` 部署 `6a20632dd1b851e4629864cf` 已进入 `RUNNING`，旧 web 实例已移除；线上搜索效果仍待用真实登录态验证。
+- 公开首页健康检查返回 HTTP 200，响应 `last-modified=2026-06-03T17:26:08Z`，Clerk 未登录识别正常。
+- `docs/operations.md` 已按代码实际读取的 env 补齐可选变量清单。生产 Zeabur 变量完整核对需读取服务变量列表；该操作会暴露密钥值，必须在获得明确授权后执行，且核对时只记录变量名/状态，不输出值。
 - 部署后用中英文播客关键词各测一次，观察 `rawCandidates`、`deduped`、`verified` 日志。
 - 若搜索覆盖仍不足，再接入 Podcast Index 作为第二 provider。

@@ -66,10 +66,12 @@
      - `CLERK_PUBLISHABLE_KEY`
      - `CLERK_SECRET_KEY`
      - `DATABASE_URL` 或 `POSTGRES_CONNECTION_STRING` / `POSTGRES_URI`
+     - `CORS_ALLOWED_ORIGINS`（可选；除 `APP_URL` 外额外允许的前端 origin，逗号分隔）
      - `AI_API_KEY`
      - `AI_MODEL`
      - `AI_RETRY_MODEL`（可选；摘要校验失败时的第二次尝试模型）
      - `AI_BASE_URL`
+     - `AI_SUMMARY_CONCURRENCY`（可选；摘要并发，默认 `3`）
      - `AI_MAX_INPUT_CHARS`
      - `AI_MAX_OUTPUT_TOKENS`（摘要最大输出 token；默认 `1200`）
      - `CF_SEARCH_PROXY_URL`
@@ -80,14 +82,20 @@
      - `PODCAST_APPLE_COUNTRIES`（可选；Apple 播客搜索地区，默认 `auto`）
      - `APP_URL`
      - `ADMIN_EMAILS`
+     - `ADMIN_OPERATIONS_TIMEZONE`（可选；Admin 运行状态日期口径，默认 `Asia/Shanghai`）
      - `VITE_ENABLE_GOOGLE_YOUTUBE_IMPORT`
      - `ENABLE_GOOGLE_YOUTUBE_IMPORT`
+     - `INITIAL_DIGEST_DEBOUNCE_MS`（可选；新增订阅后初始日报防抖，默认 `30000`）
+     - `RATE_LIMIT_DISCOVER_PER_MIN`（可选；发现/搜索接口限流，默认 `30`）
+     - `RATE_LIMIT_GENERATE_PER_MIN`（可选；日报生成分钟限流，默认 `5`）
+     - `RATE_LIMIT_GENERATE_PER_DAY`（可选；日报生成日限流，默认 `30`）
    - `scheduler`:
      - `DATABASE_URL` 或 `POSTGRES_CONNECTION_STRING` / `POSTGRES_URI`
      - `AI_API_KEY`
      - `AI_MODEL`
      - `AI_RETRY_MODEL`（可选；摘要校验失败时的第二次尝试模型）
      - `AI_BASE_URL`
+     - `AI_SUMMARY_CONCURRENCY`（可选；摘要并发，默认 `3`）
      - `AI_MAX_INPUT_CHARS`
      - `AI_MAX_OUTPUT_TOKENS`（摘要最大输出 token；默认 `1200`）
      - `JINA_RPM`
@@ -97,8 +105,11 @@
      - `DIGEST_RUN_CRON`
      - `DIGEST_JOB_RUN_LIMIT`
      - `DIGEST_ACTIVE_USER_WINDOW_DAYS`（仅为最近活跃用户生成日报和后台摘要；默认 `30`）
+     - `ENABLE_SCHEDULER_SERVICE`（可选；设为 `false` 时禁用 scheduler，默认启用）
      - `ENABLE_ARTICLE_SUMMARY_JOBS`（阶段二开关；默认 `false`）
      - `ENABLE_BACKGROUND_FEED_SYNC`（阶段二开关；默认 `false`）
+     - `FEED_SYNC_CRON`（后台 feed sync cron，默认 `0 */4 * * *`）
+     - `FEED_SYNC_FRESHNESS_WINDOW_MS`（feed sync 新鲜度窗口，默认 `14400000`）
      - `ENABLE_ARTICLE_SUMMARY_BACKFILL`（一次性/灰度 backfill 开关；默认 `false`）
      - `ARTICLE_SUMMARY_RUN_CRON`
      - `ARTICLE_SUMMARY_JOB_RUN_LIMIT`
