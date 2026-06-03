@@ -77,6 +77,7 @@
      - `JINA_RPM`
      - `JINA_MAX_CONCURRENCY`
      - `YOUTUBE_API_KEY`（可选；YouTube RSS 不可用时用于读取公开视频和频道更新）
+     - `PODCAST_APPLE_COUNTRIES`（可选；Apple 播客搜索地区，默认 `auto`）
      - `APP_URL`
      - `ADMIN_EMAILS`
      - `VITE_ENABLE_GOOGLE_YOUTUBE_IMPORT`
@@ -113,6 +114,7 @@
 
 - 主站先上线时，将 `VITE_ENABLE_GOOGLE_YOUTUBE_IMPORT=false`
 - 同时将 `ENABLE_GOOGLE_YOUTUBE_IMPORT=false`
+- 播客搜索默认使用 `PODCAST_APPLE_COUNTRIES=auto`，后端会展开为 `us,cn,tw,hk,sg,gb,ca,au` 多地区搜索；订阅后的更新仍然只依赖播客 RSS。
 - `ADMIN_EMAILS` 只配置在 `web` 服务，例如 `founder@example.com,ops@example.com`
 - `/admin` 页面复用 Clerk 登录；后端只允许 `ADMIN_EMAILS` 中的邮箱访问 `/api/admin`
 - 这样可以先发布 Digest / RSS / Substack / 手动添加 YouTube 频道能力

@@ -1727,3 +1727,27 @@ Admin 页面相关发现：
 - 检查 feed sync 扫描量、due feed 数、抓取耗时、新文章数、summary job 入队数。
 - 检查 summary runner 的 `claimed/succeeded/failed`、OpenRouter `402`、重试量和摘要缓存命中率。
 - 若余额不足导致失败，先确认失败是否受 `ARTICLE_SUMMARY_JOB_RUN_LIMIT=10` 与 `ARTICLE_SUMMARY_JOB_CONCURRENCY=2` 控制，再决定是否充值或暂停阶段 2。
+
+---
+
+## 2026-06-04: Apple Podcast Multi-Region Search
+
+### Decision
+
+- 先增强现有 Apple iTunes Search，不引入新 podcast provider。
+- Apple `country` 参数一次请求只能指定单个地区；不传时默认偏 US，不是全球搜索。
+- DigestDesk 将 `PODCAST_APPLE_COUNTRIES=auto` 作为后端通用搜索配置，展开为 `us,cn,tw,hk,sg,gb,ca,au`。
+- Podcast Index 暂不接入本轮；后续作为 Apple 之外的目录补充源评估。
+
+### Implementation Notes
+
+- 播客搜索仍发生在 `web` 服务的 `/api/podcast-feeds/search`。
+- 后端对多个 Apple country 并发搜索，合并后按 `feedUrl` 去重。
+- 最多校验 18 个候选 RSS，避免一次搜索放大为过多 RSS 请求。
+- 前端返回结构保持 `PodcastSearchResult[]`，不需要前端改动。
+- 用户订阅后仍保存 RSS `feedUrl`；后续更新继续由 scheduler 的 RSS sync 处理，Apple 不参与日常同步。
+
+### Follow-up
+
+- 部署后用中英文播客关键词各测一次，观察 `rawCandidates`、`deduped`、`verified` 日志。
+- 若搜索覆盖仍不足，再接入 Podcast Index 作为第二 provider。
