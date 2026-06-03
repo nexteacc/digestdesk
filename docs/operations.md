@@ -116,6 +116,7 @@
      - `ARTICLE_SUMMARY_JOB_CONCURRENCY`
      - `ARTICLE_SUMMARY_RETRY_BASE_DELAY_MS`
      - `ARTICLE_SUMMARY_BACKFILL_LIMIT`
+   - 生产变量完整核对需要读取 Zeabur service variables；该接口会返回 secret 值。核对时只能记录变量名和是否存在，不得复制、输出或写入 secret 值。
 6. 仅给 `web` 绑定公开域名。
 7. `scheduler` 不需要域名，不对外暴露 HTTP。
 8. `scheduler` 初始保持单实例。
