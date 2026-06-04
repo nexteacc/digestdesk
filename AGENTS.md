@@ -1,7 +1,7 @@
 # AGENTS.md
 
 ## Scope
-DigestDesk is a React/Vite + Express/Postgres reading workflow app. Keep this file for agent-only operating rules; use README and docs as the human-facing source of truth.
+DigestDesk is a React/Vite + Express/Postgres reading workflow app. Keep this file for agent-only operating rules; use docs/context.md, docs/operations.md, and docs/history.md as the human-facing source of truth.
 
 ## Commands
 Use pnpm: `pnpm dev`, `pnpm build`, `pnpm --filter substack-digest-server build`, `pnpm --filter substack-digest-server dev`, `pnpm --filter substack-digest-server dev:scheduler`, `pnpm --filter substack-digest-server smoke:structured-output`, `pnpm lint`.
@@ -19,7 +19,6 @@ Server unit tests use vitest: `pnpm --filter substack-digest-server test` (test 
 - Keep the subject concise, then use 3-6 body bullets when the change affects scheduling, digest generation, model routing, deployment, or monitoring.
 
 ## Docs Map
-- Human entry point: `README.md`
 - AI system context, invariants, data boundaries, API chains: `docs/context.md`
 - Deployment, scheduler, env vars: `docs/operations.md`
 - Project history, diagnostics, decisions, and follow-up checks: `docs/history.md`
