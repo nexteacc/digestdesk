@@ -466,7 +466,7 @@ export default function AdminPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-6xl pb-12">
+      <div className="pb-12">
         <Card className="flex min-h-[320px] items-center justify-center border-border bg-card/70 shadow-sm">
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -497,7 +497,7 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-7 pb-12">
+    <div className="space-y-7 pb-12">
       <div className="flex flex-col gap-5">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>

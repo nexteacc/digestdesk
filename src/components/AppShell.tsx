@@ -73,7 +73,7 @@ export default function AppShell({ children }: PropsWithChildren) {
         "relative overflow-hidden transition-[max-height,opacity,border-color,box-shadow] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
         isZen ? "max-h-0 opacity-0 border-none" : "max-h-[140px] md:max-h-[100px] opacity-100 hairline"
       )}>
-        <div className="mx-auto max-w-6xl px-4 py-3 md:px-6 md:py-4">
+        <div className="app-shell-container py-3 md:py-4">
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 md:flex-nowrap md:gap-4">
             <h1 className="min-w-0 text-2xl md:text-3xl font-semibold leading-none">
               <Link href="/">
@@ -176,7 +176,7 @@ export default function AppShell({ children }: PropsWithChildren) {
       </div>
 
       <div className={cn(
-        "mx-auto max-w-6xl px-4 transition-[padding] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
+        "app-shell-container transition-[padding] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
         "py-4 md:py-6"
       )}>
         <div className={cn(

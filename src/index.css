@@ -150,6 +150,25 @@ Design reminder (commitment):
   box-shadow: inset 0 -1px 0 oklch(0.84 0.01 95);
 }
 
+.app-shell-container {
+  width: 100%;
+  max-width: 84rem;
+  margin-inline: auto;
+  padding-inline: 1rem;
+}
+
+@media (min-width: 48rem) {
+  .app-shell-container {
+    padding-inline: 1.5rem;
+  }
+}
+
+@media (min-width: 80rem) {
+  .app-shell-container {
+    padding-inline: 2rem;
+  }
+}
+
 /* Zen Mode Transitions & Animations */
 :root {
   --zen-duration: 400ms;
