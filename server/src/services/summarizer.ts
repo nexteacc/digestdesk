@@ -1,12 +1,16 @@
 import { generateObject, type LanguageModel } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import Bottleneck from "bottleneck";
 import { z } from "zod";
 import type { DigestLanguage } from "../../../shared/types.js";
 import { getSummaryLanguageProfile } from "./summary-language-profiles.js";
 
 const _cachedModels = new Map<string, LanguageModel>();
+const _requestLimiters = new Map<string, Bottleneck>();
 const DEFAULT_MODEL = "gpt-4o-mini";
-const DEFAULT_OPENROUTER_RETRY_MODEL = "qwen/qwen3.5-flash-02-23";
+const DEFAULT_GEMINI_REQUESTS_PER_MINUTE = 8;
+const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 60_000;
+let rateLimitBlockedUntil = 0;
 
 type ModelPromptProfile = "editorial" | "strict-json";
 
@@ -68,8 +72,42 @@ class SummaryValidationError extends Error {
   }
 }
 
+class AiRateLimitCircuitOpenError extends Error {
+  constructor(blockedUntil: number) {
+    super(`AI rate limit circuit open until ${new Date(blockedUntil).toISOString()}`);
+    this.name = "AiRateLimitCircuitOpenError";
+  }
+}
+
+function getAiErrorText(error: unknown): string {
+  const values: string[] = [];
+  const seen = new Set<unknown>();
+
+  function visit(value: unknown) {
+    if (value === null || value === undefined || seen.has(value)) return;
+    if (typeof value === "string" || typeof value === "number") {
+      values.push(String(value));
+      return;
+    }
+    if (typeof value !== "object") return;
+    seen.add(value);
+
+    const record = value as Record<string, unknown>;
+    for (const key of ["name", "message", "code", "status", "statusCode", "responseBody"]) {
+      visit(record[key]);
+    }
+    visit(record.cause);
+    visit(record.lastError);
+    visit(record.errors);
+    if (Array.isArray(value)) value.forEach(visit);
+  }
+
+  visit(error);
+  return values.join(" ").toLowerCase();
+}
+
 export function classifyAiError(error: unknown): AiErrorCategory {
-  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  const message = getAiErrorText(error);
 
   if (message.includes("quota") || message.includes("billing")) return "quota";
   if (message.includes("rate limit") || message.includes("too many requests") || message.includes("429")) {
@@ -183,13 +221,55 @@ function getPrimaryModelId() {
   return process.env.AI_MODEL || DEFAULT_MODEL;
 }
 
-function getRetryModelId(primaryModelId: string, baseURL: string) {
-  const configured = process.env.AI_RETRY_MODEL?.trim();
-  if (configured) return configured;
-  if (baseURL.includes("openrouter.ai") && primaryModelId !== DEFAULT_OPENROUTER_RETRY_MODEL) {
-    return DEFAULT_OPENROUTER_RETRY_MODEL;
+export function getSummaryAttemptModelIds(primaryModelId: string, configuredRetryModel = process.env.AI_RETRY_MODEL) {
+  const retryModelId = configuredRetryModel?.trim();
+  if (!retryModelId || retryModelId === primaryModelId) return [primaryModelId];
+  return [primaryModelId, retryModelId];
+}
+
+function getAiRequestsPerMinute(baseURL: string) {
+  const configured = Number(process.env.AI_REQUESTS_PER_MINUTE);
+  if (Number.isFinite(configured) && configured > 0) return Math.floor(configured);
+  if (baseURL.includes("generativelanguage.googleapis.com")) return DEFAULT_GEMINI_REQUESTS_PER_MINUTE;
+  return 0;
+}
+
+function getRequestLimiter(baseURL: string) {
+  const requestsPerMinute = getAiRequestsPerMinute(baseURL);
+  if (requestsPerMinute <= 0) return null;
+  const cacheKey = `${baseURL}:${requestsPerMinute}`;
+  const cached = _requestLimiters.get(cacheKey);
+  if (cached) return cached;
+
+  const limiter = new Bottleneck({
+    maxConcurrent: 1,
+    minTime: Math.ceil(60_000 / requestsPerMinute),
+    reservoir: requestsPerMinute,
+    reservoirRefreshAmount: requestsPerMinute,
+    reservoirRefreshInterval: 60_000,
+  });
+  _requestLimiters.set(cacheKey, limiter);
+  console.log(`[summarizer] Request limiter enabled baseURL=${baseURL} rpm=${requestsPerMinute}`);
+  return limiter;
+}
+
+function getRateLimitCooldownMs(error: unknown) {
+  const message = getAiErrorText(error);
+  const retrySeconds = message.match(/retry(?:\s+in|delay["']?\s*[:=])\s*["']?(\d+(?:\.\d+)?)\s*s/i)?.[1];
+  if (retrySeconds) return Math.max(1_000, Math.ceil(Number(retrySeconds) * 1_000));
+  const configured = Number(process.env.AI_RATE_LIMIT_COOLDOWN_MS);
+  if (Number.isFinite(configured) && configured > 0) return Math.floor(configured);
+  return DEFAULT_RATE_LIMIT_COOLDOWN_MS;
+}
+
+function assertRateLimitCircuitClosed() {
+  if (Date.now() < rateLimitBlockedUntil) {
+    throw new AiRateLimitCircuitOpenError(rateLimitBlockedUntil);
   }
-  return primaryModelId;
+}
+
+function openRateLimitCircuit(error: unknown) {
+  rateLimitBlockedUntil = Math.max(rateLimitBlockedUntil, Date.now() + getRateLimitCooldownMs(error));
 }
 
 function getModelAdapter(modelId: string) {
@@ -529,7 +609,8 @@ export async function summarizeArticleWithMetadata(
 ): Promise<ArticleSummaryResult> {
   const baseURL = process.env.AI_BASE_URL || "https://api.openai.com/v1";
   const primaryModelId = getPrimaryModelId();
-  const retryModelId = getRetryModelId(primaryModelId, baseURL);
+  const attemptModelIds = getSummaryAttemptModelIds(primaryModelId);
+  const retryModelId = attemptModelIds[1] ?? "none";
   const promptVersion = getSummaryLanguageProfile(language).promptVersion;
 
   const maxInputChars = getMaxInputChars();
@@ -541,20 +622,27 @@ export async function summarizeArticleWithMetadata(
   );
 
   let lastError: unknown;
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
-    const attemptModelId = attempt === 1 ? primaryModelId : retryModelId;
+  for (let attemptIndex = 0; attemptIndex < attemptModelIds.length; attemptIndex += 1) {
+    const attempt = attemptIndex + 1;
+    const attemptModelId = attemptModelIds[attemptIndex];
     const adapter = getModelAdapter(attemptModelId);
     const model = getModel(attemptModelId);
 
     try {
       options?.onAttempt?.(attempt);
-      const { object } = await generateObject({
-        model,
-        system: buildSummarySystemPrompt(language, adapter, attempt > 1),
-        prompt: input,
-        schema: buildArticleSummaryGenerationSchema(language),
-        maxOutputTokens,
-      });
+      const request = () => {
+        assertRateLimitCircuitClosed();
+        return generateObject({
+          model,
+          system: buildSummarySystemPrompt(language, adapter, attempt > 1),
+          prompt: input,
+          schema: buildArticleSummaryGenerationSchema(language),
+          maxOutputTokens,
+          maxRetries: 0,
+        });
+      };
+      const limiter = getRequestLimiter(baseURL);
+      const { object } = limiter ? await limiter.schedule(request) : await request();
       const result = normalizeSummary(object, language);
       console.log(
         `[summarizer] AI summary complete attempt=${attempt} model=${attemptModelId}. One-liner: ${result.oneLiner.slice(0, 50)}...`,
@@ -570,7 +658,10 @@ export async function summarizeArticleWithMetadata(
     } catch (err) {
       lastError = err;
       const meta = summarizeErrorMeta(err);
-      if (attempt < 2 && shouldRetrySummaryGeneration(err)) {
+      if (meta.category === "rate_limit" && !(err instanceof AiRateLimitCircuitOpenError)) {
+        openRateLimitCircuit(err);
+      }
+      if (attemptIndex + 1 < attemptModelIds.length && shouldRetrySummaryGeneration(err)) {
         console.warn("[summarizer] AI summary failed validation; retrying once:", {
           ...meta,
           model: attemptModelId,

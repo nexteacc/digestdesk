@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { parseCachedArticleSummary } from "./summarizer.js";
+import {
+  classifyAiError,
+  getSummaryAttemptModelIds,
+  parseCachedArticleSummary,
+} from "./summarizer.js";
 
 /**
  * Guards the cache-quality contract from the 2026-05-26 incident: a structurally
@@ -51,5 +55,35 @@ describe("parseCachedArticleSummary", () => {
   it("rejects malformed input shapes", () => {
     expect(parseCachedArticleSummary({ foo: "bar" }, "zh")).toBeNull();
     expect(parseCachedArticleSummary(null, "zh")).toBeNull();
+  });
+});
+
+describe("getSummaryAttemptModelIds", () => {
+  it("uses only the primary model when no retry model is configured", () => {
+    expect(getSummaryAttemptModelIds("gemini-3.6-flash", undefined)).toEqual(["gemini-3.6-flash"]);
+  });
+
+  it("does not retry with the same model", () => {
+    expect(getSummaryAttemptModelIds("gemini-3.6-flash", "gemini-3.6-flash")).toEqual([
+      "gemini-3.6-flash",
+    ]);
+  });
+
+  it("uses an explicitly different retry model", () => {
+    expect(getSummaryAttemptModelIds("gemini-3.6-flash", "gemini-3.5-flash-lite")).toEqual([
+      "gemini-3.6-flash",
+      "gemini-3.5-flash-lite",
+    ]);
+  });
+});
+
+describe("classifyAiError", () => {
+  it("detects a nested Gemini rate limit error", () => {
+    const error = new Error("Failed after 1 attempt");
+    error.cause = Object.assign(new Error("RESOURCE_EXHAUSTED: Too Many Requests"), {
+      statusCode: 429,
+    });
+
+    expect(classifyAiError(error)).toBe("rate_limit");
   });
 });
