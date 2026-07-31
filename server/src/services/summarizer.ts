@@ -224,6 +224,9 @@ function getModel(modelId: string) {
     },
   });
 
+  if (baseURL.includes("api.deepseek.com")) {
+    console.log(`[summarizer] DeepSeek adapter enabled model=${modelId} thinking=disabled responseFormat=json_object`);
+  }
   const model = provider.chatModel(modelId);
   _cachedModels.set(cacheKey, model);
   return model;
