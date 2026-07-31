@@ -3,6 +3,7 @@ import {
   classifyAiError,
   getSummaryAttemptModelIds,
   parseCachedArticleSummary,
+  transformProviderRequestBody,
 } from "./summarizer.js";
 
 /**
@@ -85,5 +86,32 @@ describe("classifyAiError", () => {
     });
 
     expect(classifyAiError(error)).toBe("rate_limit");
+  });
+
+  it("prioritizes HTTP 429 over quota wording", () => {
+    const error = Object.assign(new Error("You exceeded your current quota"), {
+      statusCode: 429,
+    });
+
+    expect(classifyAiError(error)).toBe("rate_limit");
+  });
+
+  it("detects an exhausted provider balance as quota", () => {
+    expect(classifyAiError(new Error("Insufficient balance"))).toBe("quota");
+  });
+});
+
+describe("transformProviderRequestBody", () => {
+  it("forces DeepSeek non-thinking JSON object mode", () => {
+    expect(
+      transformProviderRequestBody("https://api.deepseek.com", {
+        model: "deepseek-v4-flash",
+        response_format: { type: "json_schema", json_schema: { name: "summary" } },
+      }),
+    ).toEqual({
+      model: "deepseek-v4-flash",
+      thinking: { type: "disabled" },
+      response_format: { type: "json_object" },
+    });
   });
 });

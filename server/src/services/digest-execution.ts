@@ -35,7 +35,10 @@ export async function executeDailyDigestJob(
   await presummarizeForUser(userId, targetDate, { executionId });
 
   // Step 3: Assemble and persist the digest (reads from cache, no AI calls)
-  const digestId = await generateDaily(userId, targetDate, { executionId });
+  const digestId = await generateDaily(userId, targetDate, {
+    executionId,
+    allowAiSummaryGeneration: false,
+  });
   console.log(
     `[digest-execution] Complete executionId=${executionId} user=${userId} targetDate=${targetDate ?? "auto"} digestId=${digestId || "empty"} durationMs=${Date.now() - startedAt}`,
   );

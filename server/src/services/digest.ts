@@ -36,7 +36,7 @@ const _userQueues = new Map<string, Promise<string | void>>();
 export function generateDaily(
   userId: string,
   date?: string,
-  options?: { executionId?: string },
+  options?: { executionId?: string; allowAiSummaryGeneration?: boolean },
 ): Promise<string> {
   const prev = _userQueues.get(userId) ?? Promise.resolve();
   const task = prev.catch(() => {}).then(() => _generateDailyCore(userId, date, options));
@@ -52,7 +52,7 @@ export function generateDaily(
 async function _generateDailyCore(
   userId: string,
   date?: string,
-  options?: { executionId?: string },
+  options?: { executionId?: string; allowAiSummaryGeneration?: boolean },
 ): Promise<string> {
   const db = getDb();
   const trace = options?.executionId ? ` executionId=${options.executionId}` : "";
@@ -95,7 +95,7 @@ async function generateWithId(
   endTime: string,
   language: DigestLanguage = "zh",
   enabledSourceTypes: Array<"substack" | "rss" | "youtube" | "podcast">,
-  options?: { executionId?: string },
+  options?: { executionId?: string; allowAiSummaryGeneration?: boolean },
 ): Promise<string> {
   const startedAt = Date.now();
   const db = getDb();
@@ -299,6 +299,18 @@ async function generateWithId(
       totalAiInputChars += contentText.length;
       estimatedAiSentChars += maxInputChars > 0 ? Math.min(contentText.length, maxInputChars) : contentText.length;
       maxAiArticleInputChars = Math.max(maxAiArticleInputChars, contentText.length);
+
+      if (options?.allowAiSummaryGeneration === false) {
+        summaryFallbacks += 1;
+        console.warn(
+          `[digest] Summary fallback${trace} article=${article.id} sourceType=${sourceType} language=${language} contentLength=${contentText.length} reason=ai_generation_disabled_for_assembly url=${article.url}`,
+        );
+        return {
+          ...base,
+          oneLiner: languageProfile.fallbackText.unavailable,
+          keyInsights: [],
+        };
+      }
 
       try {
         let articleModelRequests = 0;

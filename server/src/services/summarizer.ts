@@ -19,6 +19,9 @@ type ModelAdapter = {
 };
 
 const MODEL_ADAPTERS: Record<string, ModelAdapter> = {
+  "deepseek-v4-flash": {
+    promptProfile: "strict-json",
+  },
   "openai/gpt-oss-120b": {
     promptProfile: "editorial",
   },
@@ -109,10 +112,10 @@ function getAiErrorText(error: unknown): string {
 export function classifyAiError(error: unknown): AiErrorCategory {
   const message = getAiErrorText(error);
 
-  if (message.includes("quota") || message.includes("billing")) return "quota";
   if (message.includes("rate limit") || message.includes("too many requests") || message.includes("429")) {
     return "rate_limit";
   }
+  if (message.includes("quota") || message.includes("billing") || message.includes("insufficient balance")) return "quota";
   if (
     message.includes("unauthorized") ||
     message.includes("authentication") ||
@@ -176,6 +179,30 @@ function summarizeErrorMeta(error: unknown) {
   };
 }
 
+export function transformProviderRequestBody(baseURL: string, body: Record<string, unknown>): Record<string, unknown> {
+  const requestBody = body;
+  if (baseURL.includes("api.deepseek.com")) {
+    return {
+      ...requestBody,
+      thinking: { type: "disabled" },
+      response_format: { type: "json_object" },
+    };
+  }
+  if (!baseURL.includes("openrouter.ai")) return body;
+  const providerConfig =
+    requestBody.provider && typeof requestBody.provider === "object" && !Array.isArray(requestBody.provider)
+      ? (requestBody.provider as Record<string, unknown>)
+      : {};
+
+  return {
+    ...requestBody,
+    provider: {
+      ...providerConfig,
+      require_parameters: true,
+    },
+  };
+}
+
 function getModel(modelId: string) {
   const baseURL = process.env.AI_BASE_URL || "https://api.openai.com/v1";
   const apiKey = process.env.AI_API_KEY;
@@ -191,22 +218,7 @@ function getModel(modelId: string) {
     name: "ai-provider",
     baseURL,
     supportsStructuredOutputs: true,
-    transformRequestBody: (body) => {
-      if (!baseURL.includes("openrouter.ai")) return body;
-      const requestBody = body as Record<string, unknown>;
-      const providerConfig =
-        requestBody.provider && typeof requestBody.provider === "object" && !Array.isArray(requestBody.provider)
-          ? (requestBody.provider as Record<string, unknown>)
-          : {};
-
-      return {
-        ...requestBody,
-        provider: {
-          ...providerConfig,
-          require_parameters: true,
-        },
-      };
-    },
+    transformRequestBody: (body) => transformProviderRequestBody(baseURL, body),
     headers: {
       Authorization: `Bearer ${apiKey}`,
     },
