@@ -58,20 +58,40 @@ type CurrentUser = {
   lastLoginAt: string;
 };
 
-let _currentUserPromise: Promise<CurrentUser> | null = null;
+type CurrentUserCache = {
+  clerkId: string;
+  promise: Promise<CurrentUser>;
+};
 
-export function ensureCurrentUser(): Promise<CurrentUser> {
-  if (!_currentUserPromise) {
-    _currentUserPromise = request<CurrentUser>("/auth/me").catch((err) => {
-      _currentUserPromise = null;
-      throw err;
-    });
+let _currentUserCache: CurrentUserCache | null = null;
+
+export function ensureCurrentUser(clerkId: string): Promise<CurrentUser> {
+  if (_currentUserCache?.clerkId === clerkId) {
+    return _currentUserCache.promise;
   }
-  return _currentUserPromise;
+
+  const promise = request<CurrentUser>("/auth/me")
+    .then((user) => {
+      if (user.clerkId !== clerkId) {
+        throw new ApiError("Authenticated user does not match the initialized workspace.", 401, "AUTH_USER_MISMATCH");
+      }
+      return user;
+    })
+    .catch((error) => {
+      if (_currentUserCache?.promise === promise) {
+        _currentUserCache = null;
+      }
+      throw error;
+    });
+
+  _currentUserCache = { clerkId, promise };
+  return promise;
 }
 
-export function clearCurrentUserCache() {
-  _currentUserPromise = null;
+export function clearCurrentUserCache(clerkId?: string) {
+  if (!clerkId || _currentUserCache?.clerkId === clerkId) {
+    _currentUserCache = null;
+  }
 }
 
 // --- Feeds ---

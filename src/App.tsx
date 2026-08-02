@@ -1,4 +1,4 @@
-import { Show, useAuth } from "@clerk/react";
+import { AuthenticateWithRedirectCallback, useAuth, useClerk } from "@clerk/react";
 import { Component, Suspense, lazy, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -9,7 +9,14 @@ import AppShell from "@/components/AppShell";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { I18nProvider } from "@/contexts/I18nContext";
 import { ZenModeProvider } from "@/hooks/useZenMode";
-import { ensureCurrentUser } from "@/lib/api";
+import { clearCurrentUserCache, ensureCurrentUser } from "@/lib/api";
+import {
+  AUTH_BOOTSTRAP_TIMEOUT_MS,
+  classifyAuthBootstrapError,
+  getAuthBootstrapRetryDelay,
+  withAuthBootstrapTimeout,
+  type AuthBootstrapFailureKind,
+} from "@/lib/auth-bootstrap";
 import {
   loadDailyDigestPage,
   loadAdminPage,
@@ -17,6 +24,7 @@ import {
   loadPodcastFeedsPage,
   loadPrivacyPolicyPage,
   loadPublicHomePage,
+  loadLoginPage,
   loadRssFeedsPage,
   loadSettingsPage,
   loadSubscriptionsPage,
@@ -33,6 +41,7 @@ const PodcastFeedsPage = lazy(loadPodcastFeedsPage);
 const SettingsPage = lazy(loadSettingsPage);
 const NotFound = lazy(loadNotFoundPage);
 const PublicHome = lazy(loadPublicHomePage);
+const LoginPage = lazy(loadLoginPage);
 const PrivacyPolicyPage = lazy(loadPrivacyPolicyPage);
 const TermsOfServicePage = lazy(loadTermsOfServicePage);
 
@@ -46,6 +55,74 @@ function WorkspaceLoader() {
       >
         <div className="h-2 overflow-hidden rounded-[2px]">
           <span className="workspace-loader-bar block h-full w-2/5 rounded-[2px] bg-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.35),inset_0_-1px_0_rgba(28,25,23,0.2)]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ClerkInitializationError() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-6">
+      <div role="alert" className="max-w-sm text-center">
+        <h1 className="text-xl font-semibold text-foreground">Authentication could not be loaded</h1>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">Check your connection and try again.</p>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="mt-5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+        >
+          Try again
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function WorkspaceInitializationError({
+  failure,
+  onRetry,
+  onSignOut,
+}: {
+  failure: AuthBootstrapFailureKind;
+  onRetry: () => void;
+  onSignOut: () => void;
+}) {
+  const accessFailure = failure === "access-revoked";
+  const authenticationFailure = failure === "unauthorized";
+  const title = accessFailure
+    ? "This account does not have access"
+    : authenticationFailure
+      ? "Your session could not be verified"
+      : "We couldn't finish loading your workspace";
+  const description = accessFailure
+    ? "Sign out and contact the workspace administrator if you believe this is a mistake."
+    : authenticationFailure
+      ? "Sign in again to continue."
+      : "The service may be temporarily unavailable. Try again without leaving this page.";
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-6">
+      <div role="alert" className="max-w-sm text-center">
+        <h1 className="text-xl font-semibold text-foreground">{title}</h1>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
+        <div className="mt-5 flex items-center justify-center gap-3">
+          {failure === "recoverable" ? (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+            >
+              Retry
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={onSignOut}
+            className="rounded-md border border-border bg-card px-4 py-2 text-sm font-medium text-foreground"
+          >
+            {authenticationFailure ? "Sign in again" : "Sign out"}
+          </button>
         </div>
       </div>
     </div>
@@ -165,6 +242,13 @@ function AppRouter() {
   return (
     <Router hook={useHashLocation}>
       <Switch>
+        {import.meta.env.DEV ? (
+          <Route path="/sign-in-preview">
+            <Suspense fallback={<RouteFallback />}>
+              <LoginPage />
+            </Suspense>
+          </Route>
+        ) : null}
         <Route path="/privacy">
           <Suspense fallback={<RouteFallback />}>
             <PrivacyPolicyPage />
@@ -181,6 +265,7 @@ function AppRouter() {
               <Switch>
                 <Route path="/" component={PublicHome} />
                 <Route path="/admin" component={PublicHome} />
+                <Route path="/sign-in" component={LoginPage} />
                 <Route component={NotFound} />
               </Switch>
             </Suspense>
@@ -191,7 +276,44 @@ function AppRouter() {
   );
 }
 
+function AuthStateRouter() {
+  const { isLoaded } = useAuth();
+  const [timedOut, setTimedOut] = useState(false);
+  const authRoute = window.location.hash.startsWith("#/sign-in");
+
+  useEffect(() => {
+    if (isLoaded) {
+      return;
+    }
+    const timeoutId = window.setTimeout(() => setTimedOut(true), AUTH_BOOTSTRAP_TIMEOUT_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [isLoaded]);
+
+  if (!isLoaded && timedOut) {
+    return <ClerkInitializationError />;
+  }
+
+  if (!isLoaded && !authRoute) {
+    return <WorkspaceLoader />;
+  }
+
+  return <AppRouter />;
+}
+
 function App() {
+  if (window.location.pathname === "/sso-callback") {
+    return (
+      <ErrorBoundary>
+        <AuthenticateWithRedirectCallback
+          signInUrl="/#/sign-in"
+          signUpUrl="/#/sign-in"
+          signInFallbackRedirectUrl="/#/"
+          signUpFallbackRedirectUrl="/#/"
+        />
+      </ErrorBoundary>
+    );
+  }
+
   return (
     <ErrorBoundary>
       <ZenModeProvider>
@@ -199,12 +321,7 @@ function App() {
           <ThemeProvider defaultTheme="light">
             <TooltipProvider>
               <Toaster />
-              <Show when="signed-in">
-                <AppRouter />
-              </Show>
-              <Show when="signed-out">
-                <AppRouter />
-              </Show>
+              <AuthStateRouter />
             </TooltipProvider>
           </ThemeProvider>
         </I18nProvider>
@@ -215,45 +332,77 @@ function App() {
 
 function AuthenticatedApp() {
   const { isLoaded, userId } = useAuth();
+
+  if (!isLoaded || !userId) {
+    return <WorkspaceLoader />;
+  }
+
+  return <AuthenticatedWorkspace key={userId} userId={userId} />;
+}
+
+function AuthenticatedWorkspace({ userId }: { userId: string }) {
+  const { signOut } = useClerk();
+  const [attempt, setAttempt] = useState(0);
   const [bootstrapState, setBootstrapState] = useState<{
-    resolvedUserId: string | null;
-    status: "ready" | "error" | null;
-  }>({
-    resolvedUserId: null,
-    status: null,
-  });
+    status: "loading" | "ready" | "error";
+    failure?: AuthBootstrapFailureKind;
+  }>({ status: "loading" });
 
   useEffect(() => {
-    if (!isLoaded || !userId) {
-      return;
-    }
-
     let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
 
-    ensureCurrentUser()
+    withAuthBootstrapTimeout(ensureCurrentUser(userId))
       .then(() => {
         if (!cancelled) {
-          setBootstrapState({ resolvedUserId: userId, status: "ready" });
+          setBootstrapState({ status: "ready" });
         }
       })
       .catch((error) => {
-        console.error("[auth/bootstrap] Failed to initialize app user:", error);
-        if (!cancelled) {
-          setBootstrapState({ resolvedUserId: userId, status: "error" });
+        if (cancelled) {
+          return;
         }
+        const failure = classifyAuthBootstrapError(error);
+        const retryDelay = getAuthBootstrapRetryDelay(attempt, failure);
+        clearCurrentUserCache(userId);
+        if (retryDelay !== null) {
+          console.warn(`[auth/bootstrap] Retrying workspace initialization after ${retryDelay}ms.`);
+          retryTimer = setTimeout(() => setAttempt((current) => current + 1), retryDelay);
+          return;
+        }
+        console.error("[auth/bootstrap] Failed to initialize app user:", error);
+        setBootstrapState({ status: "error", failure });
       });
 
     return () => {
       cancelled = true;
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
     };
-  }, [isLoaded, userId]);
+  }, [attempt, userId]);
 
-  if (!isLoaded || !userId || bootstrapState.resolvedUserId !== userId) {
-    return <WorkspaceLoader />;
-  }
+  useEffect(() => () => clearCurrentUserCache(userId), [userId]);
 
   if (bootstrapState.status === "error") {
-    return <div className="min-h-screen flex items-center justify-center text-sm text-destructive">Failed to initialize your account.</div>;
+    return (
+      <WorkspaceInitializationError
+        failure={bootstrapState.failure ?? "recoverable"}
+        onRetry={() => {
+          clearCurrentUserCache(userId);
+          setBootstrapState({ status: "loading" });
+          setAttempt(0);
+        }}
+        onSignOut={() => {
+          clearCurrentUserCache(userId);
+          void signOut({ redirectUrl: "/#/sign-in" });
+        }}
+      />
+    );
+  }
+
+  if (bootstrapState.status !== "ready") {
+    return <WorkspaceLoader />;
   }
 
   return (

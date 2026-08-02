@@ -1,5 +1,3 @@
-import { SignInButton } from "@clerk/react";
-
 const titleWords = ["Your", "everyday", "editor"];
 
 const featureList = [
@@ -78,17 +76,9 @@ export default function PublicHome() {
                   className="mt-8 flex flex-wrap gap-3 animate-[fadeIn_0.6s_ease_forwards] opacity-0"
                   style={{ animationDelay: "0.85s" }}
                 >
-                  <SignInButton
-                    mode="modal"
-                    fallbackRedirectUrl="/"
-                    forceRedirectUrl="/"
-                    signUpFallbackRedirectUrl="/"
-                    signUpForceRedirectUrl="/"
-                  >
-                    <button className="inline-flex items-center gap-2 rounded-sm px-6 py-2.5 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer shadow-sm">
-                      Sign in
-                    </button>
-                  </SignInButton>
+                  <a href="#/sign-in" className="inline-flex items-center gap-2 rounded-sm px-6 py-2.5 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer shadow-sm">
+                    Sign in
+                  </a>
                 </div>
               </div>
 

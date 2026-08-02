@@ -1,12 +1,14 @@
 import { Router } from "express";
 import { getAuth, clerkClient } from "@clerk/express";
 import { nanoid } from "nanoid";
-import { and, eq, isNull, lt } from "drizzle-orm";
+import { and, eq, isNull, lt, sql } from "drizzle-orm";
 import { getDb, readLegacySettings } from "../db/index.js";
 import { users, feeds, subscriptions, userSettings } from "../db/schema.js";
 import { claimInviteForUser, getUserEntitlement, isAdminEmail } from "../services/entitlements.js";
 
 export const authRouter = Router();
+
+type UserRecord = typeof users.$inferSelect;
 
 async function repairLegacyFirstUserSubscriptions(userId: string, userCreatedAt: string) {
   const db = getDb();
@@ -43,6 +45,19 @@ async function repairLegacyFirstUserSubscriptions(userId: string, userCreatedAt:
   }
 }
 
+async function refreshExistingUser(existing: UserRecord) {
+  const db = getDb();
+  const now = new Date().toISOString();
+  await db.update(users).set({ lastLoginAt: now }).where(eq(users.id, existing.id));
+  await repairLegacyFirstUserSubscriptions(existing.id, existing.createdAt);
+  await claimInviteForUser(existing.id, existing.email);
+  const entitlement = await getUserEntitlement(existing.id);
+  return {
+    user: { ...existing, lastLoginAt: now },
+    accessRevoked: entitlement.accessStatus === "revoked" && !isAdminEmail(existing.email),
+  };
+}
+
 authRouter.get("/me", async (req, res) => {
   const auth = getAuth(req);
   if (!auth.userId) {
@@ -56,13 +71,8 @@ authRouter.get("/me", async (req, res) => {
   const [existing] = await db.select().from(users).where(eq(users.clerkId, clerkId));
 
   if (existing) {
-    // Update last login
-    const now = new Date().toISOString();
-    await db.update(users).set({ lastLoginAt: now }).where(eq(users.id, existing.id));
-    await repairLegacyFirstUserSubscriptions(existing.id, existing.createdAt);
-    await claimInviteForUser(existing.id, existing.email);
-    const entitlement = await getUserEntitlement(existing.id);
-    if (entitlement.accessStatus === "revoked" && !isAdminEmail(existing.email)) {
+    const refreshed = await refreshExistingUser(existing);
+    if (refreshed.accessRevoked) {
       res.status(403).json({
         error: "Account access has been revoked.",
         errorZh: "该账号已被停用",
@@ -70,11 +80,10 @@ authRouter.get("/me", async (req, res) => {
       });
       return;
     }
-    res.json({ ...existing, lastLoginAt: now });
+    res.json(refreshed.user);
     return;
   }
 
-  // Create new user from Clerk data
   const clerkUser = await clerkClient.users.getUser(clerkId);
   const now = new Date().toISOString();
   const userId = nanoid();
@@ -89,44 +98,84 @@ authRouter.get("/me", async (req, res) => {
     lastLoginAt: now,
   };
 
-  const allUsers = await db.select({ id: users.id }).from(users);
-  const isFirstUser = allUsers.length === 0;
-  const legacySettings = isFirstUser ? await readLegacySettings() : [];
-
-  await db.transaction(async (tx) => {
-    await tx.insert(users).values(newUser);
-
-    if (!isFirstUser) {
-      return;
+  const resolved = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('digestdesk.auth.bootstrap'))`);
+    const [concurrentExisting] = await tx.select().from(users).where(eq(users.clerkId, clerkId));
+    if (concurrentExisting) {
+      return { user: concurrentExisting, created: false };
     }
 
-    const legacyFeeds = await tx
-      .select({ id: feeds.id, feedCreatedAt: feeds.createdAt })
-      .from(feeds);
-    if (legacyFeeds.length > 0) {
-      await tx.insert(subscriptions).values(
-        legacyFeeds.map((feed) => ({
-          id: nanoid(),
-          userId,
-          feedId: feed.id,
-          startedAt: feed.feedCreatedAt,
-          createdAt: now,
-        })),
-      ).onConflictDoNothing();
+    const allUsers = await tx.select({ id: users.id }).from(users);
+    const isFirstUser = allUsers.length === 0;
+    const legacySettings = isFirstUser ? await readLegacySettings() : [];
+    const [createdUser] = await tx
+      .insert(users)
+      .values(newUser)
+      .onConflictDoNothing({ target: users.clerkId })
+      .returning();
+
+    if (!createdUser) {
+      const [conflictedUser] = await tx.select().from(users).where(eq(users.clerkId, clerkId));
+      if (!conflictedUser) {
+        throw new Error("Unable to resolve the authenticated user after a concurrent insert.");
+      }
+      return { user: conflictedUser, created: false };
     }
-    if (legacySettings.length > 0) {
-      await tx.insert(userSettings).values(
-        legacySettings.map((row: { key: string; value: string }) => ({
-          id: nanoid(),
-          userId,
-          key: row.key,
-          value: row.value,
-        })),
-      ).onConflictDoNothing();
+
+    if (isFirstUser) {
+      const legacyFeeds = await tx
+        .select({ id: feeds.id, feedCreatedAt: feeds.createdAt })
+        .from(feeds);
+      if (legacyFeeds.length > 0) {
+        await tx.insert(subscriptions).values(
+          legacyFeeds.map((feed) => ({
+            id: nanoid(),
+            userId: createdUser.id,
+            feedId: feed.id,
+            startedAt: feed.feedCreatedAt,
+            createdAt: now,
+          })),
+        ).onConflictDoNothing();
+      }
+      if (legacySettings.length > 0) {
+        await tx.insert(userSettings).values(
+          legacySettings.map((row: { key: string; value: string }) => ({
+            id: nanoid(),
+            userId: createdUser.id,
+            key: row.key,
+            value: row.value,
+          })),
+        ).onConflictDoNothing();
+      }
     }
+
+    return { user: createdUser, created: true };
   });
 
-  await claimInviteForUser(userId, newUser.email);
+  if (!resolved.created) {
+    const refreshed = await refreshExistingUser(resolved.user);
+    if (refreshed.accessRevoked) {
+      res.status(403).json({
+        error: "Account access has been revoked.",
+        errorZh: "该账号已被停用",
+        code: "ACCOUNT_ACCESS_REVOKED",
+      });
+      return;
+    }
+    res.json(refreshed.user);
+    return;
+  }
 
-  res.json(newUser);
+  await claimInviteForUser(resolved.user.id, resolved.user.email);
+  const entitlement = await getUserEntitlement(resolved.user.id);
+  if (entitlement.accessStatus === "revoked" && !isAdminEmail(resolved.user.email)) {
+    res.status(403).json({
+      error: "Account access has been revoked.",
+      errorZh: "该账号已被停用",
+      code: "ACCOUNT_ACCESS_REVOKED",
+    });
+    return;
+  }
+
+  res.json(resolved.user);
 });

@@ -1,4 +1,3 @@
-import { SignInButton } from "@clerk/react";
 import type { ReactNode } from "react";
 
 type PublicPageLayoutProps = {
@@ -35,17 +34,9 @@ export default function PublicPageLayout({
               </h1>
             </div>
 
-            <SignInButton
-              mode="modal"
-              fallbackRedirectUrl="/"
-              forceRedirectUrl="/"
-              signUpFallbackRedirectUrl="/"
-              signUpForceRedirectUrl="/"
-            >
-              <button className="inline-flex items-center gap-2 rounded-sm px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer shadow-sm">
-                Sign in
-              </button>
-            </SignInButton>
+            <a href="#/sign-in" className="inline-flex items-center gap-2 rounded-sm px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer shadow-sm">
+              Sign in
+            </a>
           </div>
         </div>
       </header>

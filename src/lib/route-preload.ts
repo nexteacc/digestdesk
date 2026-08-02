@@ -8,6 +8,7 @@ const routeLoaders = {
   "/admin": () => import("@/pages/Admin"),
   "/privacy": () => import("@/pages/PrivacyPolicy"),
   "/terms": () => import("@/pages/TermsOfService"),
+  "/sign-in": () => import("@/pages/Login"),
   "/public-home": () => import("@/pages/PublicHome"),
   "/not-found": () => import("@/pages/NotFound"),
 } as const;
@@ -28,5 +29,6 @@ export const loadSettingsPage = routeLoaders["/settings"];
 export const loadAdminPage = routeLoaders["/admin"];
 export const loadPrivacyPolicyPage = routeLoaders["/privacy"];
 export const loadTermsOfServicePage = routeLoaders["/terms"];
+export const loadLoginPage = routeLoaders["/sign-in"];
 export const loadPublicHomePage = routeLoaders["/public-home"];
 export const loadNotFoundPage = routeLoaders["/not-found"];
