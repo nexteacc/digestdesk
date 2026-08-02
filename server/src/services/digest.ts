@@ -206,7 +206,7 @@ async function generateWithId(
   let summaryCacheInvalid = 0;
   let summaryGenerated = 0;
   let summaryTooShort = 0;
-  let summaryFallbacks = 0;
+  let summaryExcluded = 0;
   let totalAiInputChars = 0;
   let estimatedAiSentChars = 0;
   let maxAiArticleInputChars = 0;
@@ -228,7 +228,7 @@ async function generateWithId(
   };
 
   const tasks = eligibleArticles.map((article) =>
-    limit(async (): Promise<ItemResult> => {
+    limit(async (): Promise<ItemResult | null> => {
       const contentText = article.contentText || "";
       const feedName = feedMap.get(article.feedId) || languageProfile.fallbackText.unknownSource;
       const sourceType = feedSourceMap.get(article.feedId) || "substack";
@@ -301,15 +301,11 @@ async function generateWithId(
       maxAiArticleInputChars = Math.max(maxAiArticleInputChars, contentText.length);
 
       if (options?.allowAiSummaryGeneration === false) {
-        summaryFallbacks += 1;
+        summaryExcluded += 1;
         console.warn(
-          `[digest] Summary fallback${trace} article=${article.id} sourceType=${sourceType} language=${language} contentLength=${contentText.length} reason=ai_generation_disabled_for_assembly url=${article.url}`,
+          `[digest] Summary excluded${trace} article=${article.id} sourceType=${sourceType} language=${language} contentLength=${contentText.length} reason=ai_generation_disabled_for_assembly url=${article.url}`,
         );
-        return {
-          ...base,
-          oneLiner: languageProfile.fallbackText.unavailable,
-          keyInsights: [],
-        };
+        return null;
       }
 
       try {
@@ -344,25 +340,29 @@ async function generateWithId(
           keyInsights: summary.keyInsights,
         };
       } catch (error) {
-        summaryFallbacks += 1;
+        summaryExcluded += 1;
         console.warn(
-          `[digest] Summary fallback${trace} article=${article.id} sourceType=${sourceType} language=${language} contentLength=${contentText.length} aiErrorCategory=${classifyAiError(error)} url=${article.url}`,
+          `[digest] Summary excluded${trace} article=${article.id} sourceType=${sourceType} language=${language} contentLength=${contentText.length} aiErrorCategory=${classifyAiError(error)} url=${article.url}`,
         );
-        return {
-          ...base,
-          oneLiner: languageProfile.fallbackText.unavailable,
-          keyInsights: [],
-        };
+        return null;
       }
     }),
   );
 
-  const items = await Promise.all(tasks);
+  const itemResults = await Promise.all(tasks);
+  const items = itemResults.filter((item): item is ItemResult => item !== null);
   items.sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : -1));
-  const fallbackCount = items.filter((item) =>
+  const publishedItemsWithoutSummary = items.filter((item) =>
     item.oneLiner === languageProfile.fallbackText.unavailable,
   ).length;
   const emptyInsightsCount = items.filter((item) => item.keyInsights.length === 0).length;
+
+  if (items.length === 0) {
+    console.warn(
+      `[digest] Skip${trace} user=${userId} date=${dateLabel} reason=no_publishable_items eligible=${eligibleArticles.length} summaryExcluded=${summaryExcluded}`,
+    );
+    return "";
+  }
 
   if (debug) {
     for (const item of items) {
@@ -415,7 +415,7 @@ async function generateWithId(
   });
 
   console.log(
-    `[digest] Daily digest updated${trace} digestId=${digestId} user=${userId} date=${dateLabel} items=${items.length} summaryCacheHits=${summaryCacheHits} summaryCacheMisses=${summaryCacheMisses} summaryCacheInvalid=${summaryCacheInvalid} summaryGenerated=${summaryGenerated} summaryTooShort=${summaryTooShort} summaryFallbacks=${summaryFallbacks} aiRequests=${modelRequests} modelRequests=${modelRequests} retryRequests=${retryRequests} totalAiInputChars=${totalAiInputChars} estimatedAiSentChars=${estimatedAiSentChars} maxAiArticleInputChars=${maxAiArticleInputChars} maxInputChars=${maxInputChars} fallbackCount=${fallbackCount} emptyInsightsCount=${emptyInsightsCount} durationMs=${Date.now() - startedAt}`,
+    `[digest] Daily digest updated${trace} digestId=${digestId} user=${userId} date=${dateLabel} items=${items.length} summaryCacheHits=${summaryCacheHits} summaryCacheMisses=${summaryCacheMisses} summaryCacheInvalid=${summaryCacheInvalid} summaryGenerated=${summaryGenerated} summaryTooShort=${summaryTooShort} summaryExcluded=${summaryExcluded} aiRequests=${modelRequests} modelRequests=${modelRequests} retryRequests=${retryRequests} totalAiInputChars=${totalAiInputChars} estimatedAiSentChars=${estimatedAiSentChars} maxAiArticleInputChars=${maxAiArticleInputChars} maxInputChars=${maxInputChars} publishedItemsWithoutSummary=${publishedItemsWithoutSummary} emptyInsightsCount=${emptyInsightsCount} durationMs=${Date.now() - startedAt}`,
   );
   return digestId;
 }

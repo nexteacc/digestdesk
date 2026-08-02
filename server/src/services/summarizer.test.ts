@@ -60,12 +60,16 @@ describe("parseCachedArticleSummary", () => {
 });
 
 describe("getSummaryAttemptModelIds", () => {
-  it("uses only the primary model when no retry model is configured", () => {
-    expect(getSummaryAttemptModelIds("gemini-3.6-flash", undefined)).toEqual(["gemini-3.6-flash"]);
+  it("retries once with the primary model when no retry model is configured", () => {
+    expect(getSummaryAttemptModelIds("gemini-3.6-flash", undefined)).toEqual([
+      "gemini-3.6-flash",
+      "gemini-3.6-flash",
+    ]);
   });
 
-  it("does not retry with the same model", () => {
+  it("retries once when the configured retry model matches the primary model", () => {
     expect(getSummaryAttemptModelIds("gemini-3.6-flash", "gemini-3.6-flash")).toEqual([
+      "gemini-3.6-flash",
       "gemini-3.6-flash",
     ]);
   });

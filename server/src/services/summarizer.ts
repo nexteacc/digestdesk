@@ -238,8 +238,7 @@ function getPrimaryModelId() {
 
 export function getSummaryAttemptModelIds(primaryModelId: string, configuredRetryModel = process.env.AI_RETRY_MODEL) {
   const retryModelId = configuredRetryModel?.trim();
-  if (!retryModelId || retryModelId === primaryModelId) return [primaryModelId];
-  return [primaryModelId, retryModelId];
+  return [primaryModelId, retryModelId || primaryModelId];
 }
 
 function getAiRequestsPerMinute(baseURL: string) {
