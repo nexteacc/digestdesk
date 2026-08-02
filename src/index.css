@@ -137,6 +137,27 @@ Design reminder (commitment):
   }
 }
 
+@keyframes workspace-loader-slide {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(250%);
+  }
+}
+
+.workspace-loader-bar {
+  animation: workspace-loader-slide 1.25s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-loader-bar {
+    animation: none;
+    transform: translateX(75%);
+  }
+}
+
 /* Subtle print-like texture */
 .paper-noise {
   background-image:

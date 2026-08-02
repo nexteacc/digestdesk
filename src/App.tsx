@@ -36,6 +36,22 @@ const PublicHome = lazy(loadPublicHomePage);
 const PrivacyPolicyPage = lazy(loadPrivacyPolicyPage);
 const TermsOfServicePage = lazy(loadTermsOfServicePage);
 
+function WorkspaceLoader() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div
+        role="progressbar"
+        aria-label="Loading workspace"
+        className="w-[280px] max-w-[calc(100vw-48px)] rounded-[4px] bg-muted p-[2px] shadow-[inset_0_1px_2px_rgba(28,25,23,0.1),inset_0_0_0_1px_rgba(28,25,23,0.06)]"
+      >
+        <div className="h-2 overflow-hidden rounded-[2px]">
+          <span className="workspace-loader-bar block h-full w-2/5 rounded-[2px] bg-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.35),inset_0_-1px_0_rgba(28,25,23,0.2)]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RouteFallback() {
   return (
     <div className="space-y-6 py-2">
@@ -233,7 +249,7 @@ function AuthenticatedApp() {
   }, [isLoaded, userId]);
 
   if (!isLoaded || !userId || bootstrapState.resolvedUserId !== userId) {
-    return <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">Loading workspace...</div>;
+    return <WorkspaceLoader />;
   }
 
   if (bootstrapState.status === "error") {
