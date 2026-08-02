@@ -292,6 +292,22 @@ export async function initDb() {
   `;
 
   await queryClient`
+    ALTER TABLE digests ADD COLUMN IF NOT EXISTS eligible_item_count INTEGER;
+  `;
+
+  await queryClient`
+    ALTER TABLE digests ADD COLUMN IF NOT EXISTS assembly_retry_count INTEGER;
+  `;
+
+  await queryClient`
+    ALTER TABLE digests ADD COLUMN IF NOT EXISTS summary_excluded_count INTEGER;
+  `;
+
+  await queryClient`
+    ALTER TABLE digests ADD COLUMN IF NOT EXISTS published_without_summary_count INTEGER;
+  `;
+
+  await queryClient`
     CREATE INDEX IF NOT EXISTS idx_digests_user_id ON digests(user_id);
   `;
 

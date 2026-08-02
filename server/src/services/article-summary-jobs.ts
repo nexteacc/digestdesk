@@ -21,7 +21,7 @@ import { parseDigestSourceTypes } from "./user-settings.js";
 
 const MIN_CONTENT_LENGTH = 50;
 const STALE_RUNNING_MS = 30 * 60 * 1000;
-const MAX_ATTEMPTS = 3;
+export const ARTICLE_SUMMARY_MAX_ATTEMPTS = 3;
 const DEFAULT_RUN_LIMIT = 10;
 const DEFAULT_CONCURRENCY = 2;
 const RECENT_ARTICLE_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -266,7 +266,7 @@ export async function runPendingArticleSummaryJobs(options?: { limit?: number; n
       and(
         inArray(articleSummaryJobs.status, ["pending", "failed"]),
         lte(articleSummaryJobs.scheduledFor, now.toISOString()),
-        lte(articleSummaryJobs.attemptCount, MAX_ATTEMPTS - 1),
+        lte(articleSummaryJobs.attemptCount, ARTICLE_SUMMARY_MAX_ATTEMPTS - 1),
       ),
     )
     .orderBy(asc(articleSummaryJobs.scheduledFor))
@@ -375,7 +375,7 @@ export async function runPendingArticleSummaryJobs(options?: { limit?: number; n
 
     const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
     const nextAttemptCount = job.attemptCount + 1;
-    const willRetry = nextAttemptCount < MAX_ATTEMPTS;
+    const willRetry = nextAttemptCount < ARTICLE_SUMMARY_MAX_ATTEMPTS;
     await db
       .update(articleSummaryJobs)
       .set({
@@ -390,7 +390,7 @@ export async function runPendingArticleSummaryJobs(options?: { limit?: number; n
       .where(eq(articleSummaryJobs.id, job.id));
     summary.failed += 1;
     console.error(
-      `[summary-jobs] Job failed jobId=${job.id} article=${job.articleId} language=${job.language} attempt=${nextAttemptCount}/${MAX_ATTEMPTS} retry=${willRetry} aiErrorCategory=${classifyAiError(result.reason)} error=${message}`,
+      `[summary-jobs] Job failed jobId=${job.id} article=${job.articleId} language=${job.language} attempt=${nextAttemptCount}/${ARTICLE_SUMMARY_MAX_ATTEMPTS} retry=${willRetry} aiErrorCategory=${classifyAiError(result.reason)} error=${message}`,
     );
   }
 

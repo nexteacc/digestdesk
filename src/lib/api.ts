@@ -329,28 +329,52 @@ export type AdminOperationsDay = {
     succeeded: number;
     skipped: number;
     failed: number;
+    retrying: number;
     pending: number;
     running: number;
+    cancelled: number;
+  };
+  summaryJobs: {
+    total: number;
+    succeeded: number;
+    skipped: number;
+    failed: number;
+    retrying: number;
+    pending: number;
+    running: number;
+    cancelled: number;
   };
   digests: number;
   items: number;
+  delivery: {
+    qualityTrackedDigests: number;
+    eligibleItems: number;
+    assemblyRetries: number;
+    summaryExcluded: number;
+    publishedWithoutSummary: number;
+  };
 };
 
 export type AdminOperationsAnomaly = {
+  kind: "digest_job" | "summary_job";
   id: string;
-  userId: string;
-  userEmail: string;
-  targetDate: string;
+  subject: string;
+  targetDate: string | null;
   status: string;
+  attemptCount: number;
   lastError: string | null;
   scheduledFor: string;
   startedAt: string | null;
   finishedAt: string | null;
+  articleUrl?: string;
+  language?: string;
 };
 
 export type AdminOperationsSummary = {
   days: AdminOperationsDay[];
+  anomalyCount: number;
   anomalies: AdminOperationsAnomaly[];
+  generatedAt: string;
 };
 
 export function fetchAdminMe(): Promise<{

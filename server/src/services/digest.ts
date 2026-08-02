@@ -386,10 +386,20 @@ async function generateWithId(
           type: "daily",
           date: dateLabel,
           generatedAt: generationTime,
+          eligibleItemCount: eligibleArticles.length,
+          assemblyRetryCount: retryRequests,
+          summaryExcludedCount: summaryExcluded,
+          publishedWithoutSummaryCount: publishedItemsWithoutSummary,
         });
     } else {
       await tx.update(digests)
-        .set({ generatedAt: generationTime })
+        .set({
+          generatedAt: generationTime,
+          eligibleItemCount: eligibleArticles.length,
+          assemblyRetryCount: retryRequests,
+          summaryExcludedCount: summaryExcluded,
+          publishedWithoutSummaryCount: publishedItemsWithoutSummary,
+        })
         .where(eq(digests.id, digestId));
     }
 

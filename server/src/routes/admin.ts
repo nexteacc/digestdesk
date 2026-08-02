@@ -15,6 +15,8 @@ import {
   type AccessStatus,
   type AccountPlan,
 } from "../services/entitlements.js";
+import { ARTICLE_SUMMARY_MAX_ATTEMPTS } from "../services/article-summary-jobs.js";
+import { DIGEST_JOB_MAX_ATTEMPTS } from "../services/digest-jobs.js";
 
 export const adminRouter = Router();
 
@@ -203,64 +205,118 @@ adminRouter.get("/operations/summary", async (req, res) => {
   const dateLabels = getRecentDateLabels(days);
   const startDate = dateLabels[0];
   const now = new Date().toISOString();
+  const overdueBefore = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   const db = getDb();
 
-  const jobRows = await db.execute(sql`
-    SELECT
-      target_date AS "date",
-      COUNT(*)::int AS "total",
-      COUNT(*) FILTER (WHERE status = 'succeeded')::int AS "succeeded",
-      COUNT(*) FILTER (WHERE status = 'skipped')::int AS "skipped",
-      COUNT(*) FILTER (WHERE status = 'failed')::int AS "failed",
-      COUNT(*) FILTER (WHERE status = 'pending')::int AS "pending",
-      COUNT(*) FILTER (WHERE status = 'running')::int AS "running"
-    FROM digest_jobs
-    WHERE job_type = 'daily_digest'
-      AND target_date >= ${startDate}
-    GROUP BY target_date
-  `);
-
-  const digestRows = await db.execute(sql`
-    SELECT
-      d.date AS "date",
-      COUNT(DISTINCT d.id)::int AS "digests",
-      COUNT(di.id)::int AS "items"
-    FROM digests d
-    LEFT JOIN digest_items di ON di.digest_id = d.id
-    WHERE d.type = 'daily'
-      AND d.date >= ${startDate}
-    GROUP BY d.date
-  `);
-
-  const anomalyRows = await db.execute(sql`
-    SELECT
-      j.id,
-      j.user_id AS "userId",
-      u.email AS "userEmail",
-      j.target_date AS "targetDate",
-      j.status,
-      j.last_error AS "lastError",
-      j.scheduled_for AS "scheduledFor",
-      j.started_at AS "startedAt",
-      j.finished_at AS "finishedAt"
-    FROM digest_jobs j
-    INNER JOIN users u ON u.id = j.user_id
-    WHERE j.job_type = 'daily_digest'
-      AND j.target_date >= ${startDate}
-      AND (
+  const [jobRows, digestRows, summaryJobRows, digestAnomalyRows, summaryAnomalyRows] = await Promise.all([
+    db.execute(sql`
+      SELECT
+        target_date AS "date",
+        COUNT(*)::int AS "total",
+        COUNT(*) FILTER (WHERE status = 'succeeded')::int AS "succeeded",
+        COUNT(*) FILTER (WHERE status = 'skipped')::int AS "skipped",
+        COUNT(*) FILTER (
+          WHERE status = 'failed' AND attempt_count >= ${DIGEST_JOB_MAX_ATTEMPTS}
+        )::int AS "failed",
+        COUNT(*) FILTER (
+          WHERE status = 'failed' AND attempt_count < ${DIGEST_JOB_MAX_ATTEMPTS}
+        )::int AS "retrying",
+        COUNT(*) FILTER (WHERE status = 'pending')::int AS "pending",
+        COUNT(*) FILTER (WHERE status = 'running')::int AS "running",
+        COUNT(*) FILTER (WHERE status = 'cancelled')::int AS "cancelled"
+      FROM digest_jobs
+      WHERE job_type = 'daily_digest'
+        AND target_date >= ${startDate}
+      GROUP BY target_date
+    `),
+    db.execute(sql`
+      SELECT
+        d.date AS "date",
+        COUNT(*)::int AS "digests",
+        SUM((SELECT COUNT(*) FROM digest_items di WHERE di.digest_id = d.id))::int AS "items",
+        COUNT(*) FILTER (WHERE d.eligible_item_count IS NOT NULL)::int AS "qualityTrackedDigests",
+        SUM(COALESCE(d.eligible_item_count, 0))::int AS "eligibleItems",
+        SUM(COALESCE(d.assembly_retry_count, 0))::int AS "assemblyRetries",
+        SUM(COALESCE(d.summary_excluded_count, 0))::int AS "summaryExcluded",
+        SUM(COALESCE(d.published_without_summary_count, 0))::int AS "publishedWithoutSummary"
+      FROM digests d
+      WHERE d.type = 'daily'
+        AND d.date >= ${startDate}
+      GROUP BY d.date
+    `),
+    db.execute(sql`
+      SELECT
+        TO_CHAR(COALESCE(finished_at, created_at)::timestamptz AT TIME ZONE ${ADMIN_OPERATIONS_TIMEZONE}, 'YYYY-MM-DD') AS "date",
+        COUNT(*)::int AS "total",
+        COUNT(*) FILTER (WHERE status = 'succeeded')::int AS "succeeded",
+        COUNT(*) FILTER (WHERE status = 'skipped')::int AS "skipped",
+        COUNT(*) FILTER (
+          WHERE status = 'failed' AND attempt_count >= ${ARTICLE_SUMMARY_MAX_ATTEMPTS}
+        )::int AS "failed",
+        COUNT(*) FILTER (
+          WHERE status = 'failed' AND attempt_count < ${ARTICLE_SUMMARY_MAX_ATTEMPTS}
+        )::int AS "retrying",
+        COUNT(*) FILTER (WHERE status = 'pending')::int AS "pending",
+        COUNT(*) FILTER (WHERE status = 'running')::int AS "running",
+        COUNT(*) FILTER (WHERE status = 'cancelled')::int AS "cancelled"
+      FROM article_summary_jobs
+      WHERE COALESCE(finished_at, created_at) >= ${startDate}
+      GROUP BY 1
+    `),
+    db.execute(sql`
+      SELECT
+        j.id,
+        j.user_id AS "userId",
+        u.email AS "userEmail",
+        j.target_date AS "targetDate",
+        j.status,
+        j.attempt_count AS "attemptCount",
+        j.last_error AS "lastError",
+        j.scheduled_for AS "scheduledFor",
+        j.started_at AS "startedAt",
+        j.finished_at AS "finishedAt"
+      FROM digest_jobs j
+      INNER JOIN users u ON u.id = j.user_id
+      WHERE j.job_type = 'daily_digest'
+        AND (
+          (j.status = 'failed' AND j.attempt_count >= ${DIGEST_JOB_MAX_ATTEMPTS} AND j.target_date >= ${startDate})
+          OR (j.status = 'failed' AND j.attempt_count < ${DIGEST_JOB_MAX_ATTEMPTS} AND j.finished_at <= ${overdueBefore})
+          OR (j.status IN ('pending', 'running') AND j.scheduled_for <= ${overdueBefore})
+        )
+    `),
+    db.execute(sql`
+      SELECT
+        j.id,
+        j.article_id AS "articleId",
+        a.title AS "articleTitle",
+        a.url AS "articleUrl",
+        j.language,
+        j.status,
+        j.attempt_count AS "attemptCount",
+        j.last_error AS "lastError",
+        j.scheduled_for AS "scheduledFor",
+        j.started_at AS "startedAt",
+        j.finished_at AS "finishedAt"
+      FROM article_summary_jobs j
+      INNER JOIN articles a ON a.id = j.article_id
+      WHERE (
         j.status = 'failed'
-        OR (j.status IN ('pending', 'running') AND j.scheduled_for <= ${now})
+        AND j.attempt_count >= ${ARTICLE_SUMMARY_MAX_ATTEMPTS}
+        AND j.finished_at >= ${startDate}
       )
-    ORDER BY j.scheduled_for DESC
-    LIMIT 20
-  `);
+        OR (j.status = 'failed' AND j.attempt_count < ${ARTICLE_SUMMARY_MAX_ATTEMPTS} AND j.finished_at <= ${overdueBefore})
+        OR (j.status IN ('pending', 'running') AND j.scheduled_for <= ${overdueBefore})
+    `),
+  ]);
 
   const jobsByDate = new Map((jobRows as Array<Record<string, unknown>>).map((row) => [String(row.date), row]));
   const digestsByDate = new Map((digestRows as Array<Record<string, unknown>>).map((row) => [String(row.date), row]));
+  const summaryJobsByDate = new Map((summaryJobRows as Array<Record<string, unknown>>).map((row) => [String(row.date), row]));
 
   const daysPayload = dateLabels.map((date) => {
     const job = jobsByDate.get(date);
     const digest = digestsByDate.get(date);
+    const summaryJob = summaryJobsByDate.get(date);
     return {
       date,
       jobs: {
@@ -268,27 +324,78 @@ adminRouter.get("/operations/summary", async (req, res) => {
         succeeded: Number(job?.succeeded ?? 0),
         skipped: Number(job?.skipped ?? 0),
         failed: Number(job?.failed ?? 0),
+        retrying: Number(job?.retrying ?? 0),
         pending: Number(job?.pending ?? 0),
         running: Number(job?.running ?? 0),
+        cancelled: Number(job?.cancelled ?? 0),
+      },
+      summaryJobs: {
+        total: Number(summaryJob?.total ?? 0),
+        succeeded: Number(summaryJob?.succeeded ?? 0),
+        skipped: Number(summaryJob?.skipped ?? 0),
+        failed: Number(summaryJob?.failed ?? 0),
+        retrying: Number(summaryJob?.retrying ?? 0),
+        pending: Number(summaryJob?.pending ?? 0),
+        running: Number(summaryJob?.running ?? 0),
+        cancelled: Number(summaryJob?.cancelled ?? 0),
       },
       digests: Number(digest?.digests ?? 0),
       items: Number(digest?.items ?? 0),
+      delivery: {
+        qualityTrackedDigests: Number(digest?.qualityTrackedDigests ?? 0),
+        eligibleItems: Number(digest?.eligibleItems ?? 0),
+        assemblyRetries: Number(digest?.assemblyRetries ?? 0),
+        summaryExcluded: Number(digest?.summaryExcluded ?? 0),
+        publishedWithoutSummary: Number(digest?.publishedWithoutSummary ?? 0),
+      },
     };
   });
 
+  const digestAnomalies = (digestAnomalyRows as Array<Record<string, unknown>>).map((row) => ({
+    kind: "digest_job" as const,
+    id: String(row.id),
+    subject: String(row.userEmail),
+    targetDate: String(row.targetDate),
+    status:
+      String(row.status) === "failed" && Number(row.attemptCount ?? 0) < DIGEST_JOB_MAX_ATTEMPTS
+        ? "retrying"
+        : String(row.status),
+    attemptCount: Number(row.attemptCount ?? 0),
+    lastError: row.lastError ? String(row.lastError) : null,
+    scheduledFor: String(row.scheduledFor),
+    startedAt: row.startedAt ? String(row.startedAt) : null,
+    finishedAt: row.finishedAt ? String(row.finishedAt) : null,
+  }));
+  const summaryAnomalies = (summaryAnomalyRows as Array<Record<string, unknown>>).map((row) => ({
+    kind: "summary_job" as const,
+    id: String(row.id),
+    subject: String(row.articleTitle),
+    targetDate: null,
+    status:
+      String(row.status) === "failed" && Number(row.attemptCount ?? 0) < ARTICLE_SUMMARY_MAX_ATTEMPTS
+        ? "retrying"
+        : String(row.status),
+    attemptCount: Number(row.attemptCount ?? 0),
+    lastError: row.lastError ? String(row.lastError) : null,
+    scheduledFor: String(row.scheduledFor),
+    startedAt: row.startedAt ? String(row.startedAt) : null,
+    finishedAt: row.finishedAt ? String(row.finishedAt) : null,
+    articleUrl: String(row.articleUrl),
+    language: String(row.language),
+  }));
+  const anomalies = [...digestAnomalies, ...summaryAnomalies]
+    .sort((a, b) => {
+      const aTime = a.finishedAt || a.startedAt || a.scheduledFor;
+      const bTime = b.finishedAt || b.startedAt || b.scheduledFor;
+      return bTime.localeCompare(aTime);
+    })
+    .slice(0, 20);
+
   res.json({
     days: daysPayload,
-    anomalies: (anomalyRows as Array<Record<string, unknown>>).map((row) => ({
-      id: String(row.id),
-      userId: String(row.userId),
-      userEmail: String(row.userEmail),
-      targetDate: String(row.targetDate),
-      status: String(row.status),
-      lastError: row.lastError ? String(row.lastError) : null,
-      scheduledFor: String(row.scheduledFor),
-      startedAt: row.startedAt ? String(row.startedAt) : null,
-      finishedAt: row.finishedAt ? String(row.finishedAt) : null,
-    })),
+    anomalyCount: digestAnomalies.length + summaryAnomalies.length,
+    anomalies,
+    generatedAt: now,
   });
 });
 

@@ -84,6 +84,10 @@ export const digests = pgTable("digests", {
   date: text("date").notNull(), // YYYY-MM-DD
   generatedAt: text("generated_at").notNull(),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  eligibleItemCount: integer("eligible_item_count"),
+  assemblyRetryCount: integer("assembly_retry_count"),
+  summaryExcludedCount: integer("summary_excluded_count"),
+  publishedWithoutSummaryCount: integer("published_without_summary_count"),
 });
 
 export const digestItems = pgTable("digest_items", {

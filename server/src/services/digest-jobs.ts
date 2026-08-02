@@ -18,7 +18,7 @@ const DISPATCH_BACKFILL_DAYS = 3;
 const DEFAULT_DIGEST_TIME = "08:00";
 const DEFAULT_TIMEZONE = "Asia/Shanghai";
 const STALE_RUNNING_MS = 30 * 60 * 1000;
-const MAX_ATTEMPTS = 3;
+export const DIGEST_JOB_MAX_ATTEMPTS = 3;
 
 function getRunnerId() {
   return `${process.pid}-${nanoid(6)}`;
@@ -161,7 +161,7 @@ export async function runPendingDigestJobs(options?: { limit?: number; now?: Dat
         eq(digestJobs.jobType, JOB_TYPE),
         inArray(digestJobs.status, ["pending", "failed"]),
         lte(digestJobs.scheduledFor, now.toISOString()),
-        lte(digestJobs.attemptCount, MAX_ATTEMPTS - 1),
+        lte(digestJobs.attemptCount, DIGEST_JOB_MAX_ATTEMPTS - 1),
       ),
     )
     .orderBy(asc(digestJobs.scheduledFor))

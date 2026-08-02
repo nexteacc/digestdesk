@@ -8,6 +8,7 @@ import {
   Gauge,
   Loader2,
   MoreVertical,
+  RefreshCw,
   Search,
   ShieldCheck,
   SlidersHorizontal,
@@ -61,26 +62,23 @@ import { cn } from "@/lib/utils";
 
 type UserStatusFilter = "active" | "revoked" | "all";
 
-const PLAN_META: Record<AdminPlan, { label: string; limit: number | null; className: string }> = {
+const PLAN_META: Record<AdminPlan, { label: string; className: string }> = {
   free: {
     label: "Free",
-    limit: 100,
     className: "border-border bg-secondary text-foreground",
   },
   test: {
     label: "Test",
-    limit: 300,
     className: "border-primary/40 bg-primary/10 text-primary",
   },
   admin: {
     label: "Admin",
-    limit: null,
     className: "border-foreground/20 bg-foreground text-background",
   },
 };
 
-function effectiveLimit(plan: AdminPlan, override: number | null) {
-  return override ?? PLAN_META[plan].limit;
+function effectiveLimit(plan: AdminPlan, override: number | null, planLimits: Record<AdminPlan, number | null>) {
+  return override ?? planLimits[plan];
 }
 
 function displayName(user: AdminUser) {
@@ -137,7 +135,7 @@ function AdminMetric({
 
 function jobStatusTone(status: string) {
   if (status === "failed") return "border-destructive/20 bg-destructive/8 text-destructive";
-  if (status === "running") return "border-primary/25 bg-primary/8 text-primary";
+  if (status === "running" || status === "retrying") return "border-primary/25 bg-primary/8 text-primary";
   if (status === "pending") return "border-foreground/20 bg-foreground/8 text-foreground";
   return "border-border bg-secondary text-foreground";
 }
@@ -148,9 +146,18 @@ function previousOperationsDay(summary: AdminOperationsSummary | null): AdminOpe
 }
 
 function operationHealth(day: AdminOperationsDay) {
-  if (day.jobs.failed > 0) return "failed";
-  if (day.jobs.pending + day.jobs.running > 0) return "pending";
-  if (day.jobs.succeeded > 0) return "healthy";
+  if (day.jobs.failed > 0 || day.summaryJobs.failed > 0 || day.delivery.publishedWithoutSummary > 0) return "failed";
+  if (
+    day.jobs.pending +
+      day.jobs.running +
+      day.jobs.retrying +
+      day.summaryJobs.pending +
+      day.summaryJobs.running +
+      day.summaryJobs.retrying >
+    0
+  ) return "pending";
+  if (day.delivery.summaryExcluded > 0) return "degraded";
+  if (day.jobs.succeeded > 0 || day.summaryJobs.succeeded > 0) return "healthy";
   return "quiet";
 }
 
@@ -158,6 +165,7 @@ function operationHealthLabel(day: AdminOperationsDay, text: (zh: string, en: st
   const health = operationHealth(day);
   if (health === "failed") return text("有失败", "Failed");
   if (health === "pending") return text("待处理", "Pending");
+  if (health === "degraded") return text("有排除", "Degraded");
   if (health === "healthy") return text("正常", "Healthy");
   return text("无任务", "No jobs");
 }
@@ -166,6 +174,7 @@ function operationHealthClass(day: AdminOperationsDay) {
   const health = operationHealth(day);
   if (health === "failed") return "border-destructive/25 bg-destructive/8 text-destructive";
   if (health === "pending") return "border-primary/25 bg-primary/8 text-primary";
+  if (health === "degraded") return "border-primary/25 bg-primary/8 text-primary";
   if (health === "healthy") return "border-green-700/20 bg-green-700/8 text-green-700";
   return "border-border bg-secondary text-muted-foreground";
 }
@@ -210,6 +219,9 @@ function UserRow({
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold">{displayName(user)}</div>
             <div className="truncate text-xs text-muted-foreground">{user.email}</div>
+            <div className="truncate text-xs text-muted-foreground">
+              {text("最近登录", "Last login")} · {formatDate(user.lastLoginAt, text)}
+            </div>
           </div>
         </div>
       </TableCell>
@@ -312,9 +324,11 @@ export default function AdminPage() {
   const { text } = useI18n();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [operations, setOperations] = useState<AdminOperationsSummary | null>(null);
+  const [planLimits, setPlanLimits] = useState<Record<AdminPlan, number | null> | null>(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<UserStatusFilter>("active");
   const [loading, setLoading] = useState(true);
+  const [refreshingOperations, setRefreshingOperations] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
   const [limitDialogOpen, setLimitDialogOpen] = useState(false);
@@ -327,12 +341,13 @@ export default function AdminPage() {
 
     async function loadAdmin() {
       try {
-        await api.fetchAdminMe();
-        const [nextUsers, nextOperations] = await Promise.all([
+        const [admin, nextUsers, nextOperations] = await Promise.all([
+          api.fetchAdminMe(),
           api.fetchAdminUsers(),
           api.fetchAdminOperationsSummary(7),
         ]);
         if (!mounted) return;
+        setPlanLimits(admin.plans);
         setUsers(nextUsers);
         setOperations(nextOperations);
       } catch (error) {
@@ -370,6 +385,26 @@ export default function AdminPage() {
   ).length;
   const digestCount = activeUserRows.reduce((sum, user) => sum + user.digestCount, 0);
   const yesterdayOperations = previousOperationsDay(operations);
+  const summaryJobs = (operations?.days ?? []).reduce(
+    (total, day) => ({
+      total: total.total + day.summaryJobs.total,
+      succeeded: total.succeeded + day.summaryJobs.succeeded,
+      failed: total.failed + day.summaryJobs.failed,
+      retrying: total.retrying + day.summaryJobs.retrying,
+    }),
+    { total: 0, succeeded: 0, failed: 0, retrying: 0 },
+  );
+
+  async function refreshOperations() {
+    setRefreshingOperations(true);
+    try {
+      setOperations(await api.fetchAdminOperationsSummary(7));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : text("刷新运行数据失败", "Failed to refresh operations"));
+    } finally {
+      setRefreshingOperations(false);
+    }
+  }
 
   async function persistUser(
     userId: string,
@@ -393,7 +428,9 @@ export default function AdminPage() {
                 accountPlan: next.accountPlan,
                 accessStatus: next.accessStatus,
                 subscriptionLimitOverride: next.subscriptionLimitOverride,
-                subscriptionLimit: effectiveLimit(next.accountPlan, next.subscriptionLimitOverride),
+                subscriptionLimit: planLimits
+                  ? effectiveLimit(next.accountPlan, next.subscriptionLimitOverride, planLimits)
+                  : item.subscriptionLimit,
               }
             : item,
         ),
@@ -529,9 +566,9 @@ export default function AdminPage() {
         />
         <AdminMetric
           icon={<Gauge className="h-4 w-4" />}
-          label={text("活跃订阅源", "Active feeds")}
+          label={text("有效订阅记录", "Active subscriptions")}
           value={String(totalSubscriptions)}
-          detail={text("可用账号正在接收的订阅源", "Feeds on active accounts")}
+          detail={text("未停用账号的有效订阅，可包含重复源", "Active subscriptions on non-revoked accounts")}
         />
         <AdminMetric
           icon={<CircleAlert className="h-4 w-4" />}
@@ -637,7 +674,7 @@ export default function AdminPage() {
                 {planLabel(plan, text)}
               </Badge>
               <div className="mt-4 text-2xl font-semibold">
-                {limitText(PLAN_META[plan].limit, text)}
+                {planLimits ? limitText(planLimits[plan], text) : "—"}
               </div>
               <div className="mt-1 text-xs text-muted-foreground">
                 {text("订阅源上限", "feed limit")}
@@ -649,10 +686,24 @@ export default function AdminPage() {
         </TabsContent>
 
         <TabsContent value="operations" className="space-y-7">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold">{text("运行监控", "Operations Monitor")}</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {operations
+                  ? text(`数据更新于 ${formatDate(operations.generatedAt, text)}`, `Updated ${formatDate(operations.generatedAt, text)}`)
+                  : text("暂无运行数据", "No operations data")}
+              </div>
+            </div>
+            <Button variant="outline" size="sm" onClick={refreshOperations} disabled={refreshingOperations}>
+              <RefreshCw data-icon="inline-start" className={cn(refreshingOperations ? "animate-spin" : "")} />
+              {text("刷新", "Refresh")}
+            </Button>
+          </div>
           <div className="grid gap-5 md:grid-cols-4">
             <AdminMetric
               icon={<Activity className="h-4 w-4" />}
-              label={text("昨日任务", "Yesterday jobs")}
+              label={text("昨日日报任务", "Yesterday digest jobs")}
               value={String(yesterdayOperations?.jobs.total ?? 0)}
               detail={text(
                 `${yesterdayOperations?.jobs.succeeded ?? 0} 成功 / ${yesterdayOperations?.jobs.skipped ?? 0} 跳过`,
@@ -661,21 +712,35 @@ export default function AdminPage() {
             />
             <AdminMetric
               icon={<CircleAlert className="h-4 w-4" />}
-              label={text("近 7 天异常", "7-day anomalies")}
-              value={String(operations?.anomalies.length ?? 0)}
-              detail={text("失败或到点未完成任务", "Failed or overdue jobs")}
+              label={text("昨日交付 QA", "Yesterday delivery QA")}
+              value={
+                yesterdayOperations?.delivery.qualityTrackedDigests
+                  ? String(yesterdayOperations.delivery.publishedWithoutSummary)
+                  : "—"
+              }
+              detail={
+                yesterdayOperations?.delivery.qualityTrackedDigests
+                  ? text(
+                      `${yesterdayOperations.delivery.summaryExcluded} 篇排除 / ${yesterdayOperations.delivery.assemblyRetries} 次装配重试`,
+                      `${yesterdayOperations.delivery.summaryExcluded} excluded / ${yesterdayOperations.delivery.assemblyRetries} assembly retries`,
+                    )
+                  : text("新版本上线后开始采集", "Tracked after the latest release")
+              }
             />
             <AdminMetric
               icon={<Gauge className="h-4 w-4" />}
-              label={text("昨日日报", "Yesterday digests")}
-              value={String(yesterdayOperations?.digests ?? 0)}
-              detail={text("昨日已生成日报", "Generated yesterday")}
+              label={text("近 7 天摘要任务", "7-day summary jobs")}
+              value={String(summaryJobs.total)}
+              detail={text(
+                `${summaryJobs.succeeded} 成功 / ${summaryJobs.retrying} 重试中 / ${summaryJobs.failed} 最终失败`,
+                `${summaryJobs.succeeded} succeeded / ${summaryJobs.retrying} retrying / ${summaryJobs.failed} exhausted`,
+              )}
             />
             <AdminMetric
               icon={<Users className="h-4 w-4" />}
-              label={text("昨日条目", "Yesterday items")}
-              value={String(yesterdayOperations?.items ?? 0)}
-              detail={text("昨日 digest items", "Digest items yesterday")}
+              label={text("近 7 天异常", "7-day anomalies")}
+              value={String(operations?.anomalyCount ?? 0)}
+              detail={text("失败或超过 10 分钟仍未处理", "Failed or overdue by more than 10 minutes")}
             />
           </div>
 
@@ -690,7 +755,7 @@ export default function AdminPage() {
               {(operations?.days ?? []).map((day) => (
                 <div
                   key={day.date}
-                  className="grid gap-3 rounded-md border border-border bg-background/55 p-3 md:grid-cols-[150px_110px_1fr_160px]"
+                  className="grid gap-4 rounded-md border border-border bg-background/55 p-4 lg:grid-cols-[140px_1fr_1fr_1fr]"
                 >
                   <div>
                     <div className="text-sm font-semibold">{day.date}</div>
@@ -699,36 +764,38 @@ export default function AdminPage() {
                     </Badge>
                   </div>
                   <div>
-                    <div className="text-2xl font-semibold leading-none">{day.jobs.total}</div>
-                    <div className="mt-1 text-xs text-muted-foreground">{text("任务", "jobs")}</div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 text-sm md:grid-cols-5">
-                    <div>
-                      <div className="font-semibold">{day.jobs.succeeded}</div>
-                      <div className="text-xs text-muted-foreground">{text("成功", "succeeded")}</div>
+                    <div className="text-xs font-medium text-muted-foreground">{text("日报任务", "Digest jobs")}</div>
+                    <div className="mt-2 text-sm font-semibold">
+                      {day.jobs.total} {text("个任务", "jobs")} · {day.digests} {text("份日报", "digests")}
                     </div>
-                    <div>
-                      <div className="font-semibold">{day.jobs.skipped}</div>
-                      <div className="text-xs text-muted-foreground">{text("跳过", "skipped")}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {day.jobs.succeeded} {text("成功", "succeeded")} / {day.jobs.skipped} {text("跳过", "skipped")} / {day.jobs.failed} {text("最终失败", "exhausted")}
                     </div>
-                    <div>
-                      <div className={cn("font-semibold", day.jobs.failed > 0 ? "text-destructive" : "")}>{day.jobs.failed}</div>
-                      <div className="text-xs text-muted-foreground">{text("失败", "failed")}</div>
-                    </div>
-                    <div>
-                      <div className={cn("font-semibold", day.jobs.pending + day.jobs.running > 0 ? "text-primary" : "")}>
-                        {day.jobs.pending + day.jobs.running}
-                      </div>
-                      <div className="text-xs text-muted-foreground">{text("待处理", "pending")}</div>
-                    </div>
-                    <div>
-                      <div className="font-semibold">{day.digests}</div>
-                      <div className="text-xs text-muted-foreground">{text("日报", "digests")}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {day.jobs.pending} {text("等待", "pending")} / {day.jobs.running} {text("执行中", "running")} / {day.jobs.retrying} {text("重试中", "retrying")} / {day.jobs.cancelled} {text("取消", "cancelled")}
                     </div>
                   </div>
-                  <div className="md:text-right">
-                    <div className="text-2xl font-semibold leading-none">{day.items}</div>
-                    <div className="mt-1 text-xs text-muted-foreground">{text("总结条目", "digest items")}</div>
+                  <div>
+                    <div className="text-xs font-medium text-muted-foreground">{text("摘要任务", "Summary jobs")}</div>
+                    <div className="mt-2 text-sm font-semibold">{day.summaryJobs.total} {text("个任务", "jobs")}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {day.summaryJobs.succeeded} {text("成功", "succeeded")} / {day.summaryJobs.skipped} {text("跳过", "skipped")} / {day.summaryJobs.failed} {text("最终失败", "exhausted")}
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {day.summaryJobs.pending} {text("等待", "pending")} / {day.summaryJobs.running} {text("执行中", "running")} / {day.summaryJobs.retrying} {text("重试中", "retrying")} / {day.summaryJobs.cancelled} {text("取消", "cancelled")}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-medium text-muted-foreground">{text("交付 QA", "Delivery QA")}</div>
+                    <div className="mt-2 text-sm font-semibold">{day.items} {text("条已发布", "published items")}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {day.delivery.qualityTrackedDigests > 0
+                        ? text(
+                            `${day.delivery.summaryExcluded} 排除 / ${day.delivery.publishedWithoutSummary} 无摘要发布`,
+                            `${day.delivery.summaryExcluded} excluded / ${day.delivery.publishedWithoutSummary} published without summary`,
+                          )
+                        : text("质量数据尚未采集", "Quality data not tracked")}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -744,31 +811,50 @@ export default function AdminPage() {
             <div className="p-4">
               <div className="text-sm font-semibold">{text("需要关注的任务", "Needs Attention")}</div>
               <div className="mt-1 text-xs text-muted-foreground">
-                {text("只显示失败、到点仍 pending 或 running 的任务。", "Failed, pending, or running jobs past schedule.")}
+                {text("显示日报和摘要任务的失败，以及超过 10 分钟仍未处理的任务。", "Digest and summary failures, plus jobs overdue by more than 10 minutes.")}
               </div>
             </div>
-            <Table className="min-w-[820px] border-collapse text-left">
+            <Table className="min-w-[960px] border-collapse text-left">
               <TableHeader className="border-t border-border bg-secondary/45 text-xs uppercase tracking-[0.14em] text-muted-foreground">
                 <TableRow>
-                  <TableHead className="py-3 pl-4 pr-3 font-medium">{text("日期", "Date")}</TableHead>
-                  <TableHead className="px-3 py-3 font-medium">{text("用户", "User")}</TableHead>
+                  <TableHead className="py-3 pl-4 pr-3 font-medium">{text("类型", "Type")}</TableHead>
+                  <TableHead className="px-3 py-3 font-medium">{text("对象", "Subject")}</TableHead>
+                  <TableHead className="px-3 py-3 font-medium">{text("日期", "Date")}</TableHead>
                   <TableHead className="px-3 py-3 font-medium">{text("状态", "Status")}</TableHead>
-                  <TableHead className="px-3 py-3 font-medium">{text("调度时间", "Scheduled")}</TableHead>
+                  <TableHead className="px-3 py-3 font-medium">{text("发生时间", "Event time")}</TableHead>
                   <TableHead className="py-3 pl-3 pr-4 font-medium">{text("错误", "Error")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {(operations?.anomalies ?? []).map((job) => (
                   <TableRow key={job.id}>
-                    <TableCell className="py-3 pl-4 pr-3 text-sm font-medium">{job.targetDate}</TableCell>
-                    <TableCell className="px-3 py-3 text-sm">{job.userEmail}</TableCell>
+                    <TableCell className="py-3 pl-4 pr-3">
+                      <Badge variant="outline" className="rounded-sm">
+                        {job.kind === "digest_job" ? text("日报", "Digest") : text("摘要", "Summary")}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="max-w-[280px] px-3 py-3 text-sm">
+                      {job.articleUrl ? (
+                        <a href={job.articleUrl} target="_blank" rel="noreferrer" className="block truncate hover:underline">
+                          {job.subject}
+                        </a>
+                      ) : (
+                        <span className="block truncate">{job.subject}</span>
+                      )}
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {text("尝试", "Attempts")} {job.attemptCount}{job.language ? ` · ${job.language}` : ""}
+                      </div>
+                    </TableCell>
+                    <TableCell className="px-3 py-3 text-sm font-medium">
+                      {job.targetDate || formatDate(job.finishedAt || job.scheduledFor, text)}
+                    </TableCell>
                     <TableCell className="px-3 py-3">
                       <Badge variant="outline" className={cn("rounded-sm", jobStatusTone(job.status))}>
                         {job.status}
                       </Badge>
                     </TableCell>
                     <TableCell className="px-3 py-3 text-xs text-muted-foreground">
-                      {formatDate(job.scheduledFor, text)}
+                      {formatDate(job.finishedAt || job.startedAt || job.scheduledFor, text)}
                     </TableCell>
                     <TableCell className="max-w-[320px] truncate py-3 pl-3 pr-4 text-xs text-muted-foreground">
                       {job.lastError || text("暂无", "None")}
@@ -777,14 +863,14 @@ export default function AdminPage() {
                 ))}
                 {operations && operations.anomalies.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={6} className="h-24 text-center text-sm text-muted-foreground">
                       {text("没有需要处理的任务", "No jobs need attention")}
                     </TableCell>
                   </TableRow>
                 ) : null}
                 {!operations ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={6} className="h-24 text-center text-sm text-muted-foreground">
                       {text("暂无运行数据", "No operations data")}
                     </TableCell>
                   </TableRow>
