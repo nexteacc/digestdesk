@@ -16,6 +16,15 @@ createRoot(document.getElementById('root')!).render(
     <ClerkProvider
       publishableKey={publishableKey}
       afterSignOutUrl="/"
+      signInUrl="/#/sign-in"
+      signUpUrl="/#/sign-in"
+      signInFallbackRedirectUrl="/#/"
+      signUpFallbackRedirectUrl="/#/"
+      taskUrls={{
+        "choose-organization": "/#/session-task/choose-organization",
+        "reset-password": "/#/session-task/reset-password",
+        "setup-mfa": "/#/session-task/setup-mfa",
+      }}
       appearance={{
         theme: shadcn,
         variables: {

@@ -2,7 +2,9 @@ import { useState, type FormEvent } from "react";
 import { useSignIn, useSignUp } from "@clerk/react/legacy";
 import { isClerkAPIResponseError } from "@clerk/react/errors";
 import { FcGoogle } from "react-icons/fc";
+import { useLocation } from "wouter";
 import DotMatrixBackground from "@/components/auth/DotMatrixBackground";
+import { finalizeAuthSession } from "@/lib/auth-session";
 
 type AuthMode = "sign-in" | "sign-up";
 type AuthStep = "start" | "verify";
@@ -33,6 +35,7 @@ function splitName(name: string) {
 export default function LoginPage() {
   const { isLoaded: signInLoaded, signIn, setActive: setSignInActive } = useSignIn();
   const { isLoaded: signUpLoaded, signUp, setActive: setSignUpActive } = useSignUp();
+  const [, navigate] = useLocation();
   const [mode, setMode] = useState<AuthMode>("sign-in");
   const [step, setStep] = useState<AuthStep>("start");
   const [verification, setVerification] = useState<VerificationState | null>(null);
@@ -46,16 +49,24 @@ export default function LoginPage() {
 
   async function completeSignIn(sessionId: string) {
     if (!setSignInActive) {
-      return;
+      throw new Error("Authentication is not ready. Try again.");
     }
-    await setSignInActive({ session: sessionId, redirectUrl: "/#/" });
+    await finalizeAuthSession({
+      setActive: setSignInActive,
+      sessionId,
+      navigate: (route) => navigate(route, { replace: true }),
+    });
   }
 
   async function completeSignUp(sessionId: string) {
     if (!setSignUpActive) {
-      return;
+      throw new Error("Authentication is not ready. Try again.");
     }
-    await setSignUpActive({ session: sessionId, redirectUrl: "/#/" });
+    await finalizeAuthSession({
+      setActive: setSignUpActive,
+      sessionId,
+      navigate: (route) => navigate(route, { replace: true }),
+    });
   }
 
   async function prepareSecondFactor() {
@@ -283,22 +294,16 @@ export default function LoginPage() {
   return (
     <main className="relative flex min-h-screen min-h-dvh items-center justify-center overflow-hidden bg-[#0d0d0b] px-4 py-6 font-sans text-[#f5f3ee]">
       <DotMatrixBackground />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(13,13,11,0.1)_0%,rgba(13,13,11,0.48)_72%,rgba(13,13,11,0.82)_100%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(13,13,11,0.75)_0%,rgba(13,13,11,0)_100%)]" />
 
       <section className="relative z-10 flex w-full max-w-[400px] flex-col items-center rounded-xl border border-[#34342f] bg-[#151512]/98 px-7 py-8 shadow-[0_24px_70px_rgba(0,0,0,0.62)] sm:px-8">
-        <a href="#/" aria-label="Back to DigestDesk" className="flex h-11 w-11 items-center justify-center rounded-full border border-[#3a3934] text-[17px] font-bold tracking-[-0.04em] text-[#f5f3ee] transition-colors hover:border-[#55534c] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f5f3ee]">
-          DD
+        <a href="#/" aria-label="Back to DigestDesk" className="block h-11 w-11 overflow-hidden rounded-xl transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f5f3ee]">
+          <img src="/icons/icon-192.png" alt="" className="h-full w-full object-cover" />
         </a>
 
         <h1 className="mt-3 text-center font-sans text-[22px] font-semibold leading-tight tracking-[-0.035em] text-[#f5f3ee]">
           {title}
         </h1>
-
-        {step === "start" ? (
-          <p className="mt-1 text-center text-sm leading-5 text-[#88867f]">
-            {mode === "sign-in" ? "Sign in to your account." : "Create a new account to get started."}
-          </p>
-        ) : null}
 
         {step === "verify" && verification ? (
           <form onSubmit={submitVerification} className="mt-5 w-full">
@@ -338,7 +343,7 @@ export default function LoginPage() {
           </form>
         ) : (
           <>
-            <form onSubmit={submitStart} className="mt-4 w-full space-y-2.5">
+            <form onSubmit={submitStart} className="mt-5 w-full space-y-2.5">
               {mode === "sign-up" ? (
                 <>
                   <label htmlFor="auth-name" className="sr-only">Full name</label>

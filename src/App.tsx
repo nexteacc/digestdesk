@@ -1,4 +1,11 @@
-import { AuthenticateWithRedirectCallback, useAuth, useClerk } from "@clerk/react";
+import {
+  AuthenticateWithRedirectCallback,
+  TaskChooseOrganization,
+  TaskResetPassword,
+  TaskSetupMFA,
+  useAuth,
+  useClerk,
+} from "@clerk/react";
 import { Component, Suspense, lazy, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -142,6 +149,10 @@ function RouteFallback() {
   );
 }
 
+function SessionTaskLayout({ children }: { children: ReactNode }) {
+  return <div className="flex min-h-screen items-center justify-center bg-background px-4 py-8">{children}</div>;
+}
+
 // #13 — chunk 加载失败时可重试，不摧毁整个应用
 class RouteErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   constructor(props: { children: ReactNode }) {
@@ -258,6 +269,21 @@ function AppRouter() {
           <Suspense fallback={<RouteFallback />}>
             <TermsOfServicePage />
           </Suspense>
+        </Route>
+        <Route path="/session-task/choose-organization">
+          <SessionTaskLayout>
+            <TaskChooseOrganization redirectUrlComplete="/#/" />
+          </SessionTaskLayout>
+        </Route>
+        <Route path="/session-task/reset-password">
+          <SessionTaskLayout>
+            <TaskResetPassword redirectUrlComplete="/#/" />
+          </SessionTaskLayout>
+        </Route>
+        <Route path="/session-task/setup-mfa">
+          <SessionTaskLayout>
+            <TaskSetupMFA redirectUrlComplete="/#/" />
+          </SessionTaskLayout>
         </Route>
         <Route>
           {isSignedIn ? <AuthenticatedApp /> : (

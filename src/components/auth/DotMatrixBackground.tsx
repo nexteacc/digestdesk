@@ -39,18 +39,18 @@ const fragmentShader = `
 
     float opacity = step(0.0, st.x) * step(0.0, st.y);
     vec2 grid = vec2(int(st.x / u_total_size), int(st.y / u_total_size));
-    float frequency = 4.0;
+    float frequency = 5.0;
     float showOffset = random(grid);
     float rand = random(grid * floor((u_time / frequency) + showOffset + frequency));
 
     opacity *= u_opacities[int(rand * 10.0)];
-    opacity *= 0.88 + 0.12 * sin(u_time * 1.35 + showOffset * 6.2831853);
     opacity *= 1.0 - step(u_dot_size / u_total_size, fract(st.x / u_total_size));
     opacity *= 1.0 - step(u_dot_size / u_total_size, fract(st.y / u_total_size));
 
     float distanceFromCenter = distance(u_resolution / 2.0 / u_total_size, grid);
     float timingOffset = distanceFromCenter * 0.01 + random(grid) * 0.15;
     opacity *= step(timingOffset, u_time * 3.0);
+    opacity *= clamp((1.0 - step(timingOffset + 0.1, u_time * 3.0)) * 1.25, 1.0, 1.25);
 
     vec3 color = u_colors[int(showOffset * 6.0)];
     fragColor = vec4(color, opacity);
@@ -76,15 +76,15 @@ export default function DotMatrixBackground() {
     const uniforms = {
       u_time: { value: 0 },
       u_resolution: { value: resolution },
-      u_opacities: { value: [0.26, 0.26, 0.34, 0.42, 0.42, 0.52, 0.62, 0.72, 0.82, 0.92] },
+      u_opacities: { value: [0.3, 0.3, 0.3, 0.5, 0.5, 0.5, 0.8, 0.8, 0.8, 1] },
       u_colors: {
         value: [
-          new THREE.Vector3(0.48, 0.47, 0.44),
-          new THREE.Vector3(0.42, 0.41, 0.39),
-          new THREE.Vector3(0.36, 0.35, 0.33),
-          new THREE.Vector3(0.52, 0.51, 0.48),
-          new THREE.Vector3(0.4, 0.39, 0.37),
-          new THREE.Vector3(0.46, 0.45, 0.42),
+          new THREE.Vector3(1, 1, 1),
+          new THREE.Vector3(1, 1, 1),
+          new THREE.Vector3(1, 1, 1),
+          new THREE.Vector3(1, 1, 1),
+          new THREE.Vector3(1, 1, 1),
+          new THREE.Vector3(1, 1, 1),
         ],
       },
       u_total_size: { value: 10 * pixelRatio },
