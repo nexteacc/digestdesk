@@ -53,7 +53,7 @@ function DigestVoicePlayer() {
       className="group flex shrink-0 items-center gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
       <span className={cn(
-        "relative h-10 w-10 shrink-0 overflow-hidden rounded-full ring-1 ring-border transition-all duration-200 group-hover:ring-primary/60",
+        "relative h-10 w-10 shrink-0 overflow-hidden rounded-full ring-1 ring-border transition-all duration-200 group-hover:ring-foreground/30",
         isPlaying && "ring-2 ring-primary"
       )}>
         <img
@@ -62,8 +62,8 @@ function DigestVoicePlayer() {
           className="h-full w-full object-cover"
         />
         <span className={cn(
-          "absolute inset-0 flex items-center justify-center bg-black/20 text-white transition-colors group-hover:bg-primary/45",
-          isPlaying && "bg-primary/50"
+          "absolute inset-0 flex items-center justify-center bg-black/20 text-white transition-colors group-hover:bg-black/30",
+          isPlaying && "bg-black/35"
         )}>
           {isPlaying ? <Pause className="h-3.5 w-3.5 fill-current" /> : <Play className="h-3.5 w-3.5 translate-x-px fill-current" />}
         </span>
