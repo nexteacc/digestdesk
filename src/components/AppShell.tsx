@@ -74,8 +74,8 @@ export default function AppShell({ children }: PropsWithChildren) {
         isZen ? "max-h-0 opacity-0 border-none" : "max-h-[140px] md:max-h-[100px] opacity-100 hairline"
       )}>
         <div className="app-shell-container py-3 md:py-4">
-          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 md:flex-nowrap md:gap-4">
-            <h1 className="min-w-0 text-2xl md:text-3xl font-semibold leading-none">
+          <div className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-2 md:grid-cols-[1fr_auto_1fr] md:gap-4">
+            <h1 className="min-w-0 text-2xl font-semibold leading-none md:col-start-1 md:row-start-1 md:text-3xl">
               <Link href="/">
                 <span className="flex items-center gap-2 md:gap-3 hover:opacity-90 transition-opacity">
                   <span>DigestDesk</span>
@@ -105,7 +105,7 @@ export default function AppShell({ children }: PropsWithChildren) {
               </Link>
             </h1>
 
-            <div className="order-3 flex w-full items-center justify-between gap-2 md:order-none md:w-auto md:justify-end">
+            <div className="col-span-2 row-start-2 flex w-full items-center justify-between gap-2 md:col-span-1 md:col-start-2 md:row-start-1 md:w-auto md:justify-self-center">
               <div className="flex items-center gap-2 md:hidden">
                 <img src="/logos/substack.svg" alt="Substack" className="h-4 w-4" />
                 <img src="/logos/applepodcasts-9933cc.svg" alt="Podcast" className="h-4 w-4" />
@@ -141,17 +141,19 @@ export default function AppShell({ children }: PropsWithChildren) {
                 </Button>
               </div>
             </div>
-            <UserButton
-              userProfileProps={{
-                additionalOAuthScopes: googleYouTubeImportEnabled
-                  ? {
-                      google: ["https://www.googleapis.com/auth/youtube.readonly"],
-                    }
-                  : undefined,
-              }}
-            />
+            <div className="col-start-2 row-start-1 justify-self-end md:col-start-3">
+              <UserButton
+                userProfileProps={{
+                  additionalOAuthScopes: googleYouTubeImportEnabled
+                    ? {
+                        google: ["https://www.googleapis.com/auth/youtube.readonly"],
+                      }
+                    : undefined,
+                }}
+              />
             </div>
           </div>
+        </div>
       </header>
 
       <div className="relative z-50 hidden h-0 justify-center md:flex">

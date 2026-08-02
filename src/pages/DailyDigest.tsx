@@ -22,6 +22,8 @@ import {
   RefreshCw,
   ArrowUp,
   ChevronDown,
+  Pause,
+  Play,
 } from "lucide-react";
 import { useZenMode } from "@/hooks/useZenMode";
 import { useI18n } from "@/contexts/I18nContext";
@@ -37,6 +39,42 @@ function slugify(s: string) {
 
 let digestOverviewCache: DigestOverview | null = null;
 const digestDetailCache = new Map<string, Digest>();
+
+function DigestVoicePlayer() {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const { text } = useI18n();
+
+  return (
+    <button
+      type="button"
+      aria-label={isPlaying ? text("暂停小雅语音日报", "Pause Xiaoya's audio digest") : text("播放小雅语音日报", "Play Xiaoya's audio digest")}
+      aria-pressed={isPlaying}
+      onClick={() => setIsPlaying((playing) => !playing)}
+      className="group flex shrink-0 items-center gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+    >
+      <span className={cn(
+        "relative h-10 w-10 shrink-0 overflow-hidden rounded-full ring-1 ring-border transition-all duration-200 group-hover:ring-primary/60",
+        isPlaying && "ring-2 ring-primary"
+      )}>
+        <img
+          src="/avatars/xiaoya.png"
+          alt=""
+          className="h-full w-full object-cover"
+        />
+        <span className={cn(
+          "absolute inset-0 flex items-center justify-center bg-black/20 text-white transition-colors group-hover:bg-primary/45",
+          isPlaying && "bg-primary/50"
+        )}>
+          {isPlaying ? <Pause className="h-3.5 w-3.5 fill-current" /> : <Play className="h-3.5 w-3.5 translate-x-px fill-current" />}
+        </span>
+      </span>
+      <span className="flex flex-col items-start leading-none">
+        <span className="text-sm font-semibold text-foreground">{text("小雅", "Xiaoya")}</span>
+        <span className="mt-1.5 text-[11px] text-muted-foreground">{text("6 分钟", "6 min")}</span>
+      </span>
+    </button>
+  );
+}
 
 // --- 生成进度阶段 ---
 const PROGRESS_PHASES = [
@@ -491,14 +529,12 @@ export default function DailyDigest() {
           "transition-all duration-500 ease-in-out overflow-hidden",
           isZen ? "max-h-0 opacity-0 mb-0" : "max-h-[300px] opacity-100 mb-6"
         )}>
-          <div className="flex-1 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-            <div>
-              <div className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground">
-                {text("日报", "Digest")}
-              </div>
-              <h2 className="mt-1 text-3xl font-semibold tracking-tight">
+          <div className="flex flex-1 flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex min-w-0 items-center gap-4">
+              <h2 className="shrink-0 text-3xl font-semibold tracking-tight">
                 {text("今日日报", "Today's Digest")}
               </h2>
+              <DigestVoicePlayer />
             </div>
             <div className="flex flex-wrap items-center gap-3">
               {hasFeeds && (
