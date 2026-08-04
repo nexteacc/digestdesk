@@ -47,7 +47,7 @@ function DigestVoicePlayer() {
   return (
     <button
       type="button"
-      aria-label={isPlaying ? text("暂停小雅语音日报", "Pause Xiaoya's audio digest") : text("播放小雅语音日报", "Play Xiaoya's audio digest")}
+      aria-label={isPlaying ? text("暂停雷军语音日报", "Pause Lei Jun's audio digest") : text("播放雷军语音日报", "Play Lei Jun's audio digest")}
       aria-pressed={isPlaying}
       onClick={() => setIsPlaying((playing) => !playing)}
       className="group flex shrink-0 items-center gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -57,8 +57,10 @@ function DigestVoicePlayer() {
         isPlaying && "ring-2 ring-primary"
       )}>
         <img
-          src="/avatars/xiaoya.png"
+          src="/avatars/lei-jun.jpg"
           alt=""
+          title={text("雷军（图片：DirectX3，CC BY-SA 4.0）", "Lei Jun (photo: DirectX3, CC BY-SA 4.0)")}
+          data-source="https://commons.wikimedia.org/wiki/File:Lei_Jun.jpg"
           className="h-full w-full object-cover"
         />
         <span className={cn(
@@ -69,7 +71,7 @@ function DigestVoicePlayer() {
         </span>
       </span>
       <span className="flex flex-col items-start leading-none">
-        <span className="text-sm font-semibold text-foreground">{text("小雅", "Xiaoya")}</span>
+        <span className="text-sm font-semibold text-foreground">{text("雷军", "Lei Jun")}</span>
         <span className="mt-1.5 text-[11px] text-muted-foreground">{text("6 分钟", "6 min")}</span>
       </span>
     </button>
