@@ -1,5 +1,8 @@
 {
   "app_dir": "server",
   "build_command": "pnpm build",
-  "start_command": "pnpm start:scheduler"
+  "start_command": "pnpm start:scheduler",
+  "dockerfile": {
+    "path": "Dockerfile.scheduler"
+  }
 }
