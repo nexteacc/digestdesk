@@ -15,4 +15,4 @@ RUN pnpm build
 
 EXPOSE 8080
 
-CMD ["node", "server/dist/index.js"]
+CMD ["sh", "-c", "exec ${ZBPACK_START_COMMAND:-pnpm start}"]

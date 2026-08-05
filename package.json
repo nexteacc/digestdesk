@@ -10,6 +10,7 @@
     "dev": "vite",
     "build": "vite build && pnpm --filter substack-digest-server build",
     "start": "node server/dist/index.js",
+    "start:scheduler": "node server/dist/scheduler.js",
     "lint": "eslint .",
     "preview": "vite preview"
   },
