@@ -52,6 +52,39 @@ const LoginPage = lazy(loadLoginPage);
 const PrivacyPolicyPage = lazy(loadPrivacyPolicyPage);
 const TermsOfServicePage = lazy(loadTermsOfServicePage);
 
+const PUBLIC_PAGE_METADATA: Record<string, { title: string; description: string }> = {
+  "/": {
+    title: "DigestDesk — Your everyday editor",
+    description: "DigestDesk brings updates from Substack, podcasts, RSS feeds, and YouTube into one personal daily digest.",
+  },
+  "/privacy": {
+    title: "Privacy Policy — DigestDesk",
+    description: "Learn how DigestDesk collects, uses, stores, and deletes personal data.",
+  },
+  "/terms": {
+    title: "Terms of Service — DigestDesk",
+    description: "Read the terms that govern access to and use of DigestDesk.",
+  },
+};
+
+function PageMetadata() {
+  const [location] = useLocation();
+  const { isSignedIn } = useAuth();
+
+  useEffect(() => {
+    const isPublicPage = location === "/privacy" || location === "/terms" || (location === "/" && !isSignedIn);
+    const metadata = isPublicPage ? PUBLIC_PAGE_METADATA[location] : undefined;
+    const description = document.querySelector<HTMLMetaElement>('meta[name="description"]');
+    const robots = document.querySelector<HTMLMetaElement>('meta[name="robots"]');
+
+    document.title = metadata?.title ?? "DigestDesk";
+    description?.setAttribute("content", metadata?.description ?? "DigestDesk personal reading workspace.");
+    robots?.setAttribute("content", isPublicPage ? "index, follow" : "noindex, nofollow");
+  }, [isSignedIn, location]);
+
+  return null;
+}
+
 function WorkspaceLoader() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
@@ -252,6 +285,7 @@ function AppRouter() {
 
   return (
     <Router hook={useHashLocation}>
+      <PageMetadata />
       <Switch>
         {import.meta.env.DEV ? (
           <Route path="/sign-in-preview">
