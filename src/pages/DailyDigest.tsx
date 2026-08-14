@@ -53,7 +53,7 @@ function DigestVoicePlayer() {
       className="group flex shrink-0 items-center gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
       <span className={cn(
-        "relative h-10 w-10 shrink-0 overflow-hidden rounded-full ring-1 ring-border transition-all duration-200 group-hover:ring-foreground/30",
+        "relative h-10 w-10 shrink-0 overflow-hidden rounded-full ring-1 ring-inset ring-border transition-all duration-200 group-hover:ring-foreground/30",
         isPlaying && "ring-2 ring-primary"
       )}>
         <img
