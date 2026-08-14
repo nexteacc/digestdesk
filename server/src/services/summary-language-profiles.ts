@@ -53,7 +53,7 @@ export const SUMMARY_LANGUAGE_PROFILES: Record<DigestLanguage, SummaryLanguagePr
   zh: {
     language: "zh",
     label: "简体中文",
-    promptVersion: "zh-v1",
+    promptVersion: "zh-v2",
     schema: {
       oneLiner: "1 条中文核心结论。",
       keyInsights: "3 条中文信息点，每条 1 个事实、数据、方法或结论。",
@@ -63,7 +63,8 @@ export const SUMMARY_LANGUAGE_PROFILES: Record<DigestLanguage, SummaryLanguagePr
 要求：
 - oneLiner：1 条核心结论，35-70 个中文字符。
 - keyInsights：3 条信息点，每条只写 1 个事实、数据、方法或结论，55-90 个中文字符。
-- 数值事实准确；英文金额按中文习惯换算（如 $124m -> 1.24 亿美元），数量级和指标类型准确。
+- 文章、书籍、报告、节目、刊物、产品、项目、模型和版本等可识别名称：有确定的通行中文名时使用通行中文名；否则保留原文拼写和大小写，不自行创造译名。人名、机构名和地名遵循中文新闻中已确立的标准译名，没有把握时保留原文。
+- 金额、百分比、日期、区间、单位和数量级可按中文新闻习惯做等值表达，但必须保持原始数值、币种、单位、数量级、精度、指标类型、时间范围及约数或预测状态不变。无法可靠确认等值关系时保留原文，不得猜测、缩放或混淆融资、估值、营收、成本与支出。
 - 行业术语翻译：先判断文章所属领域，再按该领域选择中文译法；不要机械直译多义词。
 - 专业文章的关键术语必须符合对应行业的中文习惯。
 - 若英文术语在中文专业语境中更常保留英文，优先保留英文原词；不确定时保留英文，不要误译到其他行业。`,
@@ -75,8 +76,9 @@ export const SUMMARY_LANGUAGE_PROFILES: Record<DigestLanguage, SummaryLanguagePr
 任务规则：
 1. oneLiner：1 条核心结论，35-70 个中文字符。
 2. keyInsights：3 条信息点，每条只写 1 个事实、数据、方法或结论，55-90 个中文字符。
-3. 数值事实准确；英文金额按中文习惯换算（如 $124m -> 1.24 亿美元），数量级和指标类型准确。
-4. 输出 JSON 对象：{"oneLiner": string, "keyInsights": [string, string, string]}。`,
+3. 文章、书籍、报告、节目、刊物、产品、项目、模型和版本等可识别名称：有确定的通行中文名时使用通行中文名；否则保留原文拼写和大小写，不自行创造译名。人名、机构名和地名遵循中文新闻中已确立的标准译名，没有把握时保留原文。
+4. 金额、百分比、日期、区间、单位和数量级可按中文新闻习惯做等值表达，但必须保持原始数值、币种、单位、数量级、精度、指标类型、时间范围及约数或预测状态不变。无法可靠确认等值关系时保留原文，不得猜测、缩放或混淆融资、估值、营收、成本与支出。
+5. 输出 JSON 对象：{"oneLiner": string, "keyInsights": [string, string, string]}。`,
     validation: {
       oneLiner: { unit: "chars", min: 35, max: 90 },
       keyInsight: { unit: "chars", min: 10, max: 130 },
@@ -94,7 +96,7 @@ export const SUMMARY_LANGUAGE_PROFILES: Record<DigestLanguage, SummaryLanguagePr
   en: {
     language: "en",
     label: "English",
-    promptVersion: "en-v1",
+    promptVersion: "en-v2",
     schema: {
       oneLiner: "One complete, natural English sentence expressing the core conclusion.",
       keyInsights: "Exactly 3 complete, natural English sentences. Each expresses one concrete fact, data point, method, or conclusion.",
@@ -103,7 +105,8 @@ export const SUMMARY_LANGUAGE_PROFILES: Record<DigestLanguage, SummaryLanguagePr
 
 Writing rules:
 - Keep the core conclusion and important facts; remove ads, links, boilerplate, and background noise.
-- Preserve amounts, percentages, dates, quantities, units, and order of magnitude; do not confuse funding, revenue, valuation, cost, or spend; omit uncertain numeric details instead of guessing.
+- For identifiable titles and names of articles, books, reports, programs, publications, products, projects, models, and versions, use an established English name when one is certain; otherwise preserve the source spelling and capitalization and never invent a translation. Use established English forms for people, organizations, and places; preserve the source form when uncertain.
+- Amounts, percentages, dates, ranges, units, and scales may follow standard English news conventions only when the rendering is exactly equivalent. Preserve the value, currency, unit, scale, precision, metric type, time scope, and approximate or forecast status; otherwise retain the source expression. Never guess, rescale, or confuse funding, valuation, revenue, cost, and spending.
 - oneLiner: one core conclusion, target 14-30 words.
 - keyInsights: exactly 3 takeaways, one fact, data point, method, or conclusion each, target 18-40 words.
 - Prefer a shorter complete sentence over a longer unfinished one.`,
@@ -116,10 +119,11 @@ Writing rules:
 Task rules:
 1. Output one complete English oneLiner sentence, 14-30 words.
 2. Output keyInsights as exactly 3 complete English sentences, 18-40 words each.
-3. Preserve amounts, percentages, dates, quantities, units, and order of magnitude; do not confuse funding, revenue, valuation, cost, or spend; omit uncertain numeric details instead of guessing.
-4. Each key insight must contain one specific fact, data point, method, or conclusion.
-5. Never use ellipses, placeholders, fragments, headings, markdown, or source text dumps.
-6. Required JSON object shape: {"oneLiner": string, "keyInsights": [string, string, string]}.`,
+3. For identifiable titles and names of articles, books, reports, programs, publications, products, projects, models, and versions, use an established English name when one is certain; otherwise preserve the source spelling and capitalization and never invent a translation. Use established English forms for people, organizations, and places; preserve the source form when uncertain.
+4. Amounts, percentages, dates, ranges, units, and scales may follow standard English news conventions only when exactly equivalent. Preserve the value, currency, unit, scale, precision, metric type, time scope, and approximate or forecast status; otherwise retain the source expression. Never guess, rescale, or confuse funding, valuation, revenue, cost, and spending.
+5. Each key insight must contain one specific fact, data point, method, or conclusion.
+6. Never use ellipses, placeholders, fragments, headings, markdown, or source text dumps.
+7. Required JSON object shape: {"oneLiner": string, "keyInsights": [string, string, string]}.`,
     validation: {
       oneLiner: { unit: "words", min: 14, max: 45, minChars: 6 },
       keyInsight: { unit: "words", min: 1, max: 60, minChars: 24 },
@@ -137,7 +141,7 @@ Task rules:
   de: {
     language: "de",
     label: "Deutsch",
-    promptVersion: "de-v1",
+    promptVersion: "de-v2",
     schema: {
       oneLiner: "Ein vollständiger, natürlicher deutscher Satz mit der Kernaussage.",
       keyInsights: "Genau 3 vollständige deutsche Sätze. Jeder Satz enthält genau einen konkreten Fakt, Datenpunkt, eine Methode oder Schlussfolgerung.",
@@ -146,7 +150,8 @@ Task rules:
 
 Regeln:
 - Bewahre die Kernaussage und die wichtigsten Fakten; entferne Werbung, Links, Boilerplate und Hintergrundrauschen.
-- Bewahre Beträge, Prozentwerte, Daten, Mengen, Einheiten und Größenordnungen korrekt; verwechsle Finanzierung, Umsatz, Bewertung, Kosten oder Ausgaben nicht.
+- Verwende für erkennbare Titel und Namen von Artikeln, Büchern, Berichten, Sendungen, Publikationen, Produkten, Projekten, Modellen und Versionen einen sicher etablierten deutschen Namen; andernfalls die Schreibweise und Groß-/Kleinschreibung der Quelle beibehalten und keine Übersetzung erfinden. Für Personen, Organisationen und Orte etablierte deutsche Formen verwenden; bei Unsicherheit die Quellform beibehalten.
+- Beträge, Prozentwerte, Daten, Bereiche, Einheiten und Größenordnungen dürfen nur dann an deutsche Nachrichtenkonventionen angepasst werden, wenn die Darstellung exakt gleichwertig bleibt. Wert, Währung, Einheit, Größenordnung, Genauigkeit, Kennzahltyp, Zeitraum sowie Näherungs- oder Prognosestatus bewahren; andernfalls den Quellausdruck beibehalten. Finanzierung, Bewertung, Umsatz, Kosten und Ausgaben niemals verwechseln.
 - oneLiner: genau eine zentrale Aussage als vollständiger deutscher Satz, Ziel 14-32 Wörter.
 - keyInsights: genau 3 Erkenntnisse, jeweils ein Fakt, Datenpunkt, eine Methode oder Schlussfolgerung, Ziel 18-42 Wörter.
 - Verwende natürliche deutsche Fachsprache; übersetze Fachbegriffe nur, wenn die deutsche Fachübersetzung üblich ist. Sonst den etablierten englischen Begriff beibehalten.
@@ -160,10 +165,11 @@ Regeln:
 Aufgabenregeln:
 1. Gib einen vollständigen deutschen oneLiner-Satz mit 14-32 Wörtern aus.
 2. Gib keyInsights als genau 3 vollständige deutsche Sätze aus, jeweils 18-42 Wörter.
-3. Bewahre Beträge, Prozentwerte, Daten, Mengen, Einheiten und Größenordnungen korrekt; verwechsle Finanzierung, Umsatz, Bewertung, Kosten oder Ausgaben nicht.
-4. Jeder keyInsight enthält genau einen konkreten Fakt, Datenpunkt, eine Methode oder Schlussfolgerung.
-5. Keine Ellipsen, Platzhalter, Fragmente, Überschriften, Markdown oder Quellentext-Dumps.
-6. Erforderliches JSON-Objekt: {"oneLiner": string, "keyInsights": [string, string, string]}.`,
+3. Verwende für erkennbare Titel und Namen von Artikeln, Büchern, Berichten, Sendungen, Publikationen, Produkten, Projekten, Modellen und Versionen einen sicher etablierten deutschen Namen; andernfalls die Schreibweise und Groß-/Kleinschreibung der Quelle beibehalten und keine Übersetzung erfinden. Für Personen, Organisationen und Orte etablierte deutsche Formen verwenden; bei Unsicherheit die Quellform beibehalten.
+4. Beträge, Prozentwerte, Daten, Bereiche, Einheiten und Größenordnungen dürfen nur dann an deutsche Nachrichtenkonventionen angepasst werden, wenn die Darstellung exakt gleichwertig bleibt. Wert, Währung, Einheit, Größenordnung, Genauigkeit, Kennzahltyp, Zeitraum sowie Näherungs- oder Prognosestatus bewahren; andernfalls den Quellausdruck beibehalten. Finanzierung, Bewertung, Umsatz, Kosten und Ausgaben niemals verwechseln.
+5. Jeder keyInsight enthält genau einen konkreten Fakt, Datenpunkt, eine Methode oder Schlussfolgerung.
+6. Keine Ellipsen, Platzhalter, Fragmente, Überschriften, Markdown oder Quellentext-Dumps.
+7. Erforderliches JSON-Objekt: {"oneLiner": string, "keyInsights": [string, string, string]}.`,
     validation: {
       oneLiner: { unit: "words", min: 12, max: 48, minChars: 8 },
       keyInsight: { unit: "words", min: 1, max: 66, minChars: 24 },
