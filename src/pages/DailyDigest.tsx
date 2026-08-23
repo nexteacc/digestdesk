@@ -5,8 +5,6 @@ import { enUS, zhCN } from "date-fns/locale";
 
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
@@ -24,6 +22,8 @@ import {
   ChevronDown,
   Pause,
   Play,
+  Sparkles,
+  ArrowRight,
 } from "lucide-react";
 import { useZenMode } from "@/hooks/useZenMode";
 import { useI18n } from "@/contexts/I18nContext";
@@ -353,7 +353,7 @@ function WelcomeSearch({ onAdded }: { onAdded: () => void }) {
 
 // --- 主页面 ---
 export default function DailyDigest() {
-  const { text, isZh, locale } = useI18n();
+  const { text, locale } = useI18n();
   const [digestList, setDigestList] = useState<DigestListItem[]>([]);
   const [current, setCurrent] = useState<Digest | null>(null);
   const [loading, setLoading] = useState(true);
@@ -524,21 +524,35 @@ export default function DailyDigest() {
     setIsMobileTocOpen(false);
   }, []);
 
+  const articleNumberById = useMemo(
+    () => new Map(digestSections.flatMap((section) => section.items).map((item, index) => [item.id, index + 1])),
+    [digestSections],
+  );
+
   return (
       <div className="flex flex-col">
-        {/* Header */}
         <div className={cn(
           "transition-all duration-500 ease-in-out overflow-hidden",
-          isZen ? "max-h-0 opacity-0 mb-0" : "max-h-[300px] opacity-100 mb-6"
+          isZen ? "max-h-0 opacity-0 mb-0" : "max-h-[420px] opacity-100 mb-8"
         )}>
-          <div className="flex flex-1 flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex min-w-0 items-center gap-4">
-              <h2 className="shrink-0 text-3xl font-semibold tracking-tight">
+          <div className="flex flex-1 flex-col gap-6 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0">
+              <h2 className="text-5xl font-semibold leading-none tracking-tight md:text-6xl lg:text-7xl">
                 {text("今日日报", "Today's Digest")}
               </h2>
-              <DigestVoicePlayer />
+              <div className="mt-4 text-lg text-muted-foreground md:text-xl">{todayLabel}</div>
+              {!loading && (
+                <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-foreground/70">
+                  <span><strong className="font-semibold text-foreground">{articleCount}</strong> {text("篇内容", "stories")}</span>
+                  <span><strong className="font-semibold text-foreground">{feedCount}</strong> {text("个订阅源", "feeds")}</span>
+                  {digestDays > 0 && (
+                    <span>{text(`第 ${digestDays} 期`, `Edition ${digestDays}`)}</span>
+                  )}
+                </div>
+              )}
             </div>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-4 md:justify-end">
+              <DigestVoicePlayer />
               {hasFeeds && (
                 <Button
                   size="sm"
@@ -550,43 +564,8 @@ export default function DailyDigest() {
                   {generating ? text("正在同步", "Syncing") : text("立即同步", "Sync Now")}
                 </Button>
               )}
-              <Badge variant="outline" className="border-border">
-                {todayLabel}
-              </Badge>
             </div>
           </div>
-          <Separator className="mt-4" />
-          {!loading && (
-            <div className="mt-3 grid gap-3 text-xs text-muted-foreground md:grid-cols-2 items-center">
-              <div>
-                <span className="font-bold text-primary text-sm">{feedCount}</span>
-                <span className="ml-1">{text("个订阅源", "feeds")}</span>
-                {digestDays > 0 && (
-                  isZh ? (
-                    <>
-                      <span className="mx-1">·</span>
-                      <span className="ml-1">做编辑的第</span>
-                      <span className="mx-1 font-bold text-primary text-sm">
-                        {digestDays}
-                      </span>
-                      <span className="ml-1">天</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="mx-1">·</span>
-                      <span className="ml-1">Day</span>
-                      <span className="mx-1 font-bold text-primary text-sm">{digestDays}</span>
-                      <span>as editor</span>
-                    </>
-                  )
-                )}
-              </div>
-              <div className="md:text-right">
-                <span className="font-bold text-primary text-sm">{articleCount}</span>
-                <span className="ml-1">{text("篇文章收录", "articles")}</span>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Loading */}
@@ -626,47 +605,62 @@ export default function DailyDigest() {
         {/* Has digest content */}
         {!loading && !generating && current && (
           <>
-            {/* Archive selector */}
             {digestList.length > 1 && (
               <div className={cn(
                 "transition-all duration-500 ease-in-out overflow-hidden",
                 isZen ? "max-h-0 opacity-0 mb-0" : "max-h-[200px] opacity-100 mb-6"
               )}>
-                <Card className="p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
-                      {text("归档", "Archive")}
-                    </div>
-                    <div className="flex flex-wrap justify-start gap-2 md:justify-end">
-                      {digestList.slice(0, 7).map((d) => {
-                        const active = current.id === d.id;
-                        return (
-                          <Button
-                            key={d.id}
-                            variant={active ? "default" : "outline"}
-                            size="sm"
-                            className={cn(
-                              "transition-colors",
-                              active
-                                ? "shadow-sm text-primary-foreground"
-                                : "border-border/80 text-foreground/80 hover:border-primary/30 hover:bg-accent/60",
-                            )}
-                            onClick={() => selectDigest(d)}
-                            disabled={selectingId !== null}
-                            >
-                            {formatDigestDate(d.date)}
-                          </Button>
-                        );
-                      })}
-                    </div>
+                <div className="flex flex-wrap items-center gap-3 rounded-md bg-secondary/35 px-4 py-3">
+                  <div className="mr-2 text-xs tracking-[0.18em] uppercase text-muted-foreground">
+                    {text("归档", "Archive")}
                   </div>
-                </Card>
+                  {digestList.slice(0, 7).map((d) => {
+                    const active = current.id === d.id;
+                    return (
+                      <Button
+                        key={d.id}
+                        variant={active ? "default" : "ghost"}
+                        size="sm"
+                        className={cn("transition-colors", active ? "text-primary-foreground" : "text-foreground/75")}
+                        onClick={() => selectDigest(d)}
+                        disabled={selectingId !== null}
+                      >
+                        {formatDigestDate(d.date)}
+                      </Button>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
-            <div className="grid gap-4 md:grid-cols-[320px_1fr] items-start transition-all duration-500">
-              {/* TOC */}
-              <Card id="digest-toc" className="flex flex-col p-4 md:sticky md:top-6 md:h-[calc(100vh-5rem)] md:overflow-hidden md:p-5">
+            <a
+              href="https://mega4labs.vercel.app/"
+              target="_blank"
+              rel="noreferrer"
+              className="group mb-8 flex cursor-pointer flex-col gap-4 rounded-md bg-primary/[0.07] px-5 py-5 transition-colors hover:bg-primary/[0.11] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 md:flex-row md:items-center md:justify-between md:px-6"
+            >
+              <div className="flex min-w-0 items-start gap-4 md:items-center">
+                <Sparkles className="mt-1 h-5 w-5 shrink-0 text-primary md:mt-0" />
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+                    {text("专题 · Mega4Labs 策展", "Feature · Curated by Mega4Labs")}
+                  </div>
+                  <div className="mt-1 text-xl font-semibold md:text-2xl">
+                    {text("AI 行业领航者", "AI Industry Sailors")}
+                  </div>
+                  <div className="mt-1 text-sm text-foreground/65">
+                    {text("追踪塑造 AI 未来的人，以及他们真正说过什么。", "Long-form interviews with the people shaping AI.")}
+                  </div>
+                </div>
+              </div>
+              <span className="inline-flex shrink-0 items-center gap-2 text-sm font-semibold text-primary">
+                {text("查看策展", "Explore")}
+                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </span>
+            </a>
+
+            <div className="grid items-start gap-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-10">
+              <aside id="digest-toc" className="flex flex-col rounded-md bg-secondary/35 p-4 lg:sticky lg:top-6 lg:max-h-[calc(100vh-5rem)] lg:overflow-hidden lg:p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
@@ -683,7 +677,7 @@ export default function DailyDigest() {
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-11 w-11 md:hidden"
+                    className="h-11 w-11 lg:hidden"
                     aria-expanded={isMobileTocOpen}
                     aria-controls="digest-toc-list"
                     aria-label={isMobileTocOpen ? text("收起目录", "Collapse contents") : text("展开目录", "Expand contents")}
@@ -695,15 +689,15 @@ export default function DailyDigest() {
                 <ScrollArea
                   id="digest-toc-list"
                   className={cn(
-                    "mt-4 -mx-2 px-2 md:h-auto md:min-h-0 md:flex-1 md:overscroll-contain",
-                    isMobileTocOpen ? "h-[min(50vh,320px)]" : "hidden md:block",
+                    "mt-4 -mx-2 px-2 lg:h-auto lg:min-h-0 lg:flex-1 lg:overscroll-contain",
+                    isMobileTocOpen ? "h-[min(50vh,320px)]" : "hidden lg:block",
                   )}
                 >
-                  <div className="space-y-5 pb-6">
+                  <div className="space-y-6 pb-4">
                     {digestSections.map((section) => (
                       <section key={section.sourceType}>
-                        <div className="flex items-center gap-2 border-b border-border/70 pb-2">
-                          <span className="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-background">
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-background">
                             <img src={section.meta.logoUrl} alt={section.meta.enLabel} className="h-4 w-4 object-contain" />
                           </span>
                           <div className="min-w-0">
@@ -715,17 +709,17 @@ export default function DailyDigest() {
                             </div>
                           </div>
                         </div>
-                        <ol className="mt-3 space-y-3">
-                          {section.items.map((item, idx) => (
+                        <ol className="mt-4 space-y-4">
+                          {section.items.map((item) => (
                             <li key={item.anchorId}>
                               <button
                                 type="button"
-                                className="block w-full text-left leading-snug hover:text-foreground group"
+                                className="group block w-full cursor-pointer text-left leading-snug hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                 onClick={() => handleTocClick(item.anchorId)}
                               >
                                 <div className="flex items-center gap-2 text-[12px] text-muted-foreground tracking-wide group-hover:text-foreground transition-colors">
-                                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border bg-background text-[10px] group-hover:border-foreground/30 transition-colors">
-                                    {String(idx + 1).padStart(2, "0")}
+                                  <span className="inline-flex h-5 w-6 items-center justify-center text-[11px] font-semibold tabular-nums text-foreground/55">
+                                    {String(articleNumberById.get(item.id) ?? 0).padStart(2, "0")}
                                   </span>
                                   <Avatar className="h-5 w-5 border border-border bg-muted">
                                     <AvatarImage src={item.feedLogoUrl} alt={item.feedTitle} />
@@ -735,7 +729,7 @@ export default function DailyDigest() {
                                   </Avatar>
                                   <span className="truncate">{item.feedTitle}</span>
                                 </div>
-                                <div className="mt-1 text-sm underline underline-offset-4 decoration-border group-hover:decoration-foreground/30 transition-colors line-clamp-2">
+                                <div className="mt-1 pl-8 text-sm transition-colors line-clamp-2">
                                   {item.title}
                                 </div>
                               </button>
@@ -746,110 +740,75 @@ export default function DailyDigest() {
                     ))}
                   </div>
                 </ScrollArea>
-              </Card>
+              </aside>
 
-              {/* Articles */}
-              <div className="space-y-4">
+              <div className="space-y-12">
                 {digestSections.map((section) => (
-                  <section key={section.sourceType} className="space-y-4">
-                    <Card className="gap-0 border-border/80 bg-card/80 p-5">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-background">
-                          <img src={section.meta.logoUrl} alt={section.meta.enLabel} className="h-6 w-6 object-contain" />
-                        </span>
-                        <div>
-                          <div className="text-[11px] tracking-[0.18em] uppercase text-muted-foreground">
-                            {text("栏目", "Section")}
-                          </div>
-                          <h4 className="mt-1 text-2xl font-semibold">
-                            {text(section.meta.zhLabel, section.meta.enLabel)}
-                            <span className="ml-2 text-base font-normal text-muted-foreground">
-                              · {section.items.length} {text("篇", "items")}
-                            </span>
-                          </h4>
-                        </div>
+                  <section key={section.sourceType}>
+                    <div className="mb-2 flex items-center gap-3">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary/45">
+                        <img src={section.meta.logoUrl} alt={section.meta.enLabel} className="h-5 w-5 object-contain" />
+                      </span>
+                      <div>
+                        <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{text("栏目", "Section")}</div>
+                        <h3 className="mt-0.5 text-2xl font-semibold md:text-3xl">
+                          {text(section.meta.zhLabel, section.meta.enLabel)}
+                          <span className="ml-2 text-sm font-normal text-muted-foreground">{section.items.length} {text("篇", "items")}</span>
+                        </h3>
                       </div>
-                    </Card>
+                    </div>
 
-                    {section.items.map((it, index) => (
-                      <Card key={it.id} className="p-5 scroll-mt-8" id={it.anchorId}>
-                        <div className="flex flex-col gap-3">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <Avatar className="h-6 w-6 border border-border bg-muted">
-                                <AvatarImage src={it.feedLogoUrl} alt={it.feedTitle} />
-                                <AvatarFallback className="text-[10px]">
-                                  {it.feedTitle.slice(0, 2).toUpperCase()}
-                                </AvatarFallback>
-                              </Avatar>
-                              <span className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
-                                {it.feedTitle}
-                              </span>
-                            </div>
-                            <h4 className="mt-2 text-xl md:text-2xl font-semibold leading-snug break-words">
-                              {it.title}
-                            </h4>
-                          </div>
-
-                          <div className="flex flex-col gap-3 items-start">
-                            {it.author && (
-                              <div className="text-xs text-muted-foreground">
-                                {text("作者：", "by ")}{it.author}
+                    <ol>
+                      {section.items.map((it) => (
+                        <li key={it.id}>
+                          <article className="scroll-mt-8 py-7" id={it.anchorId}>
+                            <div className="grid gap-4 lg:grid-cols-[52px_minmax(0,1fr)_auto] lg:gap-6">
+                              <div className="text-2xl font-medium tabular-nums text-foreground/45 md:text-3xl">
+                                {String(articleNumberById.get(it.id) ?? 0).padStart(2, "0")}
                               </div>
-                            )}
-                            <a
-                              href={it.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex"
-                            >
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="gap-1.5"
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                  <Avatar className="h-5 w-5 border border-border bg-muted">
+                                    <AvatarImage src={it.feedLogoUrl} alt={it.feedTitle} />
+                                    <AvatarFallback className="text-[9px]">{it.feedTitle.slice(0, 2).toUpperCase()}</AvatarFallback>
+                                  </Avatar>
+                                  <span>{it.feedTitle}</span>
+                                  {it.author && <span>· {it.author}</span>}
+                                </div>
+                                <h4 className="mt-2 text-xl font-semibold leading-snug break-words md:text-2xl lg:text-[1.7rem]">
+                                  {it.title}
+                                </h4>
+                                <p className="mt-3 max-w-4xl text-base leading-7 text-foreground/75 break-words">
+                                  {it.oneLiner}
+                                </p>
+                                {it.keyInsights.length > 0 && (
+                                  <ul className="mt-4 max-w-4xl space-y-2 text-sm leading-6 text-foreground/70">
+                                    {it.keyInsights.map((k, i) => (
+                                      <li key={i} className="flex gap-3">
+                                        <span aria-hidden="true" className="mt-[0.65rem] h-1 w-1 shrink-0 rounded-full bg-primary/70" />
+                                        <span>{k}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                              <a
+                                href={it.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex h-fit cursor-pointer items-center gap-1.5 text-sm font-semibold text-foreground/65 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 lg:mt-8"
                               >
-                                {text("阅读原文", "View Original")}
+                                {text("原文", "Original")}
                                 <ExternalLink className="h-3.5 w-3.5" />
-                              </Button>
-                            </a>
-                          </div>
-                        </div>
-
-                        <Separator className="my-4" />
-
-                        <div className="pl-4 border-l-4 border-primary my-6">
-                          <div className="text-xs tracking-[0.18em] uppercase text-primary mb-2 font-medium">
-                            {text("一句话总结", "TL;DR")}
-                          </div>
-                          <div className="text-base italic leading-relaxed text-foreground/90 break-words">
-                            {it.oneLiner}
-                          </div>
-                        </div>
-
-                        {it.keyInsights.length > 0 && (
-                          <div className="mt-4">
-                            <div className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
-                              {text("关键洞察", "Takeaways")}
+                              </a>
                             </div>
-                            <ul className="mt-2 list-disc pl-5 space-y-2 text-sm leading-relaxed">
-                              {it.keyInsights.map((k, i) => (
-                                <li key={i}>{k}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-
-                        <div className="mt-5 text-xs text-muted-foreground">
-                          <span className="text-primary font-semibold mr-1">
-                            #{String(index + 1).padStart(2, "0")}
-                          </span>
-                        </div>
-                      </Card>
-                    ))}
+                          </article>
+                        </li>
+                      ))}
+                    </ol>
                   </section>
                 ))}
 
-                {/* Reading completion ritual */}
                 <ReadingComplete itemCount={current.items.length} />
               </div>
             </div>

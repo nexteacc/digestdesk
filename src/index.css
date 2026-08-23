@@ -178,6 +178,10 @@ Design reminder (commitment):
   padding-inline: 1rem;
 }
 
+.app-shell-container-wide {
+  max-width: none;
+}
+
 @media (min-width: 48rem) {
   .app-shell-container {
     padding-inline: 1.5rem;

@@ -179,6 +179,7 @@ export default function AppShell({ children }: PropsWithChildren) {
 
       <div className={cn(
         "app-shell-container transition-[padding] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
+        location === "/" && "app-shell-container-wide",
         "py-4 md:py-6"
       )}>
         <div className={cn(

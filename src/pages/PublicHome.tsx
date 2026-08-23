@@ -5,33 +5,6 @@ const featureList = [
   "Your daily personal newspaper",
 ];
 
-const digestPreview = [
-  {
-    source: "Substack",
-    logo: "/logos/substack.svg",
-    publication: "Product Notes",
-    title: "The small decisions that make a product worth returning to",
-    summary: "Retention often begins before the habit does: with a clear promise, a useful first result, and fewer decisions left to the reader.",
-    readTime: "6 min",
-  },
-  {
-    source: "Podcast",
-    logo: "/logos/applepodcasts-9933cc.svg",
-    publication: "The Long View",
-    title: "What changes when software becomes a daily collaborator",
-    summary: "A conversation about shifting from one-off automation to systems that remember context, surface judgment, and improve with use.",
-    readTime: "42 min",
-  },
-  {
-    source: "YouTube",
-    logo: "/logos/youtube.svg",
-    publication: "Field Research",
-    title: "Inside a quieter, more durable creator business",
-    summary: "The strongest audience loops are built around recurring value, direct distribution, and content people deliberately save for later.",
-    readTime: "12 min",
-  },
-];
-
 export default function PublicHome() {
   return (
     <div className="min-h-screen paper-noise flex flex-col">
@@ -109,63 +82,6 @@ export default function PublicHome() {
             </div>
           </section>
 
-          <section aria-labelledby="digest-preview-title" className="mt-14 md:mt-20">
-            <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">A sample edition</p>
-                <h2 id="digest-preview-title" className="mt-2 text-3xl font-semibold tracking-tight md:text-4xl">
-                  Today’s digest, already edited
-                </h2>
-              </div>
-              <p className="text-sm font-medium text-foreground/65">3 sources · 3 essential stories · about 12 minutes to scan</p>
-            </div>
-
-            <div className="overflow-hidden rounded-lg border border-border bg-card/85 shadow-[0_18px_50px_rgba(28,25,23,0.07)]">
-              <div className="grid lg:grid-cols-[280px_minmax(0,1fr)]">
-                <aside className="bg-secondary/45 p-5 md:p-7 lg:border-r lg:border-border/80">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">In this edition</p>
-                  <ol className="mt-6 space-y-5">
-                    {digestPreview.map((item, index) => (
-                      <li key={item.title} className="flex gap-3">
-                        <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-background text-xs font-semibold text-foreground/65">
-                          {index + 1}
-                        </span>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                            <img src={item.logo} alt="" className="h-4 w-4 object-contain" />
-                            <span>{item.publication}</span>
-                          </div>
-                          <p className="mt-1.5 text-sm font-semibold leading-5 text-foreground/90">{item.title}</p>
-                        </div>
-                      </li>
-                    ))}
-                  </ol>
-                </aside>
-
-                <div className="p-5 md:p-8 lg:p-10">
-                  <div className="space-y-9">
-                    {digestPreview.map((item) => (
-                      <article key={item.title} className="grid gap-4 md:grid-cols-[minmax(0,1fr)_120px] md:gap-8">
-                        <div>
-                          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                            <img src={item.logo} alt="" className="h-4 w-4 object-contain" />
-                            <span>{item.source}</span>
-                            <span aria-hidden="true">·</span>
-                            <span>{item.publication}</span>
-                          </div>
-                          <h3 className="mt-3 max-w-4xl text-2xl font-semibold leading-tight md:text-3xl">{item.title}</h3>
-                          <div className="mt-4 max-w-4xl border-l-4 border-primary pl-4">
-                            <p className="text-base leading-7 text-foreground/78">{item.summary}</p>
-                          </div>
-                        </div>
-                        <div className="text-sm font-medium text-muted-foreground md:text-right">{item.readTime}</div>
-                      </article>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
         </div>
       </main>
     </div>
