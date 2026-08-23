@@ -1,5 +1,7 @@
 const routeLoaders = {
   "/": () => import("@/pages/DailyDigest"),
+  "/topics/ai-leaders": () => import("@/pages/AiLeadersTopic"),
+  "/topics/ai-leaders/detail": () => import("@/pages/AiLeaderDetail"),
   "/subscriptions": () => import("@/pages/Subscriptions"),
   "/rss": () => import("@/pages/RssFeeds"),
   "/youtube": () => import("@/pages/YouTubeFeeds"),
@@ -21,6 +23,8 @@ export function preloadRoute(path: string) {
 }
 
 export const loadDailyDigestPage = routeLoaders["/"];
+export const loadAiLeadersTopicPage = routeLoaders["/topics/ai-leaders"];
+export const loadAiLeaderDetailPage = routeLoaders["/topics/ai-leaders/detail"];
 export const loadSubscriptionsPage = routeLoaders["/subscriptions"];
 export const loadRssFeedsPage = routeLoaders["/rss"];
 export const loadYouTubeFeedsPage = routeLoaders["/youtube"];

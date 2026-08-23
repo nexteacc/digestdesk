@@ -26,6 +26,8 @@ import {
 } from "@/lib/auth-bootstrap";
 import {
   loadDailyDigestPage,
+  loadAiLeaderDetailPage,
+  loadAiLeadersTopicPage,
   loadAdminPage,
   loadNotFoundPage,
   loadPodcastFeedsPage,
@@ -40,6 +42,8 @@ import {
 } from "@/lib/route-preload";
 
 const DailyDigest = lazy(loadDailyDigestPage);
+const AiLeadersTopic = lazy(loadAiLeadersTopicPage);
+const AiLeaderDetail = lazy(loadAiLeaderDetailPage);
 const AdminPage = lazy(loadAdminPage);
 const SubscriptionsPage = lazy(loadSubscriptionsPage);
 const RssFeedsPage = lazy(loadRssFeedsPage);
@@ -221,6 +225,7 @@ class RouteErrorBoundary extends Component<{ children: ReactNode }, { hasError: 
 // #19 + #20 — 路由切换后移焦点到内容区 + aria-live 播报
 const ROUTE_TITLES: Record<string, [string, string]> = {
   "/": ["今日日报", "Daily Digest"],
+  "/topics/ai-leaders": ["AI 领航者", "AI Leaders"],
   "/subscriptions": ["关注列表", "Subscriptions"],
   "/rss": ["RSS 订阅", "RSS Feeds"],
   "/youtube": ["YouTube 频道", "YouTube Channels"],
@@ -235,7 +240,7 @@ function RouteAnnouncer() {
   const isFirstRender = useRef(true);
 
   const getTitle = useCallback(() => {
-    const pair = ROUTE_TITLES[location];
+    const pair = ROUTE_TITLES[location] ?? (location.startsWith("/topics/ai-leaders/") ? ROUTE_TITLES["/topics/ai-leaders"] : undefined);
     if (!pair) return "";
     const isZh = (localStorage.getItem("digestdesk-locale") || "en") === "zh";
     return isZh ? pair[0] : pair[1];
@@ -472,6 +477,8 @@ function AuthenticatedWorkspace({ userId }: { userId: string }) {
         <Suspense fallback={<RouteFallback />}>
           <Switch>
             <Route path="/" component={DailyDigest} />
+            <Route path="/topics/ai-leaders/:slug" component={AiLeaderDetail} />
+            <Route path="/topics/ai-leaders" component={AiLeadersTopic} />
             <Route path="/subscriptions" component={SubscriptionsPage} />
             <Route path="/rss" component={RssFeedsPage} />
             <Route path="/youtube" component={YouTubeFeedsPage} />
