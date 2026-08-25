@@ -309,6 +309,10 @@ export function fetchDigestOverview(): Promise<DigestOverview> {
   return request("/digests/overview");
 }
 
+export function fetchPublicDigest(): Promise<DigestOverview> {
+  return request("/public/digest");
+}
+
 // --- Admin ---
 
 export type AdminPlan = "free" | "test" | "admin";

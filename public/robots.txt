@@ -2,4 +2,9 @@ User-agent: *
 Allow: /
 Disallow: /api/
 
+User-agent: OAI-SearchBot
+Allow: /
+Allow: /api/public/digest
+Disallow: /api/
+
 Sitemap: https://digestdesk.news/sitemap.xml

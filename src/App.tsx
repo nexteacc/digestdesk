@@ -58,8 +58,8 @@ const TermsOfServicePage = lazy(loadTermsOfServicePage);
 
 const PUBLIC_PAGE_METADATA: Record<string, { title: string; description: string }> = {
   "/": {
-    title: "DigestDesk — Your everyday editor",
-    description: "DigestDesk brings updates from Substack, podcasts, RSS feeds, and YouTube into one personal daily digest.",
+    title: "DigestDesk — 你的每日编辑",
+    description: "DigestDesk 将 Substack、播客、RSS 和 YouTube 的重要更新整理成一份个人日报。",
   },
   "/privacy": {
     title: "Privacy Policy — DigestDesk",

@@ -15,7 +15,9 @@ import { settingsRouter } from "./routes/settings.js";
 import { authRouter } from "./routes/auth.js";
 import { adminRouter } from "./routes/admin.js";
 import { resolveUser } from "./middleware/resolve-user.js";
-import { initDb } from "./db/index.js";
+import { getDb, initDb } from "./db/index.js";
+import { eq, desc, and, isNull, or, ilike } from "drizzle-orm";
+import { digests, digestItems, feeds, subscriptions, users } from "./db/schema.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -47,6 +49,82 @@ if (allowedOriginList.length > 0) {
 }
 app.use(express.json());
 app.use(clerkMiddleware());
+
+app.get("/api/public/digest", async (_req, res) => {
+  const publisher = process.env.PUBLIC_DIGEST_USER_ID?.trim();
+  if (!publisher) {
+    res.json({ digests: [], currentDigest: null, feeds: [] });
+    return;
+  }
+
+  const db = getDb();
+  const publisherRows = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(or(eq(users.id, publisher), eq(users.name, publisher), ilike(users.email, `${publisher}@%`)))
+    .limit(2);
+
+  if (publisherRows.length !== 1) {
+    res.json({ digests: [], currentDigest: null, feeds: [] });
+    return;
+  }
+
+  const userId = publisherRows[0].id;
+  const [digest] = await db
+    .select()
+    .from(digests)
+    .where(and(eq(digests.userId, userId), eq(digests.type, "daily")))
+    .orderBy(desc(digests.date))
+    .limit(1);
+
+  if (!digest) {
+    res.json({ digests: [], currentDigest: null, feeds: [] });
+    return;
+  }
+
+  const [itemRows, feedRows] = await Promise.all([
+    db.select().from(digestItems).where(eq(digestItems.digestId, digest.id)).orderBy(digestItems.sortOrder),
+    db
+      .select({ feed: feeds })
+      .from(subscriptions)
+      .innerJoin(feeds, eq(subscriptions.feedId, feeds.id))
+      .where(and(eq(subscriptions.userId, userId), isNull(subscriptions.endedAt))),
+  ]);
+
+  res.json({
+    digests: [{ id: digest.id, type: digest.type, date: digest.date, generatedAt: digest.generatedAt }],
+    currentDigest: {
+      id: digest.id,
+      type: digest.type,
+      date: digest.date,
+      generatedAt: digest.generatedAt,
+      items: itemRows.map((row) => ({
+        id: row.id,
+        feedId: row.feedId ?? undefined,
+        sourceType: row.sourceType,
+        feedTitle: row.feedName,
+        title: row.articleTitle,
+        author: row.author ?? undefined,
+        url: row.url,
+        oneLiner: row.oneLiner,
+        keyInsights: JSON.parse(row.keyInsights),
+        publishedAt: row.publishedAt,
+      })),
+    },
+    feeds: feedRows.map(({ feed }) => ({
+      id: feed.id,
+      title: feed.name,
+      description: feed.description ?? undefined,
+      logoUrl: feed.logoUrl ?? undefined,
+      authorName: feed.authorName ?? undefined,
+      url: feed.publicationUrl,
+      feedUrl: feed.feedUrl,
+      sourceType: feed.sourceType,
+      lastFetchedAt: feed.lastFetchedAt ?? undefined,
+      createdAt: feed.createdAt,
+    })),
+  });
+});
 
 let ready = false;
 let initError: string | null = null;

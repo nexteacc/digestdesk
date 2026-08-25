@@ -1,18 +1,30 @@
-const titleWords = ["Your", "everyday", "editor"];
+import { useEffect, useState } from "react";
+
+import { DigestEdition } from "@/components/DigestEdition";
+import * as api from "@/lib/api";
+import type { DigestOverview } from "@/lib/types";
+
+const titleWords = ["你的", "每日", "编辑"];
 
 const featureList = [
-  "Track the creators you care about",
-  "Your daily personal newspaper",
+  "追踪你关心的创作者",
+  "每天一份专属日报",
 ];
 
 export default function PublicHome() {
+  const [overview, setOverview] = useState<DigestOverview | null>(null);
+
+  useEffect(() => {
+    void api.fetchPublicDigest().then(setOverview).catch(() => undefined);
+  }, []);
+
   return (
     <div className="min-h-screen paper-noise flex flex-col">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-sm focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:shadow-md"
       >
-        Skip to main content
+        跳至主要内容
       </a>
 
       <header className="hairline">
@@ -30,12 +42,12 @@ export default function PublicHome() {
               </span>
             </div>
 
-            <nav aria-label="Legal" className="flex items-center gap-4 text-sm font-medium text-foreground/70 sm:gap-7 sm:text-base">
+            <nav aria-label="法律信息" className="flex items-center gap-4 text-sm font-medium text-foreground/70 sm:gap-7 sm:text-base">
               <a href="#/privacy" className="rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4">
-                Privacy
+                隐私
               </a>
               <a href="#/terms" className="rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4">
-                Terms
+                条款
               </a>
             </nav>
           </div>
@@ -47,7 +59,7 @@ export default function PublicHome() {
           <section className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.48fr)] lg:items-end lg:gap-16">
             <div>
               <p className="mb-5 text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">
-                One edition. Every source that matters.
+                你关注的世界，每天编辑一次
               </p>
               <h2
                 className="max-w-5xl text-5xl font-semibold leading-[0.98] tracking-tight sm:text-6xl lg:text-7xl xl:text-[5.5rem]"
@@ -56,7 +68,7 @@ export default function PublicHome() {
                 {titleWords.map((word) => (
                   <span
                     key={word}
-                    className={`mr-[0.18em] inline-block ${word === "everyday" ? "text-[var(--primary)]" : "text-foreground"}`}
+                    className={`mr-[0.18em] inline-block ${word === "每日" ? "text-[var(--primary)]" : "text-foreground"}`}
                   >
                     {word}
                   </span>
@@ -65,14 +77,14 @@ export default function PublicHome() {
 
               <div className="mt-8 flex flex-wrap gap-3">
                 <a href="#/sign-in" className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-sm bg-primary px-6 py-2.5 text-base font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 active:bg-primary/85">
-                  Sign in
+                  登录
                 </a>
               </div>
             </div>
 
             <div className="rounded-md bg-secondary/65 p-6 md:p-7">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-foreground/65">
-                Why It Matters
+                为什么值得使用
               </p>
               <ul className="mt-5 space-y-3 text-base leading-7 text-foreground/85">
                 {featureList.map((item) => (
@@ -81,7 +93,11 @@ export default function PublicHome() {
               </ul>
             </div>
           </section>
-
+          {overview?.currentDigest ? (
+            <section className="mt-16 border-t border-border pt-12 md:mt-20 md:pt-16">
+              <DigestEdition digest={overview.currentDigest} feeds={overview.feeds} localeOverride="zh" />
+            </section>
+          ) : null}
         </div>
       </main>
     </div>
