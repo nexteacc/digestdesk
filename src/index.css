@@ -378,17 +378,6 @@ Design reminder (commitment):
   stroke-width: 1.8;
 }
 
-.workspace-sidebar-user {
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 11px;
-  margin-top: auto;
-  border-top: 1px solid var(--border);
-  padding: 20px 8px 0;
-  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-}
-
 .workspace-user-avatar {
   display: block;
   width: 38px;
@@ -399,33 +388,6 @@ Design reminder (commitment):
 .workspace-user-avatar > * {
   width: 100%;
   height: 100%;
-}
-
-.workspace-user-copy {
-  min-width: 0;
-}
-
-.workspace-user-copy strong,
-.workspace-user-copy span {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.workspace-user-copy strong {
-  font-size: 14px;
-}
-
-.workspace-user-copy span {
-  margin-top: 2px;
-  color: var(--muted-foreground);
-  font-size: 12px;
-}
-
-.workspace-sidebar-user > svg {
-  width: 17px;
-  height: 17px;
 }
 
 .workspace-surface {
@@ -1266,10 +1228,6 @@ Design reminder (commitment):
 
   .workspace-nav-separator {
     margin-block: 14px;
-  }
-
-  .workspace-sidebar-user {
-    display: none;
   }
 
   .workspace-surface {

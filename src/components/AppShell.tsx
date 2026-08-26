@@ -2,7 +2,6 @@ import { useState, type PropsWithChildren, type ReactNode } from "react";
 import { UserButton, useUser } from "@clerk/react";
 import { Link, useLocation } from "wouter";
 import {
-  ChevronDown,
   Menu,
   Newspaper,
   Settings as SettingsIcon,
@@ -109,14 +108,6 @@ export default function AppShell({ children }: PropsWithChildren) {
           <nav className="workspace-nav-group">{navGroup(manageNav)}</nav>
         </div>
 
-        <div className="workspace-sidebar-user">
-          <span className="workspace-user-avatar">{renderUserButton()}</span>
-          <span className="workspace-user-copy">
-            <strong>{displayName}</strong>
-            <span>{text("DigestDesk 用户", "DigestDesk reader")}</span>
-          </span>
-          <ChevronDown aria-hidden="true" />
-        </div>
       </aside>
 
       <div className="workspace-surface">
