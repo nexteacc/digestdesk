@@ -470,23 +470,80 @@ Design reminder (commitment):
   line-height: 26px;
 }
 
-.digest-date-select {
+.digest-date-rail {
+  max-width: 650px;
+  margin-top: 17px;
+  overflow-x: auto;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  scrollbar-width: thin;
+}
+
+.digest-date-track {
+  display: grid;
+  min-width: 560px;
+  grid-template-columns: repeat(7, minmax(72px, 1fr));
+}
+
+.digest-date-day {
   position: relative;
-  display: inline-flex;
-  align-items: center;
-}
-
-.digest-date-select select {
-  position: absolute;
-  inset: 0;
-  width: 100%;
+  display: grid;
+  min-height: 58px;
   cursor: pointer;
-  opacity: 0;
+  place-content: center;
+  gap: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  text-align: center;
+  transition: background-color 140ms ease, color 140ms ease;
 }
 
-.digest-date-select svg {
-  width: 16px;
-  height: 16px;
+.digest-date-day::after {
+  position: absolute;
+  right: 22%;
+  bottom: -1px;
+  left: 22%;
+  height: 3px;
+  background: transparent;
+  content: "";
+}
+
+.digest-date-day:hover:not(:disabled) {
+  background: var(--secondary);
+  color: var(--foreground);
+}
+
+.digest-date-day:focus-visible {
+  z-index: 1;
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+.digest-date-day.is-active {
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.digest-date-day.is-active::after {
+  background: var(--primary);
+}
+
+.digest-date-day:disabled:not(.is-active) {
+  cursor: default;
+  color: color-mix(in oklch, var(--muted-foreground) 42%, transparent);
+}
+
+.digest-date-day > span {
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.digest-date-day > small {
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 16px;
 }
 
 .digest-stats {
@@ -1302,6 +1359,15 @@ Design reminder (commitment):
     flex-direction: column;
     gap: 0;
     font-size: 15px;
+  }
+
+  .digest-date-rail {
+    margin-top: 14px;
+  }
+
+  .digest-date-track {
+    min-width: 504px;
+    grid-template-columns: repeat(7, 72px);
   }
 
   .digest-stats {

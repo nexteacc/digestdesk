@@ -1,10 +1,9 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { format } from "date-fns";
+import { addDays, format } from "date-fns";
 import { enUS, zhCN } from "date-fns/locale";
 import {
   ArrowRight,
   ArrowUp,
-  ChevronDown,
   Clock3,
   FileText,
   Layers3,
@@ -203,6 +202,7 @@ export default function DailyDigest() {
   const [hasFeeds, setHasFeeds] = useState(true);
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [selectingId, setSelectingId] = useState<string | null>(null);
+  const activeDateRef = useRef<HTMLButtonElement>(null);
 
   const applyOverview = useCallback((overview: DigestOverview) => {
     digestOverviewCache = overview;
@@ -279,10 +279,20 @@ export default function DailyDigest() {
       : format(date, "EEEE, MMM d, yyyy", { locale: enUS });
   }, [current, locale]);
 
-  const formatDigestDate = useCallback((dateText: string) => {
-    const date = new Date(`${dateText}T00:00:00`);
-    return locale === "zh" ? format(date, "yyyy年M月d日", { locale: zhCN }) : format(date, "MMM d, yyyy", { locale: enUS });
-  }, [locale]);
+  const recentDigestDays = useMemo(() => {
+    if (digestList.length === 0) return [];
+    const digestByDate = new Map(digestList.map((digest) => [digest.date, digest]));
+    const latestDate = new Date(`${digestList[0].date}T00:00:00`);
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = addDays(latestDate, index - 6);
+      const dateKey = format(date, "yyyy-MM-dd");
+      return { date, dateKey, digest: digestByDate.get(dateKey) };
+    });
+  }, [digestList]);
+
+  useEffect(() => {
+    activeDateRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [current?.id]);
 
   const feedLogoMaps = useMemo(() => {
     const byId = new Map<string, string | undefined>();
@@ -324,18 +334,34 @@ export default function DailyDigest() {
       <header className="digest-page-head">
         <div className="digest-title-block">
           <h1>{text("今日日报", "Today's Digest")}</h1>
-          <div className="digest-date-line">
-            <span>{dateLabel}</span>
-            {current && digestList.length > 1 ? (
-              <label className="digest-date-select">
-                <span className="sr-only">{text("切换日报日期", "Choose digest date")}</span>
-                <select value={current.id} disabled={selectingId !== null} onChange={(event) => void selectDigest(event.target.value)}>
-                  {digestList.map((digest) => <option key={digest.id} value={digest.id}>{formatDigestDate(digest.date)}</option>)}
-                </select>
-                <ChevronDown aria-hidden="true" />
-              </label>
-            ) : null}
-          </div>
+          <div className="digest-date-line"><span>{dateLabel}</span></div>
+          {current && digestList.length > 1 ? (
+            <nav className="digest-date-rail" aria-label={text("最近 7 天的日报", "Digests from the latest 7 days")}>
+              <div className="digest-date-track">
+                {recentDigestDays.map(({ date, dateKey, digest }) => {
+                  const isActive = digest?.id === current.id;
+                  const accessibleDate = locale === "zh" ? format(date, "M月d日 EEEE", { locale: zhCN }) : format(date, "EEEE, MMMM d", { locale: enUS });
+                  const accessibleLabel = digest ? accessibleDate : text(`${accessibleDate}，暂无日报`, `${accessibleDate}, no digest`);
+                  return (
+                    <button
+                      key={dateKey}
+                      ref={isActive ? activeDateRef : undefined}
+                      type="button"
+                      className={cn("digest-date-day", isActive && "is-active")}
+                      disabled={!digest || selectingId !== null}
+                      aria-current={isActive ? "date" : undefined}
+                      aria-label={accessibleLabel}
+                      title={!digest ? accessibleLabel : undefined}
+                      onClick={() => digest && void selectDigest(digest.id)}
+                    >
+                      <span>{locale === "zh" ? format(date, "M月d日") : format(date, "MMM d", { locale: enUS })}</span>
+                      <small>{format(date, "EEE", { locale: locale === "zh" ? zhCN : enUS })}</small>
+                    </button>
+                  );
+                })}
+              </div>
+            </nav>
+          ) : null}
           {!loading ? (
             <div className="digest-stats">
               <span><FileText />{articleCount} {text("篇内容", "stories")}</span>
