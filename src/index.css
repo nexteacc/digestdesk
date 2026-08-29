@@ -716,7 +716,7 @@ Design reminder (commitment):
 
 .digest-story-list {
   display: grid;
-  gap: 14px;
+  gap: 24px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1325,6 +1325,10 @@ Design reminder (commitment):
   .digest-story-card {
     grid-template-columns: 1fr;
     padding: 18px;
+  }
+
+  .digest-story-list {
+    gap: 20px;
   }
 
   .topic-video-grid {
