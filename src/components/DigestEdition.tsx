@@ -1,7 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { format } from "date-fns";
 import { enUS, zhCN } from "date-fns/locale";
-import { Clock3, FileText, Layers3 } from "lucide-react";
+import { ChevronDown, Clock3, FileText, Layers3 } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useI18n } from "@/contexts/I18nContext";
@@ -17,8 +17,9 @@ function estimateReadingMinutes(items: DigestItem[]) {
   return Math.max(1, Math.round(cjkCount / 300 + latinWords / 220));
 }
 
-export function DigestEdition({ digest, feeds, localeOverride }: { digest: Digest; feeds: Feed[]; localeOverride?: "zh" | "en" }) {
+export function DigestEdition({ digest, feeds, localeOverride, initialItemsPerSection }: { digest: Digest; feeds: Feed[]; localeOverride?: "zh" | "en"; initialItemsPerSection?: number }) {
   const i18n = useI18n();
+  const [expandedSections, setExpandedSections] = useState<Set<DigestSourceType>>(() => new Set());
   const locale = localeOverride ?? i18n.locale;
   const text = (zh: string, en: string) => (locale === "zh" ? zh : en);
   const date = new Date(`${digest.date}T00:00:00`);
@@ -70,8 +71,13 @@ export function DigestEdition({ digest, feeds, localeOverride }: { digest: Diges
       </header>
 
       <div className="digest-sections">
-        {sections.map((section) => (
-          <section key={section.sourceType} className="digest-section">
+        {sections.map((section) => {
+          const canCollapse = initialItemsPerSection !== undefined && section.items.length > initialItemsPerSection;
+          const isExpanded = expandedSections.has(section.sourceType);
+          const visibleItems = canCollapse && !isExpanded ? section.items.slice(0, initialItemsPerSection) : section.items;
+          const hiddenCount = section.items.length - visibleItems.length;
+
+          return <section key={section.sourceType} className="digest-section">
             <header className="digest-section-head">
               <span className="digest-source-mark"><img src={section.meta.logoUrl} alt={section.meta.enLabel} /></span>
               <span>
@@ -80,7 +86,7 @@ export function DigestEdition({ digest, feeds, localeOverride }: { digest: Diges
               </span>
             </header>
             <ol className="digest-story-list">
-              {section.items.map((item) => (
+              {visibleItems.map((item) => (
                 <li key={item.id}>
                   <a href={item.url} target="_blank" rel="noreferrer" className="digest-story-card" aria-label={text(`打开原文：${item.title}`, `Open original: ${item.title}`)}>
                     <span className="digest-story-number">{String(articleNumberById.get(item.id) ?? 0).padStart(2, "0")}</span>
@@ -101,8 +107,24 @@ export function DigestEdition({ digest, feeds, localeOverride }: { digest: Diges
                 </li>
               ))}
             </ol>
-          </section>
-        ))}
+            {canCollapse ? (
+              <button
+                type="button"
+                className="digest-section-toggle"
+                aria-expanded={isExpanded}
+                onClick={() => setExpandedSections((current) => {
+                  const next = new Set(current);
+                  if (isExpanded) next.delete(section.sourceType);
+                  else next.add(section.sourceType);
+                  return next;
+                })}
+              >
+                <span>{isExpanded ? text("收起本栏", "Collapse section") : text(`展开其余 ${hiddenCount} 篇`, `Show ${hiddenCount} more`)}</span>
+                <ChevronDown aria-hidden="true" />
+              </button>
+            ) : null}
+          </section>;
+        })}
       </div>
     </div>
   );

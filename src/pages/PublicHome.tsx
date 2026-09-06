@@ -6,11 +6,6 @@ import type { DigestOverview } from "@/lib/types";
 
 const titleWords = ["你的", "每日", "编辑"];
 
-const featureList = [
-  "追踪你关心的创作者",
-  "每天一份专属日报",
-];
-
 export default function PublicHome() {
   const [overview, setOverview] = useState<DigestOverview | null>(null);
 
@@ -27,8 +22,8 @@ export default function PublicHome() {
         跳至主要内容
       </a>
 
-      <header className="hairline">
-        <div className="w-full px-4 py-4 md:px-6 lg:px-8">
+      <header className="hairline public-home-header">
+        <div className="w-full px-4 md:px-6 lg:px-8">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-semibold leading-none md:text-3xl">
@@ -55,14 +50,11 @@ export default function PublicHome() {
       </header>
 
       <main id="main-content" className="flex-1">
-        <div className="w-full px-4 py-12 md:px-6 md:py-16 lg:px-8 xl:py-20">
-          <section className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.48fr)] lg:items-end lg:gap-16">
+        <div className="w-full px-4 md:px-6 lg:px-8">
+          <section className="public-home-hero">
             <div>
-              <p className="mb-5 text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">
-                你关注的世界，每天编辑一次
-              </p>
               <h2
-                className="max-w-5xl text-5xl font-semibold leading-[0.98] tracking-tight sm:text-6xl lg:text-7xl xl:text-[5.5rem]"
+                className="public-home-title max-w-5xl font-semibold leading-[0.98] tracking-tight"
                 style={{ fontFamily: "'Fraunces', ui-serif, Georgia, serif" }}
               >
                 {titleWords.map((word) => (
@@ -75,27 +67,20 @@ export default function PublicHome() {
                 ))}
               </h2>
 
-              <div className="mt-8 flex flex-wrap gap-3">
-                <a href="#/sign-in" className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-sm bg-primary px-6 py-2.5 text-base font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 active:bg-primary/85">
+              <p className="public-home-description">
+                追踪你关心的创作者，每天编辑一份专属日报。
+              </p>
+
+              <div className="public-home-actions flex flex-wrap items-center gap-3">
+                <a href="#/sign-in" className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-sm bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 active:bg-primary/85">
                   登录
                 </a>
               </div>
             </div>
-
-            <div className="rounded-md bg-secondary/65 p-6 md:p-7">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-foreground/65">
-                为什么值得使用
-              </p>
-              <ul className="mt-5 space-y-3 text-base leading-7 text-foreground/85">
-                {featureList.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </div>
           </section>
           {overview?.currentDigest ? (
-            <section className="mt-16 border-t border-border pt-12 md:mt-20 md:pt-16">
-              <DigestEdition digest={overview.currentDigest} feeds={overview.feeds} localeOverride="zh" />
+            <section className="public-home-digest border-t border-border">
+              <DigestEdition digest={overview.currentDigest} feeds={overview.feeds} localeOverride="zh" initialItemsPerSection={3} />
             </section>
           ) : null}
         </div>

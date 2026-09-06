@@ -171,6 +171,43 @@ Design reminder (commitment):
   box-shadow: inset 0 -1px 0 oklch(0.84 0.01 95);
 }
 
+.public-home-header > div {
+  min-height: 62px;
+  display: flex;
+  align-items: center;
+}
+
+.public-home-header > div > div {
+  width: 100%;
+}
+
+.public-home-hero {
+  display: grid;
+  min-height: 196px;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  padding-block: 24px;
+}
+
+.public-home-title {
+  font-size: clamp(46px, 5.2vw, 72px);
+}
+
+.public-home-description {
+  margin: 14px 0 0;
+  color: var(--muted-foreground);
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.public-home-actions {
+  margin-top: 16px;
+}
+
+.public-home-digest {
+  padding-top: 16px;
+}
+
 .app-shell-container {
   width: 100%;
   max-width: 84rem;
@@ -819,6 +856,43 @@ Design reminder (commitment):
   content: "•";
 }
 
+.digest-section-toggle {
+  display: flex;
+  width: 100%;
+  min-height: 38px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+  border: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.digest-section-toggle:hover {
+  color: var(--primary);
+}
+
+.digest-section-toggle:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.digest-section-toggle svg {
+  width: 16px;
+  height: 16px;
+  transition: transform 150ms ease;
+}
+
+.digest-section-toggle[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
 .digest-back-to-top {
   position: fixed;
   right: 24px;
@@ -1252,6 +1326,25 @@ Design reminder (commitment):
 }
 
 @media (max-width: 820px) {
+  .public-home-hero {
+    min-height: 277px;
+    grid-template-columns: 1fr;
+    align-content: center;
+    padding-block: 24px;
+  }
+
+  .public-home-title {
+    font-size: clamp(42px, 12vw, 58px);
+  }
+
+  .public-home-description {
+    font-size: 13px;
+  }
+
+  .public-home-digest {
+    padding-top: 12px;
+  }
+
   .workspace-sidebar {
     position: sticky;
     inset: 0 0 auto;
