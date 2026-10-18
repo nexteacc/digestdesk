@@ -51,3 +51,4 @@ server/.env.*
 .turbo
 *.tsbuildinfo
 .antigravitycli/
+.codex-audit/

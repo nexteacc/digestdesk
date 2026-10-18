@@ -34,7 +34,7 @@ export default function PublicPageLayout({
               </h1>
             </div>
 
-            <a href="#/sign-in" className="inline-flex items-center gap-2 rounded-sm px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer shadow-sm">
+            <a href="/#/sign-in" className="inline-flex items-center gap-2 rounded-sm px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer shadow-sm">
               Sign in
             </a>
           </div>
@@ -62,14 +62,14 @@ export default function PublicPageLayout({
         <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-4 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between md:px-6">
           <p>DigestDesk helps users organize Substack, Podcast, RSS, and YouTube updates into one personal workflow.</p>
           <div className="flex gap-4">
-            <a href="#/" className="hover:text-foreground transition-colors">
+            <a href="/" className="hover:text-foreground transition-colors">
               Home
             </a>
-            <a href="#/privacy" className="hover:text-foreground transition-colors">
-              Privacy
+            <a href="/privacy" className="hover:text-foreground transition-colors">
+              Privacy Policy
             </a>
-            <a href="#/terms" className="hover:text-foreground transition-colors">
-              Terms
+            <a href="/terms" className="hover:text-foreground transition-colors">
+              Terms of Service
             </a>
           </div>
         </div>

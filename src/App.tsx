@@ -71,9 +71,24 @@ const PUBLIC_PAGE_METADATA: Record<string, { title: string; description: string 
   },
 };
 
+function getPathnamePublicRoute(
+  pathname = window.location.pathname,
+  hash = window.location.hash,
+): "/privacy" | "/terms" | null {
+  if (hash.startsWith("#/")) {
+    return null;
+  }
+  const normalized = pathname.replace(/\/+$/, "") || "/";
+  if (normalized === "/privacy" || normalized === "/terms") {
+    return normalized;
+  }
+  return null;
+}
+
 function PageMetadata() {
-  const [location] = useLocation();
+  const [hashLocation] = useLocation();
   const { isSignedIn } = useAuth();
+  const location = getPathnamePublicRoute() ?? hashLocation;
 
   useEffect(() => {
     const isPublicPage = location === "/privacy" || location === "/terms" || (location === "/" && !isSignedIn);
@@ -287,56 +302,68 @@ function RouteAnnouncer() {
 
 function AppRouter() {
   const { isSignedIn } = useAuth();
+  useHashLocation();
+  const pathnamePublicRoute = getPathnamePublicRoute();
 
   return (
     <Router hook={useHashLocation}>
       <PageMetadata />
-      <Switch>
-        {import.meta.env.DEV ? (
-          <Route path="/sign-in-preview">
+      {pathnamePublicRoute === "/privacy" ? (
+        <Suspense fallback={<RouteFallback />}>
+          <PrivacyPolicyPage />
+        </Suspense>
+      ) : pathnamePublicRoute === "/terms" ? (
+        <Suspense fallback={<RouteFallback />}>
+          <TermsOfServicePage />
+        </Suspense>
+      ) : (
+        <Switch>
+          {import.meta.env.DEV ? (
+            <Route path="/sign-in-preview">
+              <Suspense fallback={<RouteFallback />}>
+                <LoginPage />
+              </Suspense>
+            </Route>
+          ) : null}
+          <Route path="/privacy">
             <Suspense fallback={<RouteFallback />}>
-              <LoginPage />
+              <PrivacyPolicyPage />
             </Suspense>
           </Route>
-        ) : null}
-        <Route path="/privacy">
-          <Suspense fallback={<RouteFallback />}>
-            <PrivacyPolicyPage />
-          </Suspense>
-        </Route>
-        <Route path="/terms">
-          <Suspense fallback={<RouteFallback />}>
-            <TermsOfServicePage />
-          </Suspense>
-        </Route>
-        <Route path="/session-task/choose-organization">
-          <SessionTaskLayout>
-            <TaskChooseOrganization redirectUrlComplete="/#/" />
-          </SessionTaskLayout>
-        </Route>
-        <Route path="/session-task/reset-password">
-          <SessionTaskLayout>
-            <TaskResetPassword redirectUrlComplete="/#/" />
-          </SessionTaskLayout>
-        </Route>
-        <Route path="/session-task/setup-mfa">
-          <SessionTaskLayout>
-            <TaskSetupMFA redirectUrlComplete="/#/" />
-          </SessionTaskLayout>
-        </Route>
-        <Route>
-          {isSignedIn ? <AuthenticatedApp /> : (
+          <Route path="/terms">
             <Suspense fallback={<RouteFallback />}>
-              <Switch>
-                <Route path="/" component={PublicHome} />
-                <Route path="/admin" component={PublicHome} />
-                <Route path="/sign-in" component={LoginPage} />
-                <Route component={NotFound} />
-              </Switch>
+              <TermsOfServicePage />
             </Suspense>
-          )}
-        </Route>
-      </Switch>
+          </Route>
+          <Route path="/session-task/choose-organization">
+            <SessionTaskLayout>
+              <TaskChooseOrganization redirectUrlComplete="/#/" />
+            </SessionTaskLayout>
+          </Route>
+          <Route path="/session-task/reset-password">
+            <SessionTaskLayout>
+              <TaskResetPassword redirectUrlComplete="/#/" />
+            </SessionTaskLayout>
+          </Route>
+          <Route path="/session-task/setup-mfa">
+            <SessionTaskLayout>
+              <TaskSetupMFA redirectUrlComplete="/#/" />
+            </SessionTaskLayout>
+          </Route>
+          <Route>
+            {isSignedIn ? <AuthenticatedApp /> : (
+              <Suspense fallback={<RouteFallback />}>
+                <Switch>
+                  <Route path="/" component={PublicHome} />
+                  <Route path="/admin" component={PublicHome} />
+                  <Route path="/sign-in" component={LoginPage} />
+                  <Route component={NotFound} />
+                </Switch>
+              </Suspense>
+            )}
+          </Route>
+        </Switch>
+      )}
     </Router>
   );
 }
@@ -345,14 +372,22 @@ function AuthStateRouter() {
   const { isLoaded } = useAuth();
   const [timedOut, setTimedOut] = useState(false);
   const authRoute = window.location.hash.startsWith("#/sign-in");
+  const publicLegalRoute =
+    getPathnamePublicRoute() !== null ||
+    window.location.hash.startsWith("#/privacy") ||
+    window.location.hash.startsWith("#/terms");
 
   useEffect(() => {
-    if (isLoaded) {
+    if (isLoaded || publicLegalRoute) {
       return;
     }
     const timeoutId = window.setTimeout(() => setTimedOut(true), AUTH_BOOTSTRAP_TIMEOUT_MS);
     return () => window.clearTimeout(timeoutId);
-  }, [isLoaded]);
+  }, [isLoaded, publicLegalRoute]);
+
+  if (publicLegalRoute) {
+    return <AppRouter />;
+  }
 
   if (!isLoaded && timedOut) {
     return <ClerkInitializationError />;

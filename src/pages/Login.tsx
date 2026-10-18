@@ -409,9 +409,9 @@ export default function LoginPage() {
 
         <p className="mt-3.5 text-center text-[12px] leading-[18px] text-[#6f6d67]">
           By continuing, you agree to our{" "}
-          <a href="#/terms" className="text-[#aaa79f] underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f5f3ee]">Terms of Service</a>{" "}
+          <a href="/terms" className="text-[#aaa79f] underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f5f3ee]">Terms of Service</a>{" "}
           and{" "}
-          <a href="#/privacy" className="text-[#aaa79f] underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f5f3ee]">Privacy Policy</a>.
+          <a href="/privacy" className="text-[#aaa79f] underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f5f3ee]">Privacy Policy</a>.
         </p>
       </section>
     </main>

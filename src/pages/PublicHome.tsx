@@ -38,11 +38,11 @@ export default function PublicHome() {
             </div>
 
             <nav aria-label="法律信息" className="flex items-center gap-4 text-sm font-medium text-foreground/70 sm:gap-7 sm:text-base">
-              <a href="#/privacy" className="rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4">
-                隐私
+              <a href="/privacy" className="rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4">
+                隐私 · Privacy
               </a>
-              <a href="#/terms" className="rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4">
-                条款
+              <a href="/terms" className="rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4">
+                条款 · Terms
               </a>
             </nav>
           </div>
@@ -72,7 +72,7 @@ export default function PublicHome() {
               </p>
 
               <div className="public-home-actions flex flex-wrap items-center gap-3">
-                <a href="#/sign-in" className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-sm bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 active:bg-primary/85">
+                <a href="/#/sign-in" className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-sm bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 active:bg-primary/85">
                   登录
                 </a>
               </div>
@@ -85,6 +85,20 @@ export default function PublicHome() {
           ) : null}
         </div>
       </main>
+
+      <footer className="hairline">
+        <div className="w-full flex flex-col gap-3 px-4 py-4 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between md:px-6 lg:px-8">
+          <p>DigestDesk helps users organize Substack, Podcast, RSS, and YouTube updates into one personal workflow.</p>
+          <div className="flex gap-4">
+            <a href="/privacy" className="hover:text-foreground transition-colors">
+              Privacy Policy
+            </a>
+            <a href="/terms" className="hover:text-foreground transition-colors">
+              Terms of Service
+            </a>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
