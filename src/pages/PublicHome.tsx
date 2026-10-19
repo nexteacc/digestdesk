@@ -83,6 +83,24 @@ export default function PublicHome() {
               <DigestEdition digest={overview.currentDigest} feeds={overview.feeds} localeOverride="zh" initialItemsPerSection={3} />
             </section>
           ) : null}
+
+          <section aria-labelledby="about-digestdesk-heading" className="border-t border-border py-10 md:py-12">
+            <div className="max-w-3xl space-y-3 text-sm leading-6 text-muted-foreground">
+              <h2 id="about-digestdesk-heading" className="text-base font-semibold text-foreground">
+                About DigestDesk
+              </h2>
+              <p>
+                DigestDesk is a personal reading workflow application that aggregates updates from Substack
+                newsletters, Podcasts, RSS feeds, and YouTube channels into a structured daily reading digest.
+              </p>
+              <p>
+                Users can subscribe to public feeds directly or optionally connect their Google account with
+                read-only YouTube access (<code>https://www.googleapis.com/auth/youtube.readonly</code>) solely
+                to view and import their own YouTube channel subscriptions into DigestDesk. DigestDesk complies
+                with the Google API Services User Data Policy, including the Limited Use requirements.
+              </p>
+            </div>
+          </section>
         </div>
       </main>
 

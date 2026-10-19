@@ -31,15 +31,15 @@ import {
   loadAdminPage,
   loadNotFoundPage,
   loadPodcastFeedsPage,
-  loadPrivacyPolicyPage,
-  loadPublicHomePage,
   loadLoginPage,
   loadRssFeedsPage,
   loadSettingsPage,
   loadSubscriptionsPage,
-  loadTermsOfServicePage,
   loadYouTubeFeedsPage,
 } from "@/lib/route-preload";
+import PrivacyPolicyPage from "@/pages/PrivacyPolicy";
+import PublicHome from "@/pages/PublicHome";
+import TermsOfServicePage from "@/pages/TermsOfService";
 
 const DailyDigest = lazy(loadDailyDigestPage);
 const AiLeadersTopic = lazy(loadAiLeadersTopicPage);
@@ -51,10 +51,7 @@ const YouTubeFeedsPage = lazy(loadYouTubeFeedsPage);
 const PodcastFeedsPage = lazy(loadPodcastFeedsPage);
 const SettingsPage = lazy(loadSettingsPage);
 const NotFound = lazy(loadNotFoundPage);
-const PublicHome = lazy(loadPublicHomePage);
 const LoginPage = lazy(loadLoginPage);
-const PrivacyPolicyPage = lazy(loadPrivacyPolicyPage);
-const TermsOfServicePage = lazy(loadTermsOfServicePage);
 
 const PUBLIC_PAGE_METADATA: Record<string, { title: string; description: string }> = {
   "/": {
@@ -376,6 +373,12 @@ function AuthStateRouter() {
     getPathnamePublicRoute() !== null ||
     window.location.hash.startsWith("#/privacy") ||
     window.location.hash.startsWith("#/terms");
+  const publicHomeRoute =
+    (window.location.pathname === "/" || window.location.pathname === "") &&
+    (window.location.hash === "" || window.location.hash === "#/");
+  const hasLikelyClerkSession =
+    typeof document !== "undefined" &&
+    (document.cookie.includes("__session") || document.cookie.includes("__client_uat="));
 
   useEffect(() => {
     if (isLoaded || publicLegalRoute) {
@@ -385,7 +388,7 @@ function AuthStateRouter() {
     return () => window.clearTimeout(timeoutId);
   }, [isLoaded, publicLegalRoute]);
 
-  if (publicLegalRoute) {
+  if (publicLegalRoute || (publicHomeRoute && (!hasLikelyClerkSession || timedOut))) {
     return <AppRouter />;
   }
 
