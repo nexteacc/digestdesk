@@ -212,3 +212,12 @@
 - docs-only 提交仍会触发 web 自动部署；记录生产状态时必须以 Zeabur 最新 deployment list 和生产健康检查为准，避免把中间态写成最终态。
 - 部署后用中英文播客关键词各测一次，观察 `rawCandidates`、`deduped`、`verified` 日志。
 - 若搜索覆盖仍不足，再接入 Podcast Index 作为第二 provider。
+
+
+## 2026-11-01: Substack Public Subscription Import Parser
+
+- 账号导入旧解析器仅识别内嵌 `JSON.parse` 字符串；Substack 当前个人主页改用 `script#preloads-json`，导致订阅读取失败。HTML 链接备用解析还可能把无关链接当作部分成功。
+- 支持新版 JSON 标签并兼容旧格式，优先读取个人主页的结构化订阅，移除不可靠的普通链接解析，按刊物 URL 去重。若上游明确标记列表被截断，则报错而不静默导入部分结果。
+- 账号导入直接请求 Substack；本次未改 CF 搜索 Worker、数据库导入逻辑、文章同步或摘要生成。
+- 验证：后端 7 个测试文件、52 项测试通过；后端构建及 `git diff --check` 通过。通过修改后的函数实时请求 `@slowloop`，读到 166 个唯一公开订阅。
+- 待验证：Railway 上的账号导入、少量源的订阅入库、文章同步与 AI 摘要/日报完整链路；本地公开读取成功不等于生产链路已通过。

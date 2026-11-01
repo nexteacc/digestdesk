@@ -140,23 +140,6 @@ export async function fetchSubstackReads(
       ? (value as Record<string, unknown>)
       : {};
 
-  const decodeHtml = (value: string): string =>
-    value
-      .replace(/&amp;/g, "&")
-      .replace(/&quot;/g, "\"")
-      .replace(/&#39;/g, "'")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">");
-
-  const normalizePublicationUrl = (rawUrl: string): string => {
-    const url = rawUrl.trim();
-    if (!url) return "";
-    if (/^https?:\/\//i.test(url)) return url;
-    if (url.startsWith("//")) return `https:${url}`;
-    if (url.startsWith("/")) return `https://substack.com${url}`;
-    return `https://${url}`;
-  };
-
   function mapPublicationRecords(publications: unknown[]): SubstackSearchResult[] {
     return publications.map((raw) => {
       const publicationContainer = getObj(raw);
@@ -182,20 +165,22 @@ export async function fetchSubstackReads(
   }
 
   function parseFromPreloads(html: string, sourceLabel: string): SubstackSearchResult[] {
-    const match = html.match(
+    const jsonTag = html.match(
+      /<script\b(?=[^>]*\bid\s*=\s*["']preloads-json["'])[^>]*>([\s\S]*?)<\/script>/i,
+    );
+    const legacy = html.match(
       /window\._preloads\s*=\s*JSON\.parse\(("(?:[^"\\]|\\.)*")\)/,
     );
-    if (!match) {
-      console.warn(`[substack/reads] @${username} ${sourceLabel}: window._preloads not found`);
+    if (!jsonTag && !legacy) {
+      console.warn(`[substack/reads] @${username} ${sourceLabel}: preload data not found`);
       return [];
     }
 
     let preloads: Record<string, unknown>;
     try {
-      const jsonString = JSON.parse(match[1]) as string;
-      preloads = JSON.parse(jsonString) as Record<string, unknown>;
+      preloads = getObj(jsonTag ? JSON.parse(jsonTag[1]) : JSON.parse(JSON.parse(legacy![1])));
     } catch {
-      console.warn(`[substack/reads] @${username} ${sourceLabel}: window._preloads JSON parse failed`);
+      console.warn(`[substack/reads] @${username} ${sourceLabel}: preload JSON parse failed`);
       return [];
     }
 
@@ -218,65 +203,15 @@ export async function fetchSubstackReads(
       publications = profile.visibleSubscriptions;
     }
 
+    if (profile.subscriptionsTruncated === true) {
+      throw new Error("Substack returned an incomplete public subscription list. Import stopped to avoid missing subscriptions.");
+    }
+
     console.log(
       `[substack/reads] @${username} ${sourceLabel}: preloads parser found ${publications.length} raw publications`,
     );
 
-    return mapPublicationRecords(publications);
-  }
-
-  function parseFromHtml(html: string, sourceLabel: string): SubstackSearchResult[] {
-    const publications = new Map<string, SubstackSearchResult>();
-    const blockRegex = /<a\b[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/gsi;
-
-    for (const match of html.matchAll(blockRegex)) {
-      const href = decodeHtml(match[1] || "");
-      const innerHtml = match[2] || "";
-      const url = normalizePublicationUrl(href);
-
-      if (
-        !url ||
-        /\/@(?![^/]+$)/i.test(href) ||
-        /\/(p|post|podcast|archive|about|comments|subscribe|account|api)\b/i.test(href) ||
-        /substack\.com\/@(nexteacc|[^/]+)(?:\/reads)?$/i.test(url)
-      ) {
-        continue;
-      }
-
-      const titleMatch = innerHtml.match(/<h3\b[^>]*>(.*?)<\/h3>/i)
-        || innerHtml.match(/<span\b[^>]*>(.*?)<\/span>/i);
-      const descMatch = innerHtml.match(/<p\b[^>]*>(.*?)<\/p>/i);
-      const imgMatch = innerHtml.match(/<img\b[^>]*src="([^"]+)"/i);
-
-      const stripTags = (value: string): string =>
-        decodeHtml(value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
-
-      const name = titleMatch ? stripTags(titleMatch[1]) : "";
-      const description = descMatch ? stripTags(descMatch[1]) : "";
-      const logoUrl = imgMatch ? decodeHtml(imgMatch[1]) : "";
-
-      if (!name) {
-        continue;
-      }
-      if (!/substack\.com|https?:\/\/[^/\s]+\.[^/\s]+/i.test(url)) {
-        continue;
-      }
-
-      if (!publications.has(url)) {
-        publications.set(url, {
-          name,
-          logoUrl,
-          description,
-          url,
-          authorName: "",
-        });
-      }
-    }
-
-    console.log(
-      `[substack/reads] @${username} ${sourceLabel}: html parser found ${publications.size} publications`,
-    );
-    return Array.from(publications.values());
+    return Array.from(new Map(mapPublicationRecords(publications).map((item) => [item.url, item])).values());
   }
 
   async function fetchHtml(pageUrl: string, sourceLabel: string) {
@@ -322,50 +257,14 @@ export async function fetchSubstackReads(
     return html;
   }
 
-  const readsHtml = await fetchHtml(
-    `https://substack.com/@${encodeURIComponent(username)}/reads`,
-    "reads-page",
-  );
-
-  const readsPreloads = parseFromPreloads(readsHtml, "reads-page");
-  if (readsPreloads.length > 0) {
-    console.log(
-      `[substack/reads] @${username}: using preloads parser from reads-page with ${readsPreloads.length} results`,
-    );
-    return readsPreloads;
+  for (const [pageUrl, sourceLabel] of [
+    [`https://substack.com/@${encodeURIComponent(username)}`, "profile-page"],
+    [`https://substack.com/@${encodeURIComponent(username)}/reads`, "reads-page"],
+  ]) {
+    const html = await fetchHtml(pageUrl, sourceLabel);
+    const results = parseFromPreloads(html, sourceLabel);
+    if (results.length > 0) return results;
   }
 
-  const readsHtmlFallback = parseFromHtml(readsHtml, "reads-page");
-  if (readsHtmlFallback.length > 0) {
-    console.warn(
-      `[substack/reads] @${username}: falling back to HTML parser from reads-page with ${readsHtmlFallback.length} results`,
-    );
-    return readsHtmlFallback;
-  }
-
-  const profileHtml = await fetchHtml(
-    `https://substack.com/@${encodeURIComponent(username)}`,
-    "profile-page",
-  );
-
-  const profilePreloads = parseFromPreloads(profileHtml, "profile-page");
-  if (profilePreloads.length > 0) {
-    console.log(
-      `[substack/reads] @${username}: using preloads parser from profile-page with ${profilePreloads.length} results`,
-    );
-    return profilePreloads;
-  }
-
-  const profileHtmlFallback = parseFromHtml(profileHtml, "profile-page");
-  if (profileHtmlFallback.length > 0) {
-    console.warn(
-      `[substack/reads] @${username}: falling back to HTML parser from profile-page with ${profileHtmlFallback.length} results`,
-    );
-    return profileHtmlFallback;
-  }
-
-  console.error(
-    `[substack/reads] @${username}: no publications found after all parsing strategies`,
-  );
-  throw new Error("No public subscriptions found for this user.");
+  throw new Error("No public subscriptions found. Substack may have changed its page format or hidden this user's subscriptions.");
 }
