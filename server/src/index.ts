@@ -155,7 +155,9 @@ app.get("/api/ready", (_req, res) => {
   });
 });
 
-const PUBLIC_HOME_STATIC_HTML = `
+const renderPublicHome = (isZh: boolean) => {
+  const text = (zh: string, en: string) => isZh ? zh : en;
+  return `
   <div class="min-h-screen paper-noise flex flex-col">
     <header class="hairline public-home-header">
       <div class="w-full px-4 md:px-6 lg:px-8">
@@ -163,9 +165,9 @@ const PUBLIC_HOME_STATIC_HTML = `
           <div class="flex items-center gap-3">
             <h1 class="text-2xl font-semibold leading-none md:text-3xl">DigestDesk</h1>
           </div>
-          <nav aria-label="Legal">
-            <a href="https://digestdesk.news/privacy">Privacy Policy</a>
-            <a href="https://digestdesk.news/terms">Terms of Service</a>
+          <nav aria-label="${text("法律信息", "Legal information")}">
+            <a href="https://digestdesk.news/privacy">${text("隐私政策", "Privacy policy")}</a>
+            <a href="https://digestdesk.news/terms">${text("服务条款", "Terms of service")}</a>
           </nav>
         </div>
       </div>
@@ -173,34 +175,30 @@ const PUBLIC_HOME_STATIC_HTML = `
     <main id="main-content" class="flex-1">
       <div class="w-full px-4 md:px-6 lg:px-8">
         <section class="public-home-hero">
-          <h2>DigestDesk — Personal Daily Reading Digest (你的每日编辑)</h2>
-          <p class="public-home-description">追踪你关心的创作者，每天编辑一份专属日报。</p>
+          <h2>${text("你的每日编辑", "Your daily editor")}</h2>
+          <p class="public-home-description">${text("追踪你关心的创作者，每天编辑一份专属日报。", "Follow the creators you care about. Get a daily digest made for you.")}</p>
           <p>
-            DigestDesk is a personal reading and content aggregation application that compiles daily digests
-            from a user's followed Substack newsletters, Podcasts, RSS feeds, and YouTube channels.
+            ${text("DigestDesk 将 Substack、播客、RSS 和 YouTube 的更新整理成一份个人日报。", "DigestDesk is a personal reading workflow application that aggregates updates from Substack newsletters, Podcasts, RSS feeds, and YouTube channels into a structured daily reading digest.")}
           </p>
           <p>
-            Users can browse public digest editions on the home page, subscribe to public feeds directly, or
-            optionally connect their Google account with read-only YouTube access
-            (<code>https://www.googleapis.com/auth/youtube.readonly</code>) solely to view and import their own
-            YouTube channel subscriptions into DigestDesk. DigestDesk adheres to the Google API Services User Data
-            Policy, including the Limited Use requirements, and complies with the Google APIs Terms of Service.
+            ${text("你可以直接订阅公开内容源，也可以选择连接 Google 账户，仅授予 YouTube 只读权限，用于查看并导入自己的频道订阅。DigestDesk 遵循 Google API 服务用户数据政策，包括受限使用要求。", "Users can subscribe to public feeds directly or optionally connect their Google account with read-only YouTube access solely to view and import their own YouTube channel subscriptions into DigestDesk. DigestDesk complies with the Google API Services User Data Policy, including the Limited Use requirements.")}
           </p>
           <div class="public-home-actions">
-            <a href="/#/sign-in">Sign in / 登录</a>
+            <a href="/#/sign-in">${text("登录", "Sign in")}</a>
           </div>
         </section>
       </div>
     </main>
     <footer class="hairline">
       <div>
-        <p>DigestDesk helps users organize Substack, Podcast, RSS, and YouTube updates into one personal workflow.</p>
-        <a href="https://digestdesk.news/privacy">Privacy Policy</a>
-        <a href="https://digestdesk.news/terms">Terms of Service</a>
+        <p>${text("用 DigestDesk 整理 Substack、播客、RSS 和 YouTube 更新。", "DigestDesk helps users organize Substack, Podcast, RSS, and YouTube updates into one personal workflow.")}</p>
+        <a href="https://digestdesk.news/privacy">${text("隐私政策", "Privacy policy")}</a>
+        <a href="https://digestdesk.news/terms">${text("服务条款", "Terms of service")}</a>
       </div>
     </footer>
   </div>
 `;
+};
 
 const PRIVACY_STATIC_HTML = `
   <div class="min-h-screen paper-noise flex flex-col">
@@ -339,18 +337,25 @@ if (fs.existsSync(frontendDist)) {
   const baseIndexHtml = fs.existsSync(indexHtmlPath) ? fs.readFileSync(indexHtmlPath, "utf8") : "";
 
   app.use(express.static(frontendDist, { index: false }));
-  app.get("/*path", (req, res) => {
+  app.get("/{*path}", (req, res) => {
     if (!baseIndexHtml) {
       res.sendFile(indexHtmlPath);
       return;
     }
 
     const normalizedPath = req.path.replace(/\/+$/, "") || "/";
-    let title = "DigestDesk — Personal Daily Reading Digest (你的每日编辑)";
-    let description =
-      "DigestDesk is a personal reading workflow app that compiles Substack newsletters, Podcasts, RSS feeds, and YouTube channel updates into a personalized daily digest.";
+    const savedLocale = req.headers.cookie?.match(/(?:^|;\s*)digestdesk-locale=(zh|en)(?:;|$)/)?.[1];
+    const preferredLocale = savedLocale ?? req.acceptsLanguages("zh", "en");
+    const isZh = preferredLocale === "zh";
+    res.vary("Cookie");
+    res.vary("Accept-Language");
+    res.setHeader("Cache-Control", "private, no-cache");
+    let title = isZh ? "DigestDesk — 你的每日编辑" : "DigestDesk — Your daily editor";
+    let description = isZh
+      ? "DigestDesk 将 Substack、播客、RSS 和 YouTube 的重要更新整理成一份个人日报。"
+      : "DigestDesk brings Substack, podcasts, RSS, and YouTube updates into your personal daily digest.";
     let canonicalUrl = "https://digestdesk.news/";
-    let rootContent = PUBLIC_HOME_STATIC_HTML;
+    let rootContent = renderPublicHome(isZh);
 
     if (normalizedPath === "/privacy") {
       title = "Privacy Policy — DigestDesk";
@@ -368,7 +373,9 @@ if (fs.existsSync(frontendDist)) {
       rootContent = "";
     }
 
+    const documentLocale = normalizedPath === "/privacy" || normalizedPath === "/terms" ? "en" : isZh ? "zh-CN" : "en";
     const renderedHtml = baseIndexHtml
+      .replace(/<html lang="[^"]*">/, `<html lang="${documentLocale}" data-locale="${isZh ? "zh" : "en"}">`)
       .replace(/<title>.*?<\/title>/, `<title>${title}</title>`)
       .replace(/<meta name="description" content=".*?" \/>/, `<meta name="description" content="${description}" />`)
       .replace(/<meta property="og:title" content=".*?" \/>/, `<meta property="og:title" content="${title}" />`)

@@ -20,6 +20,9 @@ function detectInitialLocale(): Locale {
     // ignore
   }
 
+  const serverLocale = document.documentElement.dataset.locale;
+  if (serverLocale === "zh" || serverLocale === "en") return serverLocale;
+
   const navLang = navigator.language.toLowerCase();
   return navLang.startsWith("zh") ? "zh" : "en";
 }
@@ -34,6 +37,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       // ignore
     }
     document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
+    document.cookie = `digestdesk-locale=${locale}; Path=/; Max-Age=31536000; SameSite=Lax${window.location.protocol === "https:" ? "; Secure" : ""}`;
   }, [locale]);
 
   const text = useCallback(

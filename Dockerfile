@@ -11,6 +11,9 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 
+ARG VITE_CLERK_PUBLISHABLE_KEY
+ARG VITE_ENABLE_GOOGLE_YOUTUBE_IMPORT=false
+
 RUN pnpm build
 
 EXPOSE 8080

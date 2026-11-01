@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { useI18n } from "@/contexts/I18nContext";
+import LocaleToggle from "@/components/LocaleToggle";
 import { cn } from "@/lib/utils";
 import { preloadRoute } from "@/lib/route-preload";
 
@@ -23,7 +24,7 @@ export default function AppShell({ children }: PropsWithChildren) {
   const [location] = useLocation();
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const { user } = useUser();
-  const { locale, setLocale, text } = useI18n();
+  const { text } = useI18n();
   const googleYouTubeImportEnabled = import.meta.env.VITE_ENABLE_GOOGLE_YOUTUBE_IMPORT === "true";
   const displayName = user?.fullName || user?.firstName || user?.primaryEmailAddress?.emailAddress || text("用户", "Reader");
   const showUtilityBar = !location.startsWith("/topics/");
@@ -113,14 +114,7 @@ export default function AppShell({ children }: PropsWithChildren) {
       <div className="workspace-surface">
         {showUtilityBar ? (
           <header className="workspace-utility-bar">
-            <button
-              type="button"
-              className="workspace-locale-button"
-              onClick={() => setLocale(locale === "zh" ? "en" : "zh")}
-              aria-label={locale === "zh" ? "Switch to English" : "切换到中文"}
-            >
-              {locale === "zh" ? "EN" : "中"}
-            </button>
+            <LocaleToggle />
             <div className="workspace-utility-user">
               <span className="workspace-user-avatar">{renderUserButton()}</span>
               <strong>{displayName}</strong>

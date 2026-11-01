@@ -202,7 +202,7 @@ export default function ImportDialog({ open, onClose, onImported, existingFeeds 
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleFetch()}
-                    placeholder={text("输入用户名，例如 nexteacc", "Enter a username, e.g. nexteacc")}
+                    placeholder={text("输入用户名，例如 slowloop", "Enter a username, e.g. slowloop")}
                     className="pl-8"
                   />
                 </div>

@@ -14,7 +14,7 @@ import { useHashLocation } from "wouter/use-hash-location";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import AppShell from "@/components/AppShell";
 import { ThemeProvider } from "@/contexts/ThemeContext";
-import { I18nProvider } from "@/contexts/I18nContext";
+import { I18nProvider, useI18n } from "@/contexts/I18nContext";
 import { ZenModeProvider } from "@/hooks/useZenMode";
 import { clearCurrentUserCache, ensureCurrentUser } from "@/lib/api";
 import {
@@ -83,20 +83,26 @@ function getPathnamePublicRoute(
 }
 
 function PageMetadata() {
+  const { locale, text } = useI18n();
   const [hashLocation] = useLocation();
   const { isSignedIn } = useAuth();
   const location = getPathnamePublicRoute() ?? hashLocation;
 
   useEffect(() => {
     const isPublicPage = location === "/privacy" || location === "/terms" || (location === "/" && !isSignedIn);
-    const metadata = isPublicPage ? PUBLIC_PAGE_METADATA[location] : undefined;
+    const metadata = isPublicPage ? (location === "/" ? {
+      title: text("DigestDesk — 你的每日编辑", "DigestDesk — Your daily editor"),
+      description: text("DigestDesk 将 Substack、播客、RSS 和 YouTube 的重要更新整理成一份个人日报。", "DigestDesk brings Substack, podcasts, RSS, and YouTube updates into your personal daily digest."),
+    } : PUBLIC_PAGE_METADATA[location]) : undefined;
     const description = document.querySelector<HTMLMetaElement>('meta[name="description"]');
     const robots = document.querySelector<HTMLMetaElement>('meta[name="robots"]');
 
     document.title = metadata?.title ?? "DigestDesk";
     description?.setAttribute("content", metadata?.description ?? "DigestDesk personal reading workspace.");
     robots?.setAttribute("content", isPublicPage ? "index, follow" : "noindex, nofollow");
-  }, [isSignedIn, location]);
+    document.querySelector('meta[property="og:title"]')?.setAttribute("content", metadata?.title ?? "DigestDesk");
+    document.querySelector('meta[property="og:description"]')?.setAttribute("content", metadata?.description ?? "DigestDesk personal reading workspace.");
+  }, [isSignedIn, location, locale, text]);
 
   return null;
 }
