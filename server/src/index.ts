@@ -178,10 +178,10 @@ const renderPublicHome = (isZh: boolean) => {
           <h2>${text("你的每日编辑", "Your daily editor")}</h2>
           <p class="public-home-description">${text("追踪你关心的创作者，每天编辑一份专属日报。", "Follow the creators you care about. Get a daily digest made for you.")}</p>
           <p>
-            ${text("DigestDesk 将 Substack、播客、RSS 和 YouTube 的更新整理成一份个人日报。", "DigestDesk is a personal reading workflow application that aggregates updates from Substack newsletters, Podcasts, RSS feeds, and YouTube channels into a structured daily reading digest.")}
+            ${text("DigestDesk 将 Substack、播客、RSS 和 YouTube 的更新整理成一份个人日报。", "DigestDesk brings Substack, podcasts, RSS, and YouTube updates into one daily digest.")}
           </p>
           <p>
-            ${text("你可以直接订阅公开内容源，也可以选择连接 Google 账户，仅授予 YouTube 只读权限，用于查看并导入自己的频道订阅。DigestDesk 遵循 Google API 服务用户数据政策，包括受限使用要求。", "Users can subscribe to public feeds directly or optionally connect their Google account with read-only YouTube access solely to view and import their own YouTube channel subscriptions into DigestDesk. DigestDesk complies with the Google API Services User Data Policy, including the Limited Use requirements.")}
+            ${text("订阅公开内容源，或授权 Google 只读访问以导入 YouTube 订阅。由你选择要跟踪的频道。", "Subscribe to public feeds, or grant read-only Google access to import your YouTube subscriptions. You choose which channels to follow.")}
           </p>
           <div class="public-home-actions">
             <a href="/#/sign-in">${text("登录", "Sign in")}</a>
@@ -191,7 +191,7 @@ const renderPublicHome = (isZh: boolean) => {
     </main>
     <footer class="hairline">
       <div>
-        <p>${text("用 DigestDesk 整理 Substack、播客、RSS 和 YouTube 更新。", "DigestDesk helps users organize Substack, Podcast, RSS, and YouTube updates into one personal workflow.")}</p>
+        <p>${text("用 DigestDesk 整理 Substack、播客、RSS 和 YouTube 更新。", "Your reading, in one place.")}</p>
         <a href="https://digestdesk.news/privacy">${text("隐私政策", "Privacy policy")}</a>
         <a href="https://digestdesk.news/terms">${text("服务条款", "Terms of service")}</a>
       </div>

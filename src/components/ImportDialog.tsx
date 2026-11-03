@@ -167,13 +167,13 @@ export default function ImportDialog({ open, onClose, onImported, existingFeeds 
       />
 
       {/* Dialog */}
-      <Card className="relative z-50 w-full max-w-lg mx-4 p-0 shadow-lg animate-in fade-in zoom-in-95 duration-200">
+      <Card className="relative z-50 w-full max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto mx-4 p-0 shadow-lg animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="flex items-center justify-between p-4 pb-0">
           <div>
             <h3 className="text-lg font-semibold">{text("从 Substack 导入", "Import from Substack")}</h3>
             <p className="text-xs text-muted-foreground mt-1">
-              {text("输入 Substack 用户名导入订阅", "Import subscriptions by Substack username")}
+              {text("读取公开关注列表。", "Read a public subscription list.")}
             </p>
           </div>
           <Button
@@ -202,14 +202,14 @@ export default function ImportDialog({ open, onClose, onImported, existingFeeds 
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleFetch()}
-                    placeholder={text("输入用户名，例如 slowloop", "Enter a username, e.g. slowloop")}
+                    placeholder={text("例如 slowloop", "e.g. slowloop")}
                     className="pl-8"
                   />
                 </div>
                 <Button onClick={handleFetch}>{text("继续", "Continue")}</Button>
               </div>
               <p className="mt-3 text-xs text-muted-foreground leading-relaxed">
-                {text("可在个人主页链接中找到，如：", "Found in your profile URL, e.g. ")} substack.com/@<span className="font-medium">{text("用户名", "username")}</span>
+                {text("主页链接：", "Profile URL: ")} substack.com/@<span className="font-medium">{text("用户名", "username")}</span>
                 </p>
               </div>
             )}
@@ -237,7 +237,7 @@ export default function ImportDialog({ open, onClose, onImported, existingFeeds 
             <div>
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm text-muted-foreground">
-                  {text("找到", "Found")} <span className="font-medium text-foreground">{results.length}</span> {text("个出版物", "publications")}
+                  {text("找到", "Found")} <span className="font-medium text-foreground">{results.length}</span> {text("个订阅源", "sources")}
                   {results.some((r) => isSubscribed(r.url)) && (
                     <span className="ml-1">
                       {text("（", "(")}{results.filter((r) => isSubscribed(r.url)).length} {text("个已订阅）", "already subscribed)")}
@@ -310,7 +310,7 @@ export default function ImportDialog({ open, onClose, onImported, existingFeeds 
                 </Button>
                 <Button onClick={handleImport} className="gap-1.5">
                   <Download className="h-3.5 w-3.5" />
-                  {text(`导入 ${selected.size} 个出版物`, `Import ${selected.size} publications`)}
+                  {text(`导入 ${selected.size} 个订阅源`, `Import ${selected.size} sources`)}
                 </Button>
               </div>
             </div>
@@ -333,7 +333,7 @@ export default function ImportDialog({ open, onClose, onImported, existingFeeds 
                 <>
                   <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
                   <div className="mt-3 text-sm text-muted-foreground animate-pulse">
-                    {text(`正在导入 ${selected.size} 个出版物…`, `Importing ${selected.size} publications...`)}
+                    {text(`正在导入 ${selected.size} 个订阅源…`, `Importing ${selected.size} sources...`)}
                   </div>
                 </>
               )}

@@ -524,8 +524,8 @@ export default function AdminPage() {
           <h2 className="mt-5 text-2xl font-semibold">{text("需要管理员邮箱", "Admin email required")}</h2>
           <p className="mt-3 text-sm leading-6 text-muted-foreground">
             {text(
-              "请使用后端 ADMIN_EMAILS 环境变量中配置的 Clerk 账号登录。这个邮箱限制只在后端生效，前端不会保存管理员名单。",
-              "Sign in with a Clerk account listed in the backend ADMIN_EMAILS environment variable. The admin list is enforced server-side only.",
+              "请使用管理员账户登录。",
+              "Sign in with an administrator account.",
             )}
           </p>
         </Card>
@@ -748,7 +748,7 @@ export default function AdminPage() {
             <div className="p-4">
               <div className="text-sm font-semibold">{text("最近 7 天逐日运行", "Daily Runs: Last 7 Days")}</div>
               <div className="mt-1 text-xs text-muted-foreground">
-                {text("每一行是一条日报目标日期，用来快速确认每天是否正常完成。", "Each row is one digest target date, so daily completion is easy to scan.")}
+                {text("按日期查看日报状态。", "Digest status by date.")}
               </div>
             </div>
             <div className="space-y-2 border-t border-border p-4">
@@ -811,7 +811,7 @@ export default function AdminPage() {
             <div className="p-4">
               <div className="text-sm font-semibold">{text("需要关注的任务", "Needs Attention")}</div>
               <div className="mt-1 text-xs text-muted-foreground">
-                {text("显示日报和摘要任务的失败，以及超过 10 分钟仍未处理的任务。", "Digest and summary failures, plus jobs overdue by more than 10 minutes.")}
+                {text("失败任务及延迟超过 10 分钟的任务。", "Failed jobs and jobs overdue by 10 minutes.")}
               </div>
             </div>
             <Table className="min-w-[960px] border-collapse text-left">
@@ -899,7 +899,7 @@ export default function AdminPage() {
               <div>
                 <Label>{text("订阅源上限", "Subscription limit")}</Label>
                 <div className="mt-1 text-xs text-muted-foreground">
-                  {text("保存后会覆盖套餐默认额度。", "Saving creates an override over the plan default.")}
+                  {text("覆盖套餐默认额度。", "Overrides the plan limit.")}
                 </div>
               </div>
               <div className="text-3xl font-semibold text-primary">{limitValue[0]}</div>
@@ -951,8 +951,8 @@ export default function AdminPage() {
             <DialogDescription>
               {userToRevoke
                 ? text(
-                    `停用 ${userToRevoke.email} 后，该用户不能继续使用 API，调度器也不会再为他生成日报。历史数据会保留。`,
-                    `After revoking ${userToRevoke.email}, they cannot use the app APIs and the scheduler will stop generating digests for them. Existing history is kept.`,
+                    `${userToRevoke.email} 将无法访问应用或生成日报。历史数据保留。`,
+                    `${userToRevoke.email} will lose app access and digest generation. History is kept.`,
                   )
                 : text("停用后会停止访问和日报生成。", "Revoking stops access and digest generation.")}
             </DialogDescription>

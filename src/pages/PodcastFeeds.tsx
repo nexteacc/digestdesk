@@ -163,7 +163,7 @@ export default function PodcastFeedsPage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={onSearchKeyDown}
-                placeholder={text("搜索你想订阅的播客节目", "Search for a podcast show")}
+                placeholder={text("播客名称", "Podcast title")}
                 className="flex-1"
               />
               <Button onClick={onSearch} disabled={searchLoading}>
@@ -235,7 +235,7 @@ export default function PodcastFeedsPage() {
                 </div>
               ) : hasSearched ? (
                 <div className="py-8 text-center text-sm text-muted-foreground">
-                  {text("未找到匹配的播客节目，试试其他关键词", "No podcasts found. Try another title.")}
+                  {text("未找到节目，换个关键词试试。", "No shows found. Try another keyword.")}
                 </div>
               ) : (
                 <div className="py-8 text-center text-sm text-muted-foreground">

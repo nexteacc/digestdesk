@@ -137,8 +137,8 @@ export default function FeedListSection({
                       </AlertDialogTitle>
                     <AlertDialogDescription>
                       {text(
-                        `将取消订阅 ${batchSelected.size} 个源，后续日报将不再包含这些来源的内容。`,
-                        `${batchSelected.size} sources will be removed from future digests.`,
+                        `后续日报不再收录这些来源，历史日报保留。`,
+                        `Future digests will exclude these sources. History is kept.`,
                       )}
                     </AlertDialogDescription>
                   </AlertDialogHeader>
@@ -253,8 +253,8 @@ export default function FeedListSection({
                           </AlertDialogTitle>
                           <AlertDialogDescription>
                             {text(
-                              `取消订阅「${f.title}」后，后续日报将不再包含该来源的内容。`,
-                              `${f.title} will be removed from future digests.`,
+                              `后续日报不再收录该来源，历史日报保留。`,
+                              `Future digests will exclude this source. History is kept.`,
                             )}
                           </AlertDialogDescription>
                         </AlertDialogHeader>

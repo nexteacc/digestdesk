@@ -93,10 +93,10 @@ export default function PublicHome() {
                 {text("关于 DigestDesk", "About DigestDesk")}
               </h2>
               <p>
-                {text("DigestDesk 将 Substack、播客、RSS 和 YouTube 的更新整理成一份个人日报。", "DigestDesk is a personal reading workflow application that aggregates updates from Substack newsletters, Podcasts, RSS feeds, and YouTube channels into a structured daily reading digest.")}
+                {text("DigestDesk 将 Substack、播客、RSS 和 YouTube 的更新整理成一份个人日报。", "DigestDesk brings Substack, podcasts, RSS, and YouTube updates into one daily digest.")}
               </p>
               <p>
-                {text("你可以直接订阅公开内容源，也可以选择连接 Google 账户，仅授予 YouTube 只读权限，用于查看并导入自己的频道订阅。DigestDesk 遵循 Google API 服务用户数据政策，包括受限使用要求。", "Users can subscribe to public feeds directly or optionally connect their Google account with read-only YouTube access solely to view and import their own YouTube channel subscriptions into DigestDesk. DigestDesk complies with the Google API Services User Data Policy, including the Limited Use requirements.")}
+                {text("订阅公开内容源，或授权 Google 只读访问以导入 YouTube 订阅。由你选择要跟踪的频道。", "Subscribe to public feeds, or grant read-only Google access to import your YouTube subscriptions. You choose which channels to follow.")}
               </p>
             </div>
           </section>
@@ -105,7 +105,7 @@ export default function PublicHome() {
 
       <footer className="hairline">
         <div className="w-full flex flex-col gap-3 px-4 py-4 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between md:px-6 lg:px-8">
-          <p>{text("用 DigestDesk 整理 Substack、播客、RSS 和 YouTube 更新。", "DigestDesk helps users organize Substack, Podcast, RSS, and YouTube updates into one personal workflow.")}</p>
+          <p>{text("用 DigestDesk 整理 Substack、播客、RSS 和 YouTube 更新。", "Your reading, in one place.")}</p>
           <div className="flex gap-4">
             <a href="/privacy" className="hover:text-foreground transition-colors">
               {text("隐私政策", "Privacy policy")}

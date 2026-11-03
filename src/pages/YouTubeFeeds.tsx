@@ -395,11 +395,11 @@ export default function YouTubeFeedsPage() {
             <DialogHeader>
               <DialogTitle>{text("连接 Google", "Connect Google")}</DialogTitle>
               <DialogDescription>
-                {text("只读你的 YouTube 订阅列表，由你选择导入的频道。", "Read your YouTube subscriptions. You choose which channels to import.")}
+                {text("读取订阅列表，由你选择导入频道。", "Read-only access to subscriptions. You choose what to import.")}
               </DialogDescription>
             </DialogHeader>
             <p className="text-sm text-muted-foreground">
-              {text("授权后返回此页，再次点击导入读取列表。", "After authorizing, return here and click import again to load the list.")}
+              {text("授权后返回此页，再次点击导入。", "After authorizing, return here and click import again.")}
             </p>
             <DialogFooter>
               <Button variant="outline" onClick={closeGoogleReauthDialog}>{text("取消", "Cancel")}</Button>
@@ -415,7 +415,7 @@ export default function YouTubeFeedsPage() {
                 value={urlInput}
                 onChange={(e) => setUrlInput(e.target.value)}
                 onKeyDown={onInputKeyDown}
-                placeholder={text("粘贴 YouTube 频道链接，例如 https://www.youtube.com/@earthfm", "Paste a YouTube channel URL, e.g. https://www.youtube.com/@earthfm")}
+                placeholder={text("YouTube 频道链接", "YouTube channel URL")}
                 className="flex-1"
               />
               <Button onClick={onDiscover} disabled={discovering}>

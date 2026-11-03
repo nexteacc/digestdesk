@@ -103,12 +103,12 @@ export default function LoginPage() {
     }
     if (attempt.status === "needs_second_factor") {
       if (!(await prepareSecondFactor())) {
-        throw new Error("This account requires a verification method that is not available here.");
+        throw new Error("This verification method is not supported here.");
       }
       return;
     }
     if (attempt.status !== "needs_first_factor") {
-      throw new Error("This account requires a sign-in step that is not supported here.");
+      throw new Error("This sign-in step is not supported here.");
     }
     const emailFactor = attempt.supportedFirstFactors?.find((factor) => factor.strategy === "email_code");
     if (!emailFactor || emailFactor.strategy !== "email_code") {
@@ -138,7 +138,7 @@ export default function LoginPage() {
       return;
     }
     if (attempt.missingFields.includes("last_name")) {
-      throw new Error("Enter both your first and last name to create this account.");
+      throw new Error("Enter your first and last name.");
     }
     const unsupportedFields = attempt.missingFields.filter((field) => !supportedSignUpFields.has(field));
     if (unsupportedFields.length > 0) {
@@ -198,7 +198,7 @@ export default function LoginPage() {
           : await signIn.attemptSecondFactor({ strategy: "totp", code: code.trim() });
       if (attempt.status === "needs_second_factor") {
         if (!(await prepareSecondFactor())) {
-          throw new Error("This account requires a verification method that is not available here.");
+          throw new Error("This verification method is not supported here.");
         }
         setCode("");
         return;
@@ -289,7 +289,7 @@ export default function LoginPage() {
     ? "Check your email"
     : mode === "sign-in"
       ? "Sign in to DigestDesk"
-      : "Create your DigestDesk account";
+      : "Create an account";
 
   return (
     <main className="relative flex min-h-screen min-h-dvh items-center justify-center overflow-hidden bg-[#0d0d0b] px-4 py-6 font-sans text-[#f5f3ee]">

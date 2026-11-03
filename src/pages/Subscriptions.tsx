@@ -258,8 +258,8 @@ export default function SubscriptionsPage() {
                                   </AlertDialogTitle>
                                   <AlertDialogDescription>
                                     {text(
-                                      `取消订阅「${result.name}」后，后续日报将不再包含该来源的内容。`,
-                                      `${result.name} will be removed from future digests.`,
+                                      `后续日报不再收录该来源，历史日报保留。`,
+                                      `Future digests will exclude this source. History is kept.`,
                                     )}
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>

@@ -16,7 +16,7 @@ export default function NotFound() {
       </p>
       <div className="mt-6">
         <Link href="/">
-          <Button>{text("回到总览", "Back to home")}</Button>
+          <Button>{text("返回首页", "Back to home")}</Button>
         </Link>
       </div>
     </div>
