@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { createPortal } from "react-dom";
+import { useClerk } from "@clerk/react";
 import { toast } from "sonner";
 
 import FeedListSection from "@/components/FeedListSection";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -14,12 +15,14 @@ import { useBatchMode } from "@/hooks/useBatchMode";
 import * as api from "@/lib/api";
 import { ApiError } from "@/lib/api";
 import type { Feed, DiscoveredYouTubeChannel, GoogleYouTubeSubscription } from "@/lib/types";
-import { Search, Download, RefreshCw, ShieldCheck, X } from "lucide-react";
+import { Search, Download, RefreshCw } from "lucide-react";
 
 let youtubeFeedsCache: Feed[] | null = null;
 
 export default function YouTubeFeedsPage() {
   const { text } = useI18n();
+  const clerk = useClerk();
+  const [authorizationStarted, setAuthorizationStarted] = useState(false);
   const googleYouTubeImportEnabled =
     import.meta.env.VITE_ENABLE_GOOGLE_YOUTUBE_IMPORT === "true";
   const [feeds, setFeeds] = useState<Feed[]>([]);
@@ -147,11 +150,22 @@ export default function YouTubeFeedsPage() {
     setRequiresGoogleReauth(false);
   }
 
+  function openGoogleAuthorization() {
+    setRequiresGoogleReauth(false);
+    setAuthorizationStarted(true);
+    clerk.openUserProfile({
+      additionalOAuthScopes: {
+        google: ["https://www.googleapis.com/auth/youtube.readonly"],
+      },
+    });
+  }
+
   async function onFetchGoogleSubscriptions() {
     setImportingSubscriptions(true);
     setRequiresGoogleReauth(false);
     try {
       const result = await api.fetchGoogleYouTubeSubscriptions();
+      setAuthorizationStarted(false);
       setGoogleSubscriptions(result.items);
       setSelectedImports(
         result.items
@@ -166,12 +180,6 @@ export default function YouTubeFeedsPage() {
         setRequiresGoogleReauth(true);
         setGoogleSubscriptions([]);
         setSelectedImports([]);
-        toast.error(
-          text(
-            "需要重新连接 Google 授权",
-            "Please reconnect Google authorization"
-          ),
-        );
         return;
       }
       toast.error(
@@ -368,88 +376,31 @@ export default function YouTubeFeedsPage() {
           </Card>
         )}
 
-        {requiresGoogleReauth && typeof document !== "undefined"
-          ? createPortal(
-              <div className="fixed inset-0 z-50 flex items-center justify-center">
-                <div
-                  className="fixed inset-0 bg-black/45 backdrop-blur-[2px] animate-in fade-in duration-200"
-                  onClick={closeGoogleReauthDialog}
-                />
-                <Card className="relative z-50 mx-4 w-full max-w-xl overflow-hidden border-0 p-0 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-                  <div className="flex items-center justify-between border-b border-border/60 px-5 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                        <ShieldCheck className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-semibold">
-                          {text("连接 YouTube 访问权限", "Connect YouTube access")}
-                        </h3>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {text(
-                            "需要 Google 授权读取你的订阅频道",
-                            "Google authorization is required to read your subscriptions."
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={closeGoogleReauthDialog}
-                      className="-mr-2 shrink-0"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <div className="space-y-5 px-5 py-5">
-                    <div className="rounded-2xl border border-border bg-muted/30 p-4">
-                      <p className="text-sm font-medium">
-                        {text("操作步骤：", "Steps:")}
-                      </p>
-                      <ol className="mt-3 space-y-2 text-sm text-muted-foreground">
-                        <li>
-                          {text(
-                            "1. 点击右上角头像打开账户面板",
-                            "1. Click top-right avatar to open account panel"
-                          )}
-                        </li>
-                        <li>
-                          {text(
-                            "2. 重新连接 Google 并允许读取 YouTube 订阅",
-                            "2. Reconnect Google and allow YouTube access"
-                          )}
-                        </li>
-                        <li>
-                          {text(
-                            "3. 返回此页面重新点击导入",
-                            "3. Return here and click import again"
-                          )}
-                        </li>
-                      </ol>
-                    </div>
-
-                    <div className="flex items-center justify-end gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={closeGoogleReauthDialog}
-                      >
-                        {text("稍后再说", "Later")}
-                      </Button>
-                      <Button
-                        type="button"
-                        onClick={closeGoogleReauthDialog}
-                      >
-                        {text("我知道了", "Got it")}
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-              </div>,
-              document.body,
-            )
-          : null}
+        <Dialog open={requiresGoogleReauth} onOpenChange={setRequiresGoogleReauth}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{text("授权导入 YouTube 订阅", "Authorize YouTube subscription import")}</DialogTitle>
+              <DialogDescription>
+                {text("仅在你同意后读取 YouTube 订阅列表。你可以选择要导入的频道；不会修改你的 YouTube 订阅或发布内容。", "Read your YouTube subscription list only with your permission. You choose which channels to import. This will not change your YouTube subscriptions or publish content.")}
+              </DialogDescription>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              {text("点击下方按钮打开账户面板，在已连接账户中连接或重新授权 Google。完成后关闭面板，返回这里重新读取列表。你也可以取消，继续使用其他功能。", "Open the account panel below, then connect or reconnect Google under connected accounts. After authorizing, close the panel and return here to reload the list. You can also cancel and keep using other features.")}
+            </p>
+            <DialogFooter>
+              <Button variant="outline" onClick={closeGoogleReauthDialog}>{text("取消", "Cancel")}</Button>
+              <Button onClick={openGoogleAuthorization}>{text("连接 Google 并授权", "Connect and authorize Google")}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        {authorizationStarted ? (
+          <div role="status" className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+            <p>{text("完成 Google 授权后，请重新读取订阅列表。取消授权不会影响你的登录。", "After granting Google access, reload your subscriptions. Canceling authorization will not sign you out.")}</p>
+            <Button variant="outline" disabled={importingSubscriptions} onClick={onFetchGoogleSubscriptions}>
+              {text("重新读取列表", "Reload subscriptions")}
+            </Button>
+          </div>
+        ) : null}
 
         {/* Discover YouTube Channel */}
         <Card className="p-4 md:p-5">

@@ -24,7 +24,6 @@ export default function AppShell({ children }: PropsWithChildren) {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const { user } = useUser();
   const { text } = useI18n();
-  const googleYouTubeImportEnabled = import.meta.env.VITE_ENABLE_GOOGLE_YOUTUBE_IMPORT === "true";
   const displayName = user?.fullName || user?.firstName || user?.primaryEmailAddress?.emailAddress || text("用户", "Reader");
 
   const contentNav: NavItem[] = [
@@ -64,11 +63,6 @@ export default function AppShell({ children }: PropsWithChildren) {
   function renderUserButton() {
     return (
       <UserButton
-        userProfileProps={{
-          additionalOAuthScopes: googleYouTubeImportEnabled
-            ? { google: ["https://www.googleapis.com/auth/youtube.readonly"] }
-            : undefined,
-        }}
         appearance={{ elements: { avatarBox: "h-full w-full" } }}
       />
     );
