@@ -144,7 +144,7 @@ export default function RssFeedsPage() {
                 value={urlInput}
                 onChange={(e) => setUrlInput(e.target.value)}
                 onKeyDown={onInputKeyDown}
-                placeholder={text("网站或 RSS 链接", "Website or RSS URL")}
+                placeholder={text("粘贴网站或 RSS 链接", "Paste a website or RSS URL")}
                 className="flex-1"
               />
               <Button onClick={onDiscover} disabled={discovering}>

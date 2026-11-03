@@ -395,7 +395,7 @@ export default function YouTubeFeedsPage() {
             <DialogHeader>
               <DialogTitle>{text("连接 Google", "Connect Google")}</DialogTitle>
               <DialogDescription>
-                {text("读取订阅列表，由你选择导入频道。", "Read-only access to subscriptions. You choose what to import.")}
+                {text("只读访问你的 YouTube 订阅，由你选择导入频道。", "Read-only access to your YouTube subscriptions. You choose which channels to import.")}
               </DialogDescription>
             </DialogHeader>
             <p className="text-sm text-muted-foreground">
@@ -415,7 +415,7 @@ export default function YouTubeFeedsPage() {
                 value={urlInput}
                 onChange={(e) => setUrlInput(e.target.value)}
                 onKeyDown={onInputKeyDown}
-                placeholder={text("YouTube 频道链接", "YouTube channel URL")}
+                placeholder={text("粘贴 YouTube 频道链接", "Paste a YouTube channel URL")}
                 className="flex-1"
               />
               <Button onClick={onDiscover} disabled={discovering}>

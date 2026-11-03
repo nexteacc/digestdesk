@@ -173,7 +173,7 @@ export default function ImportDialog({ open, onClose, onImported, existingFeeds 
           <div>
             <h3 className="text-lg font-semibold">{text("从 Substack 导入", "Import from Substack")}</h3>
             <p className="text-xs text-muted-foreground mt-1">
-              {text("读取公开关注列表。", "Read a public subscription list.")}
+              {text("输入 Substack 用户名，选择并导入公开订阅。", "Enter a Substack username to select and import public subscriptions.")}
             </p>
           </div>
           <Button
@@ -202,14 +202,14 @@ export default function ImportDialog({ open, onClose, onImported, existingFeeds 
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleFetch()}
-                    placeholder={text("例如 slowloop", "e.g. slowloop")}
+                    placeholder={text("输入用户名，例如 slowloop", "Enter a username, e.g. slowloop")}
                     className="pl-8"
                   />
                 </div>
                 <Button onClick={handleFetch}>{text("继续", "Continue")}</Button>
               </div>
               <p className="mt-3 text-xs text-muted-foreground leading-relaxed">
-                {text("主页链接：", "Profile URL: ")} substack.com/@<span className="font-medium">{text("用户名", "username")}</span>
+                {text("用户名是主页链接中 @ 后的部分：", "Your username follows @ in your profile URL: ")} substack.com/@<span className="font-medium">{text("用户名", "username")}</span>
                 </p>
               </div>
             )}
