@@ -4,6 +4,13 @@ import { buildYouTubeChannelUrl, buildYouTubeFeedUrl } from "./youtube-discovery
 const YOUTUBE_SUBSCRIPTIONS_ENDPOINT = "https://www.googleapis.com/youtube/v3/subscriptions";
 const YOUTUBE_READONLY_SCOPE = "https://www.googleapis.com/auth/youtube.readonly";
 
+export class GoogleYouTubeAuthorizationError extends Error {
+  constructor() {
+    super("Google YouTube authorization is missing or expired.");
+    this.name = "GoogleYouTubeAuthorizationError";
+  }
+}
+
 type GoogleYouTubeSubscriptionsResponse = {
   nextPageToken?: string;
   items?: Array<{
@@ -48,8 +55,14 @@ export async function fetchGoogleYouTubeSubscriptions(accessToken: string) {
     });
 
     if (!response.ok) {
-      const message = await response.text().catch(() => "");
-      throw new Error(`YouTube API request failed (${response.status}): ${message.slice(0, 200)}`);
+      const body = await response.json().catch(() => null) as {
+        error?: { errors?: Array<{ reason?: string }> };
+      } | null;
+      const reasons = body?.error?.errors?.map((error) => error.reason) ?? [];
+      if (response.status === 401 || reasons.includes("insufficientPermissions")) {
+        throw new GoogleYouTubeAuthorizationError();
+      }
+      throw new Error(`YouTube API request failed (${response.status}).`);
     }
 
     const data = (await response.json()) as GoogleYouTubeSubscriptionsResponse;

@@ -16,7 +16,7 @@ import { authRouter } from "./routes/auth.js";
 import { adminRouter } from "./routes/admin.js";
 import { resolveUser } from "./middleware/resolve-user.js";
 import { getDb, initDb } from "./db/index.js";
-import { eq, desc, and, isNull, or, ilike } from "drizzle-orm";
+import { eq, ne, desc, and, isNull, or, ilike } from "drizzle-orm";
 import { digests, digestItems, feeds, subscriptions, users } from "./db/schema.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -83,12 +83,12 @@ app.get("/api/public/digest", async (_req, res) => {
   }
 
   const [itemRows, feedRows] = await Promise.all([
-    db.select().from(digestItems).where(eq(digestItems.digestId, digest.id)).orderBy(digestItems.sortOrder),
+    db.select().from(digestItems).where(and(eq(digestItems.digestId, digest.id), ne(digestItems.sourceType, "youtube"))).orderBy(digestItems.sortOrder),
     db
       .select({ feed: feeds })
       .from(subscriptions)
       .innerJoin(feeds, eq(subscriptions.feedId, feeds.id))
-      .where(and(eq(subscriptions.userId, userId), isNull(subscriptions.endedAt))),
+      .where(and(eq(subscriptions.userId, userId), isNull(subscriptions.endedAt), ne(feeds.sourceType, "youtube"))),
   ]);
 
   res.json({

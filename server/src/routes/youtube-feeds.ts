@@ -6,6 +6,7 @@ import { getYouTubeAdapter } from "../sources/factory.js";
 import { createSourceFeedRouter } from "./source-feed-router.js";
 import {
   fetchGoogleYouTubeSubscriptions,
+  GoogleYouTubeAuthorizationError,
   hasYouTubeReadonlyScope,
 } from "../services/google-youtube.js";
 import { getDb } from "../db/index.js";
@@ -94,6 +95,7 @@ youtubeFeedsRouter.get("/", async (req, res) => {
 });
 
 youtubeFeedsRouter.get("/google-subscriptions", async (req, res) => {
+  res.setHeader("Cache-Control", "private, no-store");
   if (!googleYouTubeImportEnabled) {
     res.status(403).json({
       error: "Google YouTube import is not available.",
@@ -129,6 +131,15 @@ youtubeFeedsRouter.get("/google-subscriptions", async (req, res) => {
     const items = await fetchGoogleYouTubeSubscriptions(usableToken.token);
     res.json({ items });
   } catch (error) {
+    if (error instanceof GoogleYouTubeAuthorizationError ||
+      (typeof error === "object" && error !== null && "status" in error && error.status === 404)) {
+      res.status(403).json({
+        error: "Please reconnect Google to allow YouTube access.",
+        errorZh: "需要重新授权 Google，允许读取 YouTube 订阅列表",
+        code: "GOOGLE_YOUTUBE_REAUTH_REQUIRED",
+      });
+      return;
+    }
     const message = error instanceof Error ? error.message : String(error);
     console.error("[youtube] Failed to fetch Google subscriptions:", message);
     res.status(502).json({
