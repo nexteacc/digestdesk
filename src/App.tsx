@@ -404,16 +404,45 @@ function AuthStateRouter() {
   return <AppRouter />;
 }
 
+function OAuthCallback() {
+  const [timedOut, setTimedOut] = useState(false);
+  const isZh = document.documentElement.lang.startsWith("zh");
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setTimedOut(true), 25000);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  return (
+    <>
+      <AuthenticateWithRedirectCallback
+        signInUrl="/#/sign-in"
+        signUpUrl="/#/sign-in"
+        signInFallbackRedirectUrl="/#/"
+        signUpFallbackRedirectUrl="/#/"
+      />
+      <div className="flex min-h-screen items-center justify-center bg-background px-6">
+        <div className="max-w-sm text-center" role="status" aria-live="polite">
+          <p className="text-base font-medium">{timedOut
+            ? (isZh ? "验证尚未完成" : "Verification is taking longer than expected")
+            : (isZh ? "正在完成 Google 验证…" : "Completing Google verification…")}</p>
+          {timedOut ? (
+            <>
+              <p className="mt-3 text-sm text-muted-foreground">{isZh ? "请返回应用检查状态。如果仍未登录，请重新登录。" : "Return to the app to check your status. If you are not signed in, try signing in again."}</p>
+              <a href="/#/" className="mt-5 inline-block rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{isZh ? "返回应用" : "Return to app"}</a>
+            </>
+          ) : null}
+        </div>
+      </div>
+    </>
+  );
+}
+
 function App() {
   if (window.location.pathname === "/sso-callback") {
     return (
       <ErrorBoundary>
-        <AuthenticateWithRedirectCallback
-          signInUrl="/#/sign-in"
-          signUpUrl="/#/sign-in"
-          signInFallbackRedirectUrl="/#/"
-          signUpFallbackRedirectUrl="/#/"
-        />
+        <OAuthCallback />
       </ErrorBoundary>
     );
   }
