@@ -377,25 +377,25 @@ export default function YouTubeFeedsPage() {
         )}
 
         <Dialog open={requiresGoogleReauth} onOpenChange={setRequiresGoogleReauth}>
-          <DialogContent>
+          <DialogContent className="sm:max-w-sm">
             <DialogHeader>
-              <DialogTitle>{text("授权导入 YouTube 订阅", "Authorize YouTube subscription import")}</DialogTitle>
+              <DialogTitle>{text("连接 Google", "Connect Google")}</DialogTitle>
               <DialogDescription>
-                {text("仅在你同意后读取 YouTube 订阅列表。你可以选择要导入的频道；不会修改你的 YouTube 订阅或发布内容。", "Read your YouTube subscription list only with your permission. You choose which channels to import. This will not change your YouTube subscriptions or publish content.")}
+                {text("只读你的 YouTube 订阅列表，由你选择导入的频道。", "Read your YouTube subscriptions. You choose which channels to import.")}
               </DialogDescription>
             </DialogHeader>
             <p className="text-sm text-muted-foreground">
-              {text("点击下方按钮打开账户面板，在已连接账户中连接或重新授权 Google。完成后关闭面板，返回这里重新读取列表。你也可以取消，继续使用其他功能。", "Open the account panel below, then connect or reconnect Google under connected accounts. After authorizing, close the panel and return here to reload the list. You can also cancel and keep using other features.")}
+              {text("在账户面板连接 Google，授权后返回此页。", "Connect Google in the account panel, then return here.")}
             </p>
             <DialogFooter>
               <Button variant="outline" onClick={closeGoogleReauthDialog}>{text("取消", "Cancel")}</Button>
-              <Button onClick={openGoogleAuthorization}>{text("连接 Google 并授权", "Connect and authorize Google")}</Button>
+              <Button onClick={openGoogleAuthorization}>{text("继续", "Continue")}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
         {authorizationStarted ? (
           <div role="status" className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-            <p>{text("完成 Google 授权后，请重新读取订阅列表。取消授权不会影响你的登录。", "After granting Google access, reload your subscriptions. Canceling authorization will not sign you out.")}</p>
+            <p>{text("已完成授权？", "Finished authorizing?")}</p>
             <Button variant="outline" disabled={importingSubscriptions} onClick={onFetchGoogleSubscriptions}>
               {text("重新读取列表", "Reload subscriptions")}
             </Button>
