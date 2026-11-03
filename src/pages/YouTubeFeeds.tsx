@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useClerk } from "@clerk/react";
+import { useUser, useReverification } from "@clerk/react";
 import { toast } from "sonner";
 
 import FeedListSection from "@/components/FeedListSection";
@@ -21,8 +21,19 @@ let youtubeFeedsCache: Feed[] | null = null;
 
 export default function YouTubeFeedsPage() {
   const { text } = useI18n();
-  const clerk = useClerk();
-  const [authorizationStarted, setAuthorizationStarted] = useState(false);
+  const { user } = useUser();
+  const [authorizing, setAuthorizing] = useState(false);
+  const authorizeGoogle = useReverification(async () => {
+    if (!user) throw new Error(text("请先登录", "Please sign in first"));
+    const params = {
+      additionalScopes: ["https://www.googleapis.com/auth/youtube.readonly"],
+      redirectUrl: `${window.location.origin}/#/youtube`,
+    };
+    const existing = user.externalAccounts.find((account) => account.provider === "google");
+    return existing
+      ? existing.reauthorize(params)
+      : user.createExternalAccount({ strategy: "oauth_google", ...params });
+  });
   const googleYouTubeImportEnabled =
     import.meta.env.VITE_ENABLE_GOOGLE_YOUTUBE_IMPORT === "true";
   const [feeds, setFeeds] = useState<Feed[]>([]);
@@ -150,14 +161,18 @@ export default function YouTubeFeedsPage() {
     setRequiresGoogleReauth(false);
   }
 
-  function openGoogleAuthorization() {
-    setRequiresGoogleReauth(false);
-    setAuthorizationStarted(true);
-    clerk.openUserProfile({
-      additionalOAuthScopes: {
-        google: ["https://www.googleapis.com/auth/youtube.readonly"],
-      },
-    });
+  async function openGoogleAuthorization() {
+    setAuthorizing(true);
+    try {
+      const account = await authorizeGoogle();
+      const url = account?.verification?.externalVerificationRedirectURL;
+      if (!url) throw new Error(text("未能开始 Google 授权，请重试", "Could not start Google authorization. Try again."));
+      window.location.assign(url.toString());
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : text("授权未完成", "Authorization was not completed"));
+    } finally {
+      setAuthorizing(false);
+    }
   }
 
   async function onFetchGoogleSubscriptions() {
@@ -165,7 +180,6 @@ export default function YouTubeFeedsPage() {
     setRequiresGoogleReauth(false);
     try {
       const result = await api.fetchGoogleYouTubeSubscriptions();
-      setAuthorizationStarted(false);
       setGoogleSubscriptions(result.items);
       setSelectedImports(
         result.items
@@ -385,23 +399,14 @@ export default function YouTubeFeedsPage() {
               </DialogDescription>
             </DialogHeader>
             <p className="text-sm text-muted-foreground">
-              {text("在账户面板连接 Google，授权后返回此页。", "Connect Google in the account panel, then return here.")}
+              {text("授权后返回此页，再次点击导入读取列表。", "After authorizing, return here and click import again to load the list.")}
             </p>
             <DialogFooter>
               <Button variant="outline" onClick={closeGoogleReauthDialog}>{text("取消", "Cancel")}</Button>
-              <Button onClick={openGoogleAuthorization}>{text("继续", "Continue")}</Button>
+              <Button disabled={authorizing} onClick={openGoogleAuthorization}>{authorizing ? text("正在连接…", "Connecting…") : text("继续", "Continue")}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
-        {authorizationStarted ? (
-          <div role="status" className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-            <p>{text("已完成授权？", "Finished authorizing?")}</p>
-            <Button variant="outline" disabled={importingSubscriptions} onClick={onFetchGoogleSubscriptions}>
-              {text("重新读取列表", "Reload subscriptions")}
-            </Button>
-          </div>
-        ) : null}
-
         {/* Discover YouTube Channel */}
         <Card className="p-4 md:p-5">
           <div className="min-h-[120px]">
