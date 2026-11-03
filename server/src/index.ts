@@ -213,16 +213,16 @@ const PRIVACY_STATIC_HTML = `
       <p>This policy describes how DigestDesk collects, uses, stores, and deletes personal data, including data accessed through Apple, Google, and YouTube integrations.</p>
       <section>
         <h2>1. Controller and contact</h2>
-        <p>DigestDesk is operated by an individual developer. If you have privacy questions or deletion requests, contact the operator at <a href="mailto:nextbigtoy@gmail.com">nextbigtoy@gmail.com</a>.</p>
+        <p>DigestDesk is operated by an individual developer. If you have privacy questions or deletion requests, contact the operator at <a href="mailto:nexteacc@gmail.com">nexteacc@gmail.com</a>.</p>
       </section>
       <section>
         <h2>2. Data we collect</h2>
-        <p>We collect account and product usage data required to operate DigestDesk. This may include account identifiers, feed subscriptions created inside the product, and content metadata needed to show a user's reading workflow.</p>
+        <p>DigestDesk stores your Clerk account identifier, email address, name and avatar URL, selected feed subscriptions, content metadata, and generated daily digests. Signing in does not by itself authorize access to your YouTube subscription list.</p>
         <p>If a user chooses to connect Google, and if the integration is enabled for that environment, DigestDesk may request read-only access to the user's YouTube subscription list through the YouTube Data API scope <code>https://www.googleapis.com/auth/youtube.readonly</code>.</p>
       </section>
       <section>
         <h2>3. How Google and YouTube data is used</h2>
-        <p>DigestDesk uses Google and YouTube data only after explicit user authorization. The user's YouTube subscription list is used only to help that same user review and import channels into DigestDesk. If the Google import feature is disabled in a given environment, DigestDesk will not request this access from users in that environment.</p>
+        <p>DigestDesk uses Google and YouTube data only after explicit user authorization. The user's YouTube subscription list is retrieved to let that user review and select channels to import. The full returned list is displayed temporarily in the browser. Selected channel identifiers, names, URLs and avatar URLs, and the user's relationship to those channels, are stored to track updates and prepare personal digests. Channels you later subscribe to on YouTube are not automatically imported.</p>
         <p>DigestDesk does not sell YouTube data, does not expose one user's YouTube subscription list to other users, and does not use YouTube authorization to publish content, manage videos, or act on behalf of a user beyond the approved read-only import flow.</p>
       </section>
       <section>
@@ -236,11 +236,11 @@ const PRIVACY_STATIC_HTML = `
       </section>
       <section>
         <h2>6. Sharing</h2>
-        <p>We do not sell personal data. We may use infrastructure or service providers acting on our behalf to host the application, authenticate users, or store operational data, subject to confidentiality and security obligations.</p>
+        <p>We do not sell personal data. We may use infrastructure or service providers acting on our behalf to host the application, authenticate users, or store operational data. Clerk manages authentication and connected Google authorization; Railway hosts the application and database. Content text used for summaries is sent to the configured AI service (currently DeepSeek). The Google access token and the returned Google subscription list are not included in summary requests. The site also loads third-party assets such as channel images and fonts, whose providers receive the associated network requests.</p>
       </section>
       <section>
         <h2>7. User choices</h2>
-        <p>Users may choose whether to connect Google. Users may also revoke DigestDesk access from their Google account permissions page and may request deletion of stored data associated with the integration.</p>
+        <p>Users may choose whether to authorize YouTube import and may revoke access through their Google Account at https://myaccount.google.com/permissions. Revoking access and requesting deletion are distinct actions: to request deletion of stored integration data, email nexteacc@gmail.com from your account email address. Unsubscribing from a channel stops future tracking for that subscription; it does not erase existing digests.</p>
       </section>
       <section>
         <h2>8. Security</h2>
@@ -248,13 +248,14 @@ const PRIVACY_STATIC_HTML = `
       </section>
       <section>
         <h2>9. External terms</h2>
+        <p>DigestDesk uses YouTube API Services. Review the <a href="https://policies.google.com/privacy">Google Privacy Policy</a> and manage access on the <a href="https://myaccount.google.com/permissions">Google Account permissions page</a>.</p>
         <p>DigestDesk's use and transfer of information received from Google APIs to any other app will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
         <p>Where YouTube data is involved, users should also review the <a href="https://www.youtube.com/t/terms">YouTube Terms of Service</a>.</p>
       </section>
       <section>
         <h2>10. Updates</h2>
         <p>We may update this Privacy Policy from time to time. The latest version will be posted on this page with the effective date shown below.</p>
-        <p>Effective date: March 27, 2026</p>
+        <p>Effective date: November 3, 2026</p>
       </section>
     </main>
     <footer class="hairline">
