@@ -157,7 +157,7 @@ function WorkspaceInitializationError({
     ? "Sign out and contact the workspace administrator if you believe this is a mistake."
     : authenticationFailure
       ? "Sign in again to continue."
-      : "Try again in a moment.";
+      : "Try loading your workspace again.";
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-6">
@@ -428,7 +428,7 @@ function OAuthCallback() {
             : (isZh ? "正在完成 Google 验证…" : "Completing Google verification…")}</p>
           {timedOut ? (
             <>
-              <p className="mt-3 text-sm text-muted-foreground">{isZh ? "返回应用检查登录状态。" : "Return to the app to check your sign-in status."}</p>
+              <p className="mt-3 text-sm text-muted-foreground">{isZh ? "返回应用；如果仍未登录，请重新登录。" : "Return to the app. If you are still signed out, sign in again."}</p>
               <a href="/#/" className="mt-5 inline-block rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{isZh ? "返回应用" : "Return to app"}</a>
             </>
           ) : null}

@@ -748,7 +748,7 @@ export default function AdminPage() {
             <div className="p-4">
               <div className="text-sm font-semibold">{text("最近 7 天逐日运行", "Daily Runs: Last 7 Days")}</div>
               <div className="mt-1 text-xs text-muted-foreground">
-                {text("按日期查看日报状态。", "Digest status by date.")}
+                {text("按日报日期查看生成状态。", "Generation status by digest date.")}
               </div>
             </div>
             <div className="space-y-2 border-t border-border p-4">
@@ -811,7 +811,7 @@ export default function AdminPage() {
             <div className="p-4">
               <div className="text-sm font-semibold">{text("需要关注的任务", "Needs Attention")}</div>
               <div className="mt-1 text-xs text-muted-foreground">
-                {text("失败任务及延迟超过 10 分钟的任务。", "Failed jobs and jobs overdue by 10 minutes.")}
+                {text("日报与摘要任务：失败或延迟超过 10 分钟。", "Digest and summary jobs: failed or overdue by more than 10 minutes.")}
               </div>
             </div>
             <Table className="min-w-[960px] border-collapse text-left">
@@ -899,7 +899,7 @@ export default function AdminPage() {
               <div>
                 <Label>{text("订阅源上限", "Subscription limit")}</Label>
                 <div className="mt-1 text-xs text-muted-foreground">
-                  {text("覆盖套餐默认额度。", "Overrides the plan limit.")}
+                  {text("保存后会覆盖套餐默认额度。", "Saving overrides the plan limit.")}
                 </div>
               </div>
               <div className="text-3xl font-semibold text-primary">{limitValue[0]}</div>

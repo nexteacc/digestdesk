@@ -399,11 +399,11 @@ export default function YouTubeFeedsPage() {
               </DialogDescription>
             </DialogHeader>
             <p className="text-sm text-muted-foreground">
-              {text("授权后返回此页，再次点击导入。", "After authorizing, return here and click import again.")}
+              {text("授权后返回此页，点击导入读取频道列表。", "After authorizing, return here and click import to load your channels.")}
             </p>
             <DialogFooter>
               <Button variant="outline" onClick={closeGoogleReauthDialog}>{text("取消", "Cancel")}</Button>
-              <Button disabled={authorizing} onClick={openGoogleAuthorization}>{authorizing ? text("正在连接…", "Connecting…") : text("继续", "Continue")}</Button>
+              <Button disabled={authorizing} onClick={openGoogleAuthorization}>{authorizing ? text("正在连接…", "Connecting…") : text("前往 Google 授权", "Authorize with Google")}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

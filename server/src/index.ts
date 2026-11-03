@@ -181,7 +181,7 @@ const renderPublicHome = (isZh: boolean) => {
             ${text("DigestDesk 将 Substack、播客、RSS 和 YouTube 的更新整理成一份个人日报。", "DigestDesk brings Substack, podcasts, RSS, and YouTube updates into one daily digest.")}
           </p>
           <p>
-            ${text("订阅公开内容源，或授权 Google 只读访问以导入 YouTube 订阅。由你选择要跟踪的频道。", "Subscribe to public feeds, or grant read-only Google access to import your YouTube subscriptions. You choose which channels to follow.")}
+            ${text("订阅公开内容源，也可选择连接 Google，只读导入你的 YouTube 订阅列表，再选择要跟踪的频道。", "Subscribe to public feeds, or optionally connect Google to import your YouTube subscription list with read-only access. You choose which channels to follow.")}
           </p>
           <div class="public-home-actions">
             <a href="/#/sign-in">${text("登录", "Sign in")}</a>
@@ -191,7 +191,7 @@ const renderPublicHome = (isZh: boolean) => {
     </main>
     <footer class="hairline">
       <div>
-        <p>${text("用 DigestDesk 整理 Substack、播客、RSS 和 YouTube 更新。", "Your reading, in one place.")}</p>
+        <p>${text("用 DigestDesk 整理 Substack、播客、RSS 和 YouTube 更新。", "Organize Substack, podcast, RSS, and YouTube updates with DigestDesk.")}</p>
         <a href="https://digestdesk.news/privacy">${text("隐私政策", "Privacy policy")}</a>
         <a href="https://digestdesk.news/terms">${text("服务条款", "Terms of service")}</a>
       </div>
