@@ -5,7 +5,6 @@ import {
   Menu,
   Newspaper,
   Settings as SettingsIcon,
-  Star,
   X,
 } from "lucide-react";
 
@@ -27,11 +26,9 @@ export default function AppShell({ children }: PropsWithChildren) {
   const { text } = useI18n();
   const googleYouTubeImportEnabled = import.meta.env.VITE_ENABLE_GOOGLE_YOUTUBE_IMPORT === "true";
   const displayName = user?.fullName || user?.firstName || user?.primaryEmailAddress?.emailAddress || text("用户", "Reader");
-  const showUtilityBar = !location.startsWith("/topics/");
 
   const contentNav: NavItem[] = [
     { href: "/", label: text("今日日报", "Daily Digest"), icon: <Newspaper /> },
-    { href: "/topics/ai-leaders", label: text("专题", "Features"), icon: <Star /> },
   ];
 
   const manageNav: NavItem[] = [
@@ -112,15 +109,13 @@ export default function AppShell({ children }: PropsWithChildren) {
       </aside>
 
       <div className="workspace-surface">
-        {showUtilityBar ? (
-          <header className="workspace-utility-bar">
-            <LocaleToggle />
-            <div className="workspace-utility-user">
-              <span className="workspace-user-avatar">{renderUserButton()}</span>
-              <strong>{displayName}</strong>
-            </div>
-          </header>
-        ) : null}
+        <header className="workspace-utility-bar">
+          <LocaleToggle />
+          <div className="workspace-utility-user">
+            <span className="workspace-user-avatar">{renderUserButton()}</span>
+            <strong>{displayName}</strong>
+          </div>
+        </header>
         <main id="main-content" className="workspace-main">{children}</main>
       </div>
     </div>

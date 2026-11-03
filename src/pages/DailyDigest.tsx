@@ -2,7 +2,6 @@ import { startTransition, useCallback, useEffect, useMemo, useRef, useState } fr
 import { addDays, format } from "date-fns";
 import { enUS, zhCN } from "date-fns/locale";
 import {
-  ArrowRight,
   ArrowUp,
   Clock3,
   FileText,
@@ -10,10 +9,8 @@ import {
   Loader2,
   RefreshCw,
   Search,
-  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Link } from "wouter";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -391,13 +388,6 @@ export default function DailyDigest() {
         </Card>
       ) : (
         <>
-          <Link href="/topics/ai-leaders" className="digest-feature-band">
-            <span className="digest-feature-kicker"><Sparkles />{text("专题 · AI 领航者", "Feature · AI Leaders")}</span>
-            <span className="digest-feature-cell"><strong>{text("本周新增 6 场访谈", "6 new interviews this week")}</strong></span>
-            <span className="digest-feature-cell">Sam Altman、Boris Cherny、Michael Truell</span>
-            <span className="digest-feature-action">{text("查看专题", "View feature")}<ArrowRight /></span>
-          </Link>
-
           <div className="digest-sections">
             {digestSections.map((section) => (
               <section key={section.sourceType} className="digest-section">
