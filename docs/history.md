@@ -221,3 +221,13 @@
 - 账号导入直接请求 Substack；本次未改 CF 搜索 Worker、数据库导入逻辑、文章同步或摘要生成。
 - 验证：后端 7 个测试文件、52 项测试通过；后端构建及 `git diff --check` 通过。通过修改后的函数实时请求 `@slowloop`，读到 166 个唯一公开订阅。
 - 待验证：Railway 上的账号导入、少量源的订阅入库、文章同步与 AI 摘要/日报完整链路；本地公开读取成功不等于生产链路已通过。
+
+
+## 2026-11-18: Prepare OpenAI Responses migration
+
+- Railway scheduler runtime logs confirmed DeepSeek `deepseek-flash`; older OpenRouter/Zeabur documentation did not describe current runtime.
+- OpenAI official API now uses the existing `@ai-sdk/openai` Responses provider; retained compatible providers continue on Chat Completions. Defaults for OpenAI: `gpt-6-luna`, validation retry `gpt-6.2-sol`.
+- Keep summary prompt/schema, post-validation, article/language cache reuse, scheduling and digest assembly contracts. Reject incomplete output before returning a summary. Requests disable response storage.
+- Pinned SDK predates GPT-6 recognition; use supported `forceReasoning` option. Luna disables reasoning; Sol uses low with at least 4096 output tokens, including reasoning.
+- No production variables, secrets, deployments or cached summaries were changed. Operator supplies the existing OpenAI key in Railway.
+- Verification results and remaining live checks: see `TEMP-openai-migration-ledger.md`.

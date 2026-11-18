@@ -1,6 +1,6 @@
 import { summarizeArticle } from "../services/summarizer.js";
 
-const sampleArticle = `Gemini structured outputs use a JSON schema to constrain model responses.
+const sampleArticle = `Model structured outputs use a JSON schema to constrain model responses.
 Applications still validate the returned object before writing it to the summary cache.
 Rate limits are handled separately from schema and content quality validation.`;
 
@@ -11,7 +11,7 @@ async function main() {
   });
 
   if (attempts.length !== 1 || attempts[0] !== 1) {
-    throw new Error(`Expected a single Gemini attempt [1], got [${attempts.join(",")}]`);
+    throw new Error(`Expected a single model attempt [1], got [${attempts.join(",")}]`);
   }
   if (!result.oneLiner || result.keyInsights.length !== 3) {
     throw new Error("Structured output smoke returned an invalid summary shape.");
