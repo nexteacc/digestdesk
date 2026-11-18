@@ -1,4 +1,5 @@
-import { generateObject, type LanguageModel } from "ai";
+import { generateObject, generateText, Output, type LanguageModel } from "ai";
+import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import Bottleneck from "bottleneck";
 import { z } from "zod";
@@ -7,7 +8,7 @@ import { getSummaryLanguageProfile } from "./summary-language-profiles.js";
 
 const _cachedModels = new Map<string, LanguageModel>();
 const _requestLimiters = new Map<string, Bottleneck>();
-const DEFAULT_MODEL = "gpt-4o-mini";
+const DEFAULT_MODEL = "gpt-6-luna";
 const DEFAULT_GEMINI_REQUESTS_PER_MINUTE = 8;
 const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 60_000;
 let rateLimitBlockedUntil = 0;
@@ -203,6 +204,23 @@ export function transformProviderRequestBody(baseURL: string, body: Record<strin
   };
 }
 
+export function usesOpenAIResponses(baseURL = process.env.AI_BASE_URL || "https://api.openai.com/v1") {
+  return new URL(baseURL).origin === "https://api.openai.com";
+}
+
+export function getOpenAISummaryOptions(modelId: string) {
+  // The pinned SDK predates GPT-6; explicitly identify these reasoning models.
+  const isGpt6 = /^gpt-6(?:[.-])/.test(modelId);
+  return {
+    store: false,
+    ...(isGpt6 ? {
+      forceReasoning: true,
+      reasoningEffort: modelId === "gpt-6-luna" ? "none" : "low",
+      textVerbosity: "low" as const,
+    } : {}),
+  };
+}
+
 function getModel(modelId: string) {
   const baseURL = process.env.AI_BASE_URL || "https://api.openai.com/v1";
   const apiKey = process.env.AI_API_KEY;
@@ -212,6 +230,12 @@ function getModel(modelId: string) {
 
   if (!apiKey) {
     throw new Error("请设置 AI_API_KEY 环境变量");
+  }
+
+  if (usesOpenAIResponses(baseURL)) {
+    const model = createOpenAI({ apiKey, baseURL }).responses(modelId);
+    _cachedModels.set(cacheKey, model);
+    return model;
   }
 
   const provider = createOpenAICompatible({
@@ -233,12 +257,13 @@ function getModel(modelId: string) {
 }
 
 function getPrimaryModelId() {
-  return process.env.AI_MODEL || DEFAULT_MODEL;
+  return process.env.AI_MODEL || (usesOpenAIResponses() ? DEFAULT_MODEL : "gpt-4o-mini");
 }
 
 export function getSummaryAttemptModelIds(primaryModelId: string, configuredRetryModel = process.env.AI_RETRY_MODEL) {
   const retryModelId = configuredRetryModel?.trim();
-  return [primaryModelId, retryModelId || primaryModelId];
+  return [primaryModelId, retryModelId || (usesOpenAIResponses() && primaryModelId === DEFAULT_MODEL
+    ? "gpt-6.2-sol" : primaryModelId)];
 }
 
 function getAiRequestsPerMinute(baseURL: string) {
@@ -622,6 +647,7 @@ export async function summarizeArticleWithMetadata(
   options?: { onAttempt?: (attempt: number) => void },
 ): Promise<ArticleSummaryResult> {
   const baseURL = process.env.AI_BASE_URL || "https://api.openai.com/v1";
+  const responses = usesOpenAIResponses(baseURL);
   const primaryModelId = getPrimaryModelId();
   const attemptModelIds = getSummaryAttemptModelIds(primaryModelId);
   const retryModelId = attemptModelIds[1] ?? "none";
@@ -632,7 +658,7 @@ export async function summarizeArticleWithMetadata(
   const input = buildMarkdownSummaryInput(markdown, maxInputChars);
 
   console.log(
-    `[summarizer] Starting AI summary language=${language} model=${primaryModelId} retryModel=${retryModelId} baseURL=${baseURL} inputLength=${markdown.length} sentLength=${input.length} maxInputChars=${maxInputChars} maxOutputTokens=${maxOutputTokens}`,
+    `[summarizer] Starting AI summary language=${language} model=${primaryModelId} retryModel=${retryModelId} baseURL=${baseURL} api=${responses ? "responses" : "chat"} inputLength=${markdown.length} sentLength=${input.length} maxInputChars=${maxInputChars} maxOutputTokens=${maxOutputTokens}`,
   );
 
   let lastError: unknown;
@@ -644,8 +670,30 @@ export async function summarizeArticleWithMetadata(
 
     try {
       options?.onAttempt?.(attempt);
-      const request = () => {
+      const request = async () => {
         assertRateLimitCircuitClosed();
+        if (responses) {
+          const result = await generateText({
+            model,
+            system: buildSummarySystemPrompt(language, adapter, attempt > 1),
+            prompt: input,
+            output: Output.object({ schema: buildArticleSummaryGenerationSchema(language) }),
+            // Sol requires reasoning, which shares the output-token budget.
+            maxOutputTokens: attemptModelId === "gpt-6.2-sol" ? Math.max(maxOutputTokens, 4096) : maxOutputTokens,
+            maxRetries: 0,
+            providerOptions: { openai: getOpenAISummaryOptions(attemptModelId) },
+          });
+          if (result.finishReason !== "stop") {
+            throw new Error(`Incomplete AI summary: finishReason=${result.finishReason}`);
+          }
+          console.log("[summarizer] OpenAI usage", {
+            model: attemptModelId, attempt,
+            inputTokens: result.usage.inputTokens,
+            outputTokens: result.usage.outputTokens,
+            cachedInputTokens: result.usage.inputTokenDetails.cacheReadTokens,
+          });
+          return { object: result.output };
+        }
         return generateObject({
           model,
           system: buildSummarySystemPrompt(language, adapter, attempt > 1),

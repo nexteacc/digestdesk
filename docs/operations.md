@@ -1,4 +1,27 @@
-# DigestDesk Zeabur Deployment
+# DigestDesk Deployment
+
+## Railway / OpenAI Responses（2026-11-18）
+
+当前生产项目在 Railway，包含 `web`、`scheduler`、`Postgres`。下文 Zeabur 部分保留为历史部署参考。
+
+此代码分支仅准备 OpenAI 接入，未修改生产配置或部署。切换时在 `web` 和 `scheduler` 同时设置：
+
+```text
+AI_BASE_URL=https://api.openai.com/v1
+AI_MODEL=gpt-6-luna
+AI_RETRY_MODEL=gpt-6.2-sol
+AI_MAX_OUTPUT_TOKENS=1200
+```
+
+`AI_API_KEY` 由操作者在 Railway Variables 中填写，使用赠送额度所属 OpenAI 组织的密钥；不要提交到仓库。仅设置 `OPENAI_API_KEY` 不生效。
+
+OpenAI 官方地址自动使用 Responses；其他地址保留 Chat Completions。Luna 使用 `reasoning.effort=none`；Sol 使用 `low`，输出预算至少 4096（包含推理 token）；其他模型不自动套用 GPT-6 参数。固定 JSON 输出、长度校验、重试、文章/语言缓存和日报执行入口不变。请求使用 `store=false`，不建立服务端会话；这不等于 Zero Data Retention。
+
+合并并部署代码后，再切换两个服务的变量及密钥并重新部署。观察日志的 `api=responses`、模型名、token 使用和失败率；用未缓存文章验证中英文摘要及手动/定时日报。已有缓存会继续复用。建议用约 30 篇文章比较事实、语言、长度、延迟和成本；本地模拟测试不代表线上摘要质量验证。
+
+回滚：恢复两个服务原有 `AI_BASE_URL`、`AI_MODEL`、`AI_RETRY_MODEL`（原来没有则删除）和原有密钥，再部署；DeepSeek 适配仍保留。
+
+## Historical Zeabur Deployment
 
 本文档给出当前在 Zeabur 上的正式部署方式，以及后续面向更大规模用户的演进方向。
 
