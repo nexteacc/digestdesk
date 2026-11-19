@@ -5,11 +5,14 @@ import { digests } from "../db/schema.js";
 import { generateDaily } from "./digest.js";
 import { presummarizeForUser } from "./presummarize.js";
 import { syncUserFeeds } from "./rss.js";
+import { getBackgroundFeedFreshnessMs, isBackgroundFeedSyncEnabled } from "./feed-sync-policy.js";
+import { getUserSettingsMap } from "./user-settings.js";
+import { getDayRangeForTimeZone } from "../utils/timezone.js";
 
 export async function executeDailyDigestJob(
   userId: string,
   targetDate?: string,
-  options?: { force?: boolean; executionId?: string },
+  options?: { force?: boolean; executionId?: string; scheduled?: boolean },
 ) {
   const startedAt = Date.now();
   const db = getDb();
@@ -26,7 +29,13 @@ export async function executeDailyDigestJob(
   }
 
   // Step 1: Sync feeds (fetch new articles, no AI)
-  await syncUserFeeds(userId, { executionId });
+  if (options?.scheduled && targetDate && isBackgroundFeedSyncEnabled()) {
+    const settings = await getUserSettingsMap(userId);
+    const { endIso } = getDayRangeForTimeZone(targetDate, settings.timezone || "Asia/Shanghai");
+    await syncUserFeeds(userId, { executionId, freshnessWindowMs: getBackgroundFeedFreshnessMs(), fetchedOnOrAfter: endIso });
+  } else {
+    await syncUserFeeds(userId, { executionId });
+  }
 
   await presummarizeForUser(userId, targetDate, { executionId });
 

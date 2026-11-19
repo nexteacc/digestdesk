@@ -21,6 +21,21 @@ OpenAI 官方地址自动使用 Responses；其他地址保留 Chat Completions�
 
 回滚：恢复两个服务原有 `AI_BASE_URL`、`AI_MODEL`、`AI_RETRY_MODEL`（原来没有则删除）和原有密钥，再部署；DeepSeek 适配仍保留。
 
+## Railway RSS 同步（2026-11-19）
+
+`scheduler` 使用以下配置分批抓取。每 15 分钟最多处理 24 个到期源，优先处理最久未同步的源。成功抓取过的源四小时内不重复做后台同步。
+
+```text
+ENABLE_BACKGROUND_FEED_SYNC=true
+FEED_SYNC_CRON=*/15 * * * *
+FEED_SYNC_BATCH_LIMIT=24
+FEED_SYNC_FRESHNESS_WINDOW_MS=14400000
+```
+
+Substack 刊物（包括标记为 Substack 的自定义域名）每个进程共用抓取队列，请求起点至少间隔 1.5 秒。收到 429 后，该队列暂停 5 分钟，收到 429 的源单独等待至少 15 分钟，并遵守更长的 `Retry-After`。下次可抓取时间保存到数据库。定时日报复用目标日期结束后成功抓取且仍新鲜的源，继续同步其他到期源。晚于日报抓到的文章会入库，已生成的日报需要重新生成才能纳入。
+
+上线后检查 `backgroundFeedSyncEnabled=true`、每轮 `toSync`、`deferred`、`remaining` 和 `Rate limited` 的最终响应域名与重试时间。下一次定时日报检查 `skippedRecent`、抓取 429 数量及成品条数。紧急关闭后台任务时，将 `ENABLE_BACKGROUND_FEED_SYNC` 设为 `false`，日报仍会执行带限速的同步。
+
 ## Historical Zeabur Deployment
 
 本文档给出当前在 Zeabur 上的正式部署方式，以及后续面向更大规模用户的演进方向。

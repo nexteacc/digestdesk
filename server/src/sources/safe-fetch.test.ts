@@ -66,4 +66,13 @@ describe("safeFetchText", () => {
       code: "RESPONSE_TOO_LARGE",
     });
   });
+
+  it("preserves Retry-After and the final host when an upstream redirect leads to a 429", async () => {
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: "https://1.1.1.1/feed" } }))
+      .mockResolvedValueOnce(new Response(null, { status: 429, headers: { "retry-after": "1800" } })));
+    await expect(safeFetchText("https://8.8.8.8/feed")).rejects.toMatchObject({
+      status: 429, hostname: "1.1.1.1", retryAfter: "1800",
+    });
+  });
 });

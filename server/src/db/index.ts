@@ -44,6 +44,8 @@ export async function initDb() {
     ALTER TABLE feeds ADD COLUMN IF NOT EXISTS source_type TEXT NOT NULL DEFAULT 'substack';
   `;
 
+  await queryClient`ALTER TABLE feeds ADD COLUMN IF NOT EXISTS next_fetch_at TEXT;`;
+
   await queryClient`
     CREATE TABLE IF NOT EXISTS articles (
       id TEXT PRIMARY KEY,

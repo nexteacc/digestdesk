@@ -211,7 +211,7 @@ export async function runPendingDigestJobs(options?: { limit?: number; now?: Dat
           return { digestId: null, skipReason: "access_revoked" as const };
         }
 
-        const digestId = await executeDailyDigestJob(job.userId, job.targetDate);
+        const digestId = await executeDailyDigestJob(job.userId, job.targetDate, { scheduled: true });
         console.log(
           digestId
             ? `[digest-jobs] Job done jobId=${job.id} user=${job.userId} targetDate=${job.targetDate} digestId=${digestId} durationMs=${Date.now() - jobStartedAt}`
