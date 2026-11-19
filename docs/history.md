@@ -231,3 +231,9 @@
 - Pinned SDK predates GPT-6 recognition; use supported `forceReasoning` option. Luna disables reasoning; Sol uses low with at least 4096 output tokens, including reasoning.
 - No production variables, secrets, deployments or cached summaries were changed. Operator supplies the existing OpenAI key in Railway.
 - Verification results and remaining live checks: see `TEMP-openai-migration-ledger.md`.
+
+## 2026-11-19: Spread out Railway RSS sync
+
+- Railway had background sync disabled, so the morning digest tried 192 feeds in one run. On November 19, 45 feeds returned 429. The same RSS code ran on Zeabur, where a four-hour background scan had been enabled. Older Zeabur logs were unavailable for a rate-limit comparison.
+- Cap background ticks to 24 due feeds every 15 minutes while keeping a four-hour freshness window. Scheduled digests skip feeds synced within that window after the target day closed.
+- Pace Substack requests across publications and persist per-feed backoff for 429. Log the final response host and Retry-After delay. Check the next morning's RSS 429 count, deferred feeds, and digest coverage before judging the production effect.

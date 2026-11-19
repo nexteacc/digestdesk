@@ -21,6 +21,16 @@ export interface SafeFetchTextResult {
   ok: boolean;
 }
 
+export class HttpResponseError extends Error {
+  constructor(
+    readonly status: number,
+    readonly hostname: string,
+    readonly retryAfter: string | null,
+  ) {
+    super(`HTTP request failed with status ${status}`);
+  }
+}
+
 function invalidRedirect(): never {
   throw new AppError("Invalid redirect.", 400, "INVALID_REDIRECT", "重定向地址无效");
 }
@@ -95,7 +105,9 @@ export async function safeFetchText(
     }
 
     if ((options.requireOk ?? true) && !response.ok) {
-      throw new Error(`HTTP request failed with status ${response.status}`);
+      const error = new HttpResponseError(response.status, new URL(currentUrl).hostname, response.headers.get("retry-after"));
+      await response.body?.cancel().catch(() => undefined);
+      throw error;
     }
 
     return {

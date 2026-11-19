@@ -151,6 +151,7 @@ feedsRouter.post("/", async (req, res) => {
       sourceType: "substack" as const,
       createdAt: now,
       lastFetchedAt: null,
+      nextFetchAt: null,
     };
 
     await db.transaction(async (tx) => {
@@ -321,6 +322,7 @@ feedsRouter.post("/import", async (req, res) => {
         sourceType: "substack" as const,
         createdAt: now,
         lastFetchedAt: null,
+        nextFetchAt: null,
       };
 
       await db.insert(feeds).values(feed);

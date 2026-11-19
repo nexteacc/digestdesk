@@ -25,6 +25,7 @@ export const feeds = pgTable("feeds", {
   sourceType: text("source_type", { enum: ["substack", "rss", "youtube", "podcast"] }).notNull().default("substack"),
   createdAt: text("created_at").notNull(),
   lastFetchedAt: text("last_fetched_at"),
+  nextFetchAt: text("next_fetch_at"),
 });
 
 export const subscriptions = pgTable(

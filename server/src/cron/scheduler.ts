@@ -6,11 +6,16 @@ import {
   runPendingArticleSummaryJobs,
 } from "../services/article-summary-jobs.js";
 import { syncAllFeeds } from "../services/rss.js";
+import {
+  getBackgroundFeedBatchLimit,
+  getBackgroundFeedFreshnessMs,
+  isBackgroundFeedSyncEnabled,
+} from "../services/feed-sync-policy.js";
 
 const DEFAULT_DISPATCH_CRON = "*/5 * * * *";
 const DEFAULT_RUN_CRON = "* * * * *";
 const DEFAULT_SUMMARY_RUN_CRON = "*/5 * * * *";
-const DEFAULT_FEED_SYNC_CRON = "0 */4 * * *";
+const DEFAULT_FEED_SYNC_CRON = "*/15 * * * *";
 const DEFAULT_RUN_LIMIT = 20;
 const DEFAULT_BACKFILL_LIMIT = 50;
 
@@ -35,11 +40,6 @@ function getFeedSyncCron() {
   return process.env.FEED_SYNC_CRON || DEFAULT_FEED_SYNC_CRON;
 }
 
-function getFeedSyncFreshnessWindowMs() {
-  const raw = Number(process.env.FEED_SYNC_FRESHNESS_WINDOW_MS ?? 4 * 60 * 60 * 1000);
-  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 4 * 60 * 60 * 1000;
-}
-
 function getRunLimit() {
   const raw = Number(process.env.DIGEST_JOB_RUN_LIMIT ?? DEFAULT_RUN_LIMIT);
   return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : DEFAULT_RUN_LIMIT;
@@ -47,10 +47,6 @@ function getRunLimit() {
 
 function isArticleSummaryJobsEnabled() {
   return process.env.ENABLE_ARTICLE_SUMMARY_JOBS === "true";
-}
-
-function isBackgroundFeedSyncEnabled() {
-  return process.env.ENABLE_BACKGROUND_FEED_SYNC === "true";
 }
 
 function isArticleSummaryBackfillEnabled() {
@@ -135,10 +131,10 @@ async function runFeedSync(reason: string) {
 
   isFeedSyncRunning = true;
   const startedAt = Date.now();
-  const freshnessWindowMs = getFeedSyncFreshnessWindowMs();
+  const freshnessWindowMs = getBackgroundFeedFreshnessMs();
 
   try {
-    await syncAllFeeds({ freshnessWindowMs });
+    await syncAllFeeds({ freshnessWindowMs, limit: getBackgroundFeedBatchLimit() });
     console.log(`[scheduler] Feed sync ${reason}: succeeded durationMs=${Date.now() - startedAt}`);
   } catch (error) {
     console.error(`[scheduler] Feed sync ${reason}:`, error);
@@ -190,6 +186,6 @@ export function startScheduler() {
   });
 
   console.log(
-    `[scheduler] Initialized: dispatchCron="${getDispatchCron()}", runCron="${getRunCron()}", runLimit=${getRunLimit()}, summaryRunCron="${getSummaryRunCron()}", summaryRunLimit=${getSummaryJobRunLimit()}, feedSyncCron="${getFeedSyncCron()}", articleSummaryJobsEnabled=${isArticleSummaryJobsEnabled()}, backgroundFeedSyncEnabled=${isBackgroundFeedSyncEnabled()}, articleSummaryBackfillEnabled=${isArticleSummaryBackfillEnabled()}, mode=digest_jobs+article_summary_jobs`,
+    `[scheduler] Initialized: dispatchCron="${getDispatchCron()}", runCron="${getRunCron()}", runLimit=${getRunLimit()}, summaryRunCron="${getSummaryRunCron()}", summaryRunLimit=${getSummaryJobRunLimit()}, feedSyncCron="${getFeedSyncCron()}", feedSyncBatchLimit=${getBackgroundFeedBatchLimit()}, feedSyncFreshnessWindowMs=${getBackgroundFeedFreshnessMs()}, articleSummaryJobsEnabled=${isArticleSummaryJobsEnabled()}, backgroundFeedSyncEnabled=${isBackgroundFeedSyncEnabled()}, articleSummaryBackfillEnabled=${isArticleSummaryBackfillEnabled()}, mode=digest_jobs+article_summary_jobs`,
   );
 }
